@@ -1,0 +1,3 @@
+python-telegram-bot==20.7
+vkbottle==3.3
+aiohttp==3.9.1
