@@ -1,3 +1,9 @@
+import os
+
+# Берем токены из переменных окружения
+TELEGRAM_TOKEN = os.environ.get('TELEGRAM_TOKEN', '8326390250:AAFuUVHZ6ucUtLy132Ep1pmteRr6tTk7u0Q')
+VK_TOKEN = os.environ.get('VK_TOKEN', 'vk1.a.sl7q9qebmFwqxkdpMVJTQpLWUtLMsKYPvVInyidaBe1GwkuxkDewfvYss7AcGYPlbw817In-UDgILA38ltHafX3p-t0_xaNWPwXOPpwPezMqq89fx1y9ru6lyde_qFYtu-ll3J-1_vBPPCZ0fHyh4j8qxkiXWCVBgFKtkNhqukNIFTbWqMjX57iMIPbawIdYOr_ngdaXRuGXZAAxzffhbg')
+AI_API_KEY = os.environ.get('AI_API_KEY', 'sk-759a31464f974de2a7e83e1020ba7873')
 import asyncio
 import logging
 import random
