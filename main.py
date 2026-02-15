@@ -1719,9 +1719,6 @@ class GameBot:
         
         await update.message.reply_text(text, parse_mode='Markdown')
         self.db.add_stat(user.id, "commands_used")
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-        self.db.add_stat(user.id, "commands_used")
     
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
