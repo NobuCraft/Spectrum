@@ -31,9 +31,6 @@ TELEGRAM_TOKEN = "8326390250:AAFuUVHZ6ucUtLy132Ep1pmteRr6tTk7u0Q"
 OWNER_ID = 1732658530
 OWNER_USERNAME = "@NobuCraft"
 
-# API ключи
-DEEPSEEK_KEY = "sk-97ac1d0de1844c449852a5470cbcae35"
-
 # Настройки
 SPAM_LIMIT = 5
 SPAM_WINDOW = 3
@@ -52,7 +49,7 @@ class Database:
         self.cursor = self.conn.cursor()
         self.create_tables()
         self.migrate_tables()
-        self.init_data()
+        self.init_bosses()
     
     def migrate_tables(self):
         try:
@@ -83,34 +80,6 @@ class Database:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN clan_id INTEGER DEFAULT 0")
             if 'clan_role' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN clan_role TEXT DEFAULT 'member'")
-            if 'mafia_wins' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN mafia_wins INTEGER DEFAULT 0")
-            if 'mafia_games' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN mafia_games INTEGER DEFAULT 0")
-            if 'rps_wins' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rps_wins INTEGER DEFAULT 0")
-            if 'rps_losses' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rps_losses INTEGER DEFAULT 0")
-            if 'rps_draws' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rps_draws INTEGER DEFAULT 0")
-            if 'casino_wins' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN casino_wins INTEGER DEFAULT 0")
-            if 'casino_losses' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN casino_losses INTEGER DEFAULT 0")
-            if 'rr_wins' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rr_wins INTEGER DEFAULT 0")
-            if 'rr_losses' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rr_losses INTEGER DEFAULT 0")
-            if 'rr_games' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rr_games INTEGER DEFAULT 0")
-            if 'rr_money' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN rr_money INTEGER DEFAULT 100")
-            if 'ttt_wins' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_wins INTEGER DEFAULT 0")
-            if 'ttt_losses' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_losses INTEGER DEFAULT 0")
-            if 'ttt_draws' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_draws INTEGER DEFAULT 0")
             self.conn.commit()
         except Exception as e:
             print(f"Ошибка миграции: {e}")
@@ -139,20 +108,6 @@ class Database:
                 premium_until TIMESTAMP,
                 clan_id INTEGER DEFAULT 0,
                 clan_role TEXT DEFAULT 'member',
-                mafia_wins INTEGER DEFAULT 0,
-                mafia_games INTEGER DEFAULT 0,
-                rps_wins INTEGER DEFAULT 0,
-                rps_losses INTEGER DEFAULT 0,
-                rps_draws INTEGER DEFAULT 0,
-                casino_wins INTEGER DEFAULT 0,
-                casino_losses INTEGER DEFAULT 0,
-                rr_wins INTEGER DEFAULT 0,
-                rr_losses INTEGER DEFAULT 0,
-                rr_games INTEGER DEFAULT 0,
-                rr_money INTEGER DEFAULT 100,
-                ttt_wins INTEGER DEFAULT 0,
-                ttt_losses INTEGER DEFAULT 0,
-                ttt_draws INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -208,118 +163,28 @@ class Database:
             )
         ''')
         
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS rr_inventory (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                item_name TEXT,
-                item_type TEXT,
-                item_desc TEXT,
-                quantity INTEGER DEFAULT 1,
-                FOREIGN KEY (user_id) REFERENCES users (user_id)
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS rr_lobbies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                creator_id INTEGER,
-                max_players INTEGER,
-                bet INTEGER,
-                players TEXT,
-                status TEXT DEFAULT 'waiting',
-                created_at TIMESTAMP
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS rr_games (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                lobby_id INTEGER,
-                players TEXT,
-                current_player INTEGER,
-                cylinder_size INTEGER,
-                bullets INTEGER,
-                positions TEXT,
-                alive_players TEXT,
-                phase TEXT,
-                turn_order TEXT,
-                started_at TIMESTAMP
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ttt_lobbies (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                creator_id INTEGER,
-                opponent_id INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'waiting',
-                created_at TIMESTAMP
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS ttt_games (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                lobby_id INTEGER,
-                player_x INTEGER,
-                player_o INTEGER,
-                current_player INTEGER,
-                main_board TEXT,
-                sub_boards TEXT,
-                last_move INTEGER,
-                status TEXT,
-                started_at TIMESTAMP
-            )
-        ''')
-        
-        self.conn.commit()
-    
-    def init_data(self):
-        self.init_bosses()
-        
-        self.cursor.execute("SELECT * FROM rr_inventory LIMIT 1")
-        if not self.cursor.fetchone():
-            items_data = [
-                (0, "🪙 Монета Демона", "active", "Убирает или добавляет один патрон"),
-                (0, "👁️‍🗨️ Кровавый Глаз", "active", "Показывает патроны в текущей и следующей позициях"),
-                (0, "🔄 Обратный Спин", "active", "Меняет направление вращения барабана"),
-                (0, "⏳ Песочные часы", "active", "Пропускает ход"),
-                (0, "🎲 Кубик Судьбы", "active", "Случайно изменяет количество патронов"),
-                (0, "🤡 Маска Клоуна", "active", "Полностью перезаряжает оружие"),
-                (0, "👁️ Глаз Провидца", "active", "Показывает патрон в текущей позиции"),
-                (0, "🧲 Магнит Пули", "active", "Сдвигает все патроны на одну позицию"),
-                (0, "🔎 Проклятая лупа", "active", "Показывает точную позицию случайного патрона")
-            ]
-            for user_id, name, typ, desc in items_data:
-                self.cursor.execute(
-                    "INSERT INTO rr_inventory (user_id, item_name, item_type, item_desc) VALUES (?, ?, ?, ?)",
-                    (user_id, name, typ, desc)
-                )
-        
         self.conn.commit()
     
     def init_bosses(self):
         self.cursor.execute("SELECT * FROM bosses")
         if not self.cursor.fetchone():
             bosses_data = [
-                ("🌲 Лесной тролль", 5, 200, 20, 100, "https://i.imgur.com/troll.jpg"),
-                ("🐉 Огненный дракон", 10, 500, 40, 250, "https://i.imgur.com/dragon.jpg"),
-                ("❄️ Ледяной великан", 15, 1000, 60, 500, "https://i.imgur.com/giant.jpg"),
-                ("⚔️ Темный рыцарь", 20, 2000, 80, 1000, "https://i.imgur.com/knight.jpg"),
-                ("👾 Король демонов", 25, 5000, 150, 2500, "https://i.imgur.com/demon.jpg"),
-                ("💀 Бог разрушения", 30, 10000, 300, 5000, "https://i.imgur.com/god.jpg")
+                ("🌲 Лесной тролль", 5, 200, 20, 100, ""),
+                ("🐉 Огненный дракон", 10, 500, 40, 250, ""),
+                ("❄️ Ледяной великан", 15, 1000, 60, 500, ""),
+                ("⚔️ Темный рыцарь", 20, 2000, 80, 1000, ""),
+                ("👾 Король демонов", 25, 5000, 150, 2500, ""),
+                ("💀 Бог разрушения", 30, 10000, 300, 5000, "")
             ]
             for name, level, health, damage, reward, image in bosses_data:
                 self.cursor.execute('''
                     INSERT INTO bosses (boss_name, boss_level, boss_health, boss_max_health, boss_damage, boss_reward, boss_image)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', (name, level, health, health, damage, reward, image))
+            self.conn.commit()
     
     def respawn_bosses(self):
-        self.cursor.execute(
-            "UPDATE bosses SET is_alive = 1, boss_health = boss_max_health"
-        )
+        self.cursor.execute("UPDATE bosses SET is_alive = 1, boss_health = boss_max_health")
         self.conn.commit()
     
     def get_user(self, user_id: int, first_name: str = "Player", last_name: str = ""):
@@ -344,66 +209,39 @@ class Database:
         return dict(zip(columns, user))
     
     def add_coins(self, user_id: int, coins: int):
-        self.cursor.execute(
-            "UPDATE users SET coins = coins + ? WHERE user_id = ?",
-            (coins, user_id)
-        )
+        self.cursor.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (coins, user_id))
         self.conn.commit()
     
     def add_exp(self, user_id: int, exp: int):
-        self.cursor.execute(
-            "UPDATE users SET exp = exp + ? WHERE user_id = ?",
-            (exp, user_id)
-        )
+        self.cursor.execute("UPDATE users SET exp = exp + ? WHERE user_id = ?", (exp, user_id))
         
-        self.cursor.execute(
-            "SELECT exp, level FROM users WHERE user_id = ?",
-            (user_id,)
-        )
+        self.cursor.execute("SELECT exp, level FROM users WHERE user_id = ?", (user_id,))
         user = self.cursor.fetchone()
         
         exp_needed = user[1] * 100
         if user[0] >= exp_needed:
-            self.cursor.execute(
-                "UPDATE users SET level = level + 1, exp = exp - ? WHERE user_id = ?",
-                (exp_needed, user_id)
-            )
+            self.cursor.execute("UPDATE users SET level = level + 1, exp = exp - ? WHERE user_id = ?", (exp_needed, user_id))
         self.conn.commit()
     
     def add_energy(self, user_id: int, energy: int):
-        self.cursor.execute(
-            "UPDATE users SET energy = energy + ? WHERE user_id = ?",
-            (energy, user_id)
-        )
+        self.cursor.execute("UPDATE users SET energy = energy + ? WHERE user_id = ?", (energy, user_id))
         self.conn.commit()
     
     def add_stat(self, user_id: int, stat: str, value: int = 1):
-        self.cursor.execute(
-            f"UPDATE stats SET {stat} = {stat} + ? WHERE user_id = ?",
-            (value, user_id)
-        )
+        self.cursor.execute(f"UPDATE stats SET {stat} = {stat} + ? WHERE user_id = ?", (value, user_id))
         self.conn.commit()
     
     def damage(self, user_id: int, amount: int):
-        self.cursor.execute(
-            "UPDATE users SET health = health - ? WHERE user_id = ?",
-            (amount, user_id)
-        )
+        self.cursor.execute("UPDATE users SET health = health - ? WHERE user_id = ?", (amount, user_id))
         self.conn.commit()
     
     def heal(self, user_id: int, amount: int):
-        self.cursor.execute(
-            "UPDATE users SET health = health + ? WHERE user_id = ?",
-            (amount, user_id)
-        )
+        self.cursor.execute("UPDATE users SET health = health + ? WHERE user_id = ?", (amount, user_id))
         self.conn.commit()
     
     def mute_user(self, user_id: int, minutes: int, admin_id: int = None, reason: str = "Спам"):
         mute_until = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
-        self.cursor.execute(
-            "UPDATE users SET mute_until = ? WHERE user_id = ?",
-            (mute_until, user_id)
-        )
+        self.cursor.execute("UPDATE users SET mute_until = ? WHERE user_id = ?", (mute_until, user_id))
         self.conn.commit()
         return mute_until
     
@@ -428,10 +266,7 @@ class Database:
         return "0"
     
     def add_warn(self, user_id: int, admin_id: int, reason: str = "Нарушение"):
-        self.cursor.execute(
-            "UPDATE users SET warns = warns + 1 WHERE user_id = ?",
-            (user_id,)
-        )
+        self.cursor.execute("UPDATE users SET warns = warns + 1 WHERE user_id = ?", (user_id,))
         self.conn.commit()
         
         self.cursor.execute("SELECT warns FROM users WHERE user_id = ?", (user_id,))
@@ -443,17 +278,11 @@ class Database:
         return f"⚠️ Пользователь получил варн ({warns}/3)"
     
     def ban_user(self, user_id: int, admin_id: int):
-        self.cursor.execute(
-            "UPDATE users SET banned = 1 WHERE user_id = ?",
-            (user_id,)
-        )
+        self.cursor.execute("UPDATE users SET banned = 1 WHERE user_id = ?", (user_id,))
         self.conn.commit()
     
     def unban_user(self, user_id: int):
-        self.cursor.execute(
-            "UPDATE users SET banned = 0, warns = 0 WHERE user_id = ?",
-            (user_id,)
-        )
+        self.cursor.execute("UPDATE users SET banned = 0, warns = 0 WHERE user_id = ?", (user_id,))
         self.conn.commit()
     
     def is_banned(self, user_id: int) -> bool:
@@ -479,18 +308,12 @@ class Database:
     
     def set_vip(self, user_id: int, days: int):
         vip_until = datetime.datetime.now() + datetime.timedelta(days=days)
-        self.cursor.execute(
-            "UPDATE users SET vip_until = ?, role = 'vip' WHERE user_id = ?",
-            (vip_until, user_id)
-        )
+        self.cursor.execute("UPDATE users SET vip_until = ?, role = 'vip' WHERE user_id = ?", (vip_until, user_id))
         self.conn.commit()
     
     def set_premium(self, user_id: int, days: int):
         premium_until = datetime.datetime.now() + datetime.timedelta(days=days)
-        self.cursor.execute(
-            "UPDATE users SET premium_until = ?, role = 'premium' WHERE user_id = ?",
-            (premium_until, user_id)
-        )
+        self.cursor.execute("UPDATE users SET premium_until = ?, role = 'premium' WHERE user_id = ?", (premium_until, user_id))
         self.conn.commit()
     
     def get_bosses(self, alive_only=True):
@@ -505,54 +328,33 @@ class Database:
         return self.cursor.fetchone()
     
     def damage_boss(self, boss_id, damage):
-        self.cursor.execute(
-            "UPDATE bosses SET boss_health = boss_health - ? WHERE id = ?",
-            (damage, boss_id)
-        )
+        self.cursor.execute("UPDATE bosses SET boss_health = boss_health - ? WHERE id = ?", (damage, boss_id))
         self.conn.commit()
         
         self.cursor.execute("SELECT boss_health FROM bosses WHERE id = ?", (boss_id,))
         health = self.cursor.fetchone()[0]
         
         if health <= 0:
-            self.cursor.execute(
-                "UPDATE bosses SET is_alive = 0 WHERE id = ?",
-                (boss_id,)
-            )
+            self.cursor.execute("UPDATE bosses SET is_alive = 0 WHERE id = ?", (boss_id,))
             self.conn.commit()
             return True
         return False
     
     def add_boss_kill(self, user_id):
-        self.cursor.execute(
-            "UPDATE users SET boss_kills = boss_kills + 1 WHERE user_id = ?",
-            (user_id,)
-        )
+        self.cursor.execute("UPDATE users SET boss_kills = boss_kills + 1 WHERE user_id = ?", (user_id,))
         self.conn.commit()
     
     def get_top(self, by="coins", limit=10):
-        self.cursor.execute(
-            f"SELECT first_name, {by} FROM users ORDER BY {by} DESC LIMIT ?",
-            (limit,)
-        )
+        self.cursor.execute(f"SELECT first_name, {by} FROM users ORDER BY {by} DESC LIMIT ?", (limit,))
         return self.cursor.fetchall()
     
     def create_clan(self, name, owner_id):
         try:
-            self.cursor.execute(
-                "INSERT INTO clans (name, owner_id) VALUES (?, ?)",
-                (name, owner_id)
-            )
+            self.cursor.execute("INSERT INTO clans (name, owner_id) VALUES (?, ?)", (name, owner_id))
             self.conn.commit()
             clan_id = self.cursor.lastrowid
-            self.cursor.execute(
-                "INSERT INTO clan_members (clan_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)",
-                (clan_id, owner_id, 'owner', datetime.datetime.now())
-            )
-            self.cursor.execute(
-                "UPDATE users SET clan_id = ?, clan_role = 'owner' WHERE user_id = ?",
-                (clan_id, owner_id)
-            )
+            self.cursor.execute("INSERT INTO clan_members (clan_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)", (clan_id, owner_id, 'owner', datetime.datetime.now()))
+            self.cursor.execute("UPDATE users SET clan_id = ?, clan_role = 'owner' WHERE user_id = ?", (clan_id, owner_id))
             self.conn.commit()
             return clan_id
         except:
@@ -579,157 +381,16 @@ class Database:
         return self.cursor.fetchall()
     
     def join_clan(self, user_id, clan_id):
-        self.cursor.execute(
-            "INSERT INTO clan_members (clan_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)",
-            (clan_id, user_id, 'member', datetime.datetime.now())
-        )
-        self.cursor.execute(
-            "UPDATE users SET clan_id = ?, clan_role = 'member' WHERE user_id = ?",
-            (clan_id, user_id)
-        )
-        self.cursor.execute(
-            "UPDATE clans SET members = members + 1 WHERE id = ?",
-            (clan_id,)
-        )
+        self.cursor.execute("INSERT INTO clan_members (clan_id, user_id, role, joined_at) VALUES (?, ?, ?, ?)", (clan_id, user_id, 'member', datetime.datetime.now()))
+        self.cursor.execute("UPDATE users SET clan_id = ?, clan_role = 'member' WHERE user_id = ?", (clan_id, user_id))
+        self.cursor.execute("UPDATE clans SET members = members + 1 WHERE id = ?", (clan_id,))
         self.conn.commit()
     
     def leave_clan(self, user_id, clan_id):
-        self.cursor.execute(
-            "DELETE FROM clan_members WHERE clan_id = ? AND user_id = ?",
-            (clan_id, user_id)
-        )
-        self.cursor.execute(
-            "UPDATE users SET clan_id = 0, clan_role = 'member' WHERE user_id = ?",
-            (user_id,)
-        )
-        self.cursor.execute(
-            "UPDATE clans SET members = members - 1 WHERE id = ?",
-            (clan_id,)
-        )
+        self.cursor.execute("DELETE FROM clan_members WHERE clan_id = ? AND user_id = ?", (clan_id, user_id))
+        self.cursor.execute("UPDATE users SET clan_id = 0, clan_role = 'member' WHERE user_id = ?", (user_id,))
+        self.cursor.execute("UPDATE clans SET members = members - 1 WHERE id = ?", (clan_id,))
         self.conn.commit()
-    
-    def rr_get_user(self, user_id):
-        user = self.get_user(user_id, "")
-        return {
-            "money": user.get('rr_money', 100),
-            "wins": user.get('rr_wins', 0),
-            "losses": user.get('rr_losses', 0),
-            "games": user.get('rr_games', 0)
-        }
-    
-    def rr_add_money(self, user_id, amount):
-        self.cursor.execute(
-            "UPDATE users SET rr_money = rr_money + ? WHERE user_id = ?",
-            (amount, user_id)
-        )
-        self.conn.commit()
-    
-    def rr_create_lobby(self, creator_id, max_players, bet):
-        self.cursor.execute('''
-            INSERT INTO rr_lobbies (creator_id, max_players, bet, players, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (creator_id, max_players, bet, str([creator_id]), datetime.datetime.now()))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def rr_get_lobby(self, lobby_id):
-        self.cursor.execute("SELECT * FROM rr_lobbies WHERE id = ?", (lobby_id,))
-        return self.cursor.fetchone()
-    
-    def rr_join_lobby(self, lobby_id, user_id):
-        self.cursor.execute("SELECT players, max_players FROM rr_lobbies WHERE id = ? AND status = 'waiting'", (lobby_id,))
-        result = self.cursor.fetchone()
-        if result:
-            players = eval(result[0])
-            max_players = result[1]
-            if user_id not in players and len(players) < max_players:
-                players.append(user_id)
-                self.cursor.execute(
-                    "UPDATE rr_lobbies SET players = ? WHERE id = ?",
-                    (str(players), lobby_id)
-                )
-                self.conn.commit()
-                return True
-        return False
-    
-    def rr_start_game(self, lobby_id):
-        self.cursor.execute("SELECT * FROM rr_lobbies WHERE id = ?", (lobby_id,))
-        lobby = self.cursor.fetchone()
-        if lobby:
-            players = eval(lobby[4])
-            bet = lobby[3]
-            
-            cylinder_size = random.choice([6, 7, 8, 9, 10])
-            bullets = random.randint(1, 3)
-            
-            positions = [False] * cylinder_size
-            bullet_positions = random.sample(range(cylinder_size), bullets)
-            for pos in bullet_positions:
-                positions[pos] = True
-            
-            random.shuffle(players)
-            current_player = 0
-            
-            self.cursor.execute('''
-                INSERT INTO rr_games (lobby_id, players, current_player, cylinder_size, bullets, positions, alive_players, phase, turn_order, started_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (lobby_id, str(players), current_player, cylinder_size, bullets, str(positions), str(players), 'playing', str(players), datetime.datetime.now()))
-            game_id = self.cursor.lastrowid
-            
-            self.cursor.execute(
-                "UPDATE rr_lobbies SET status = 'playing' WHERE id = ?",
-                (lobby_id,)
-            )
-            self.conn.commit()
-            
-            return game_id, players, cylinder_size, bullets, positions
-        return None
-    
-    def rr_get_game(self, game_id):
-        self.cursor.execute("SELECT * FROM rr_games WHERE id = ?", (game_id,))
-        return self.cursor.fetchone()
-    
-    def rr_make_shot(self, game_id, user_id):
-        game = self.rr_get_game(game_id)
-        if not game:
-            return None
-        
-        players = eval(game[2])
-        current_player = game[3]
-        positions = eval(game[6])
-        alive_players = eval(game[7])
-        
-        if players[current_player] != user_id:
-            return "not_your_turn"
-        
-        shot_result = positions[0]
-        
-        if shot_result:
-            alive_players.remove(user_id)
-            result = "dead"
-            self.rr_add_money(user_id, -game[5])
-            
-            if len(alive_players) == 1:
-                winner_id = alive_players[0]
-                self.rr_add_money(winner_id, game[5] * len(players))
-                self.cursor.execute(
-                    "UPDATE rr_games SET phase = 'finished' WHERE id = ?",
-                    (game_id,)
-                )
-                self.conn.commit()
-                return "game_over", winner_id
-        else:
-            result = "alive"
-            positions = positions[1:] + [False]
-        
-        current_player = (current_player + 1) % len(alive_players)
-        
-        self.cursor.execute('''
-            UPDATE rr_games SET current_player = ?, positions = ?, alive_players = ? WHERE id = ?
-        ''', (current_player, str(positions), str(alive_players), game_id))
-        self.conn.commit()
-        
-        return result
     
     def close(self):
         self.conn.close()
@@ -737,104 +398,128 @@ class Database:
 # ===================== БАЗА ДАННЫХ =====================
 db = Database()
 
-# ===================== ИИ С OPENROUTER =====================
+# ===================== УМНЫЙ ИИ (ЛОКАЛЬНЫЙ) =====================
 class SpectrumAI:
     def __init__(self):
         self.contexts = {}
-        self.user_state = {}
-        self.session = None
-        self.api_key = "sk-97ac1d0de1844c449852a5470cbcae35"
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         print("🤖 ИИ СПЕКТР инициализирован")
-    
-    async def get_session(self):
-        if not self.session:
-            self.session = aiohttp.ClientSession()
-        return self.session
     
     async def get_response(self, user_id: int, message: str) -> str:
         msg_lower = message.lower().strip()
         
-        # Сначала пробуем OpenRouter
-        try:
-            session = await self.get_session()
-            
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-                "HTTP-Referer": "https://railway.app",
-                "X-Title": "Spectrum Bot"
-            }
-            
-            if user_id not in self.contexts:
-                self.contexts[user_id] = [
-                    {"role": "system", "content": "Ты - игровой бот «СПЕКТР». Ты помогаешь игрокам сражаться с боссами, играть в казино, русскую рулетку, крестики-нолики. Отвечай кратко, с эмодзи, по-русски. Ты дружелюбный помощник."}
-                ]
-            
-            self.contexts[user_id].append({"role": "user", "content": message})
-            
-            if len(self.contexts[user_id]) > 11:
-                self.contexts[user_id] = [self.contexts[user_id][0]] + self.contexts[user_id][-10:]
-            
-            data = {
-                "model": "deepseek/deepseek-chat",
-                "messages": self.contexts[user_id],
-                "temperature": 0.7,
-                "max_tokens": 150
-            }
-            
-            async with session.post(self.api_url, json=data, headers=headers, timeout=15) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    ai_response = result["choices"][0]["message"]["content"]
-                    self.contexts[user_id].append({"role": "assistant", "content": ai_response})
-                    print(f"✅ OpenRouter ответил")
-                    return f"🤖 **СПЕКТР:** {ai_response}"
-                else:
-                    print(f"OpenRouter ошибка: {resp.status}")
-        except Exception as e:
-            print(f"OpenRouter ошибка: {e}")
+        # Приветствия
+        if any(word in msg_lower for word in ["привет", "здравствуй", "хай", "ку", "hello", "здаров"]):
+            return random.choice([
+                "👋 Привет! Я на месте. Чем могу помочь?",
+                "🌟 Здравствуй! Как твои дела?",
+                "😊 Привет-привет! Готов к приключениям?",
+                "🎯 Хай! Скучал по мне?",
+                "🤗 О, привет! Давно не виделись!"
+            ])
         
-        # Если OpenRouter не работает — запасные ответы
-        if any(word in msg_lower for word in ["привет", "здравствуй", "хай"]):
-            return "👋 **СПЕКТР:** Приветствую, игрок. Чем могу помочь?"
-        elif any(word in msg_lower for word in ["как дела", "как ты"]):
-            return "⚙️ **СПЕКТР:** Всё отлично! Анализирую твой прогресс."
-        elif any(word in msg_lower for word in ["спасибо", "благодарю"]):
-            return "🤝 **СПЕКТР:** Обращайся. Удачных сражений!"
-        elif any(word in msg_lower for word in ["пока", "до свидания"]):
-            return "👋 **СПЕКТР:** До встречи! Не забывай забирать /daily!"
-        elif any(word in msg_lower for word in ["кто ты", "ты кто"]):
-            return "🤖 **СПЕКТР:** Я — искусственный интеллект, созданный для помощи в играх."
-        elif any(word in msg_lower for word in ["что ты умеешь", "твои функции"]):
+        # Как дела
+        elif any(word in msg_lower for word in ["как дела", "как ты", "что делаешь", "как жизнь"]):
+            return random.choice([
+                "⚙️ Всё отлично! Слежу за битвами и статистикой. А у тебя как?",
+                "💫 Супер! Только что обновился, полон сил!",
+                "✨ Хорошо, как никогда! Есть идеи для игр?",
+                "🎮 Работаю не покладая рук! Хочешь сыграть?",
+                "😎 Лучше всех! А у тебя как настроение?"
+            ])
+        
+        # Спасибо
+        elif any(word in msg_lower for word in ["спасибо", "благодарю", "thanks", "пасиб"]):
+            return random.choice([
+                "🤝 Всегда пожалуйста! Обращайся!",
+                "😊 Рад помочь! Удачных сражений!",
+                "💖 Приятно, когда ценят! Спасибо тебе!",
+                "🌟 Не за что! Давай еще поиграем?",
+                "💫 Рад стараться для тебя!"
+            ])
+        
+        # Пока
+        elif any(word in msg_lower for word in ["пока", "до свидания", "увидимся", "bye", "досвидания"]):
+            return random.choice([
+                "👋 Пока! Заходи еще, буду скучать!",
+                "🌟 До встречи! Не забывай забирать /daily!",
+                "😢 Уже уходишь? Возвращайся скорее!",
+                "💫 Пока-пока! Удачи тебе!",
+                "⭐ Забери /daily перед уходом!"
+            ])
+        
+        # Кто ты
+        elif any(word in msg_lower for word in ["кто ты", "ты кто", "кто такой", "твое имя"]):
+            return random.choice([
+                "🤖 Я — СПЕКТР, искусственный интеллект, созданный для помощи в играх!",
+                "👾 Я бот, который помогает играть и общаться!",
+                "💫 Меня создали, чтобы развлекать тебя!",
+                "🎮 Я твой друг в мире игр и отношений!",
+                "🌟 Я — «СПЕКТР»! Приятно познакомиться!"
+            ])
+        
+        # Что ты умеешь
+        elif any(word in msg_lower for word in ["что ты умеешь", "твои функции", "что можешь", "что делаешь"]):
             return (
-                "📋 **СПЕКТР:** Мои возможности:\n"
-                "• 👾 Битвы с боссами\n"
-                "• 🎰 Казино\n"
-                "• 💣 Русская рулетка\n"
-                "• ⭕ Крестики-нолики 3D\n"
-                "• 👥 Кланы\n"
-                "• 💎 Привилегии\n\n"
+                "📋 **Мои возможности:**\n"
+                "• 👾 Битвы с боссами (/bosses)\n"
+                "• 📊 Статистика игроков (/profile)\n"
+                "• 🛍 Магазин предметов (/shop)\n"
+                "• 💎 Привилегии (VIP, Premium)\n"
+                "• 👥 Кланы (/clan)\n"
+                "• 👑 Админ-команды для модерации\n\n"
                 "Полный список: /help"
             )
-        elif msg_lower == "/test_deepseek":
-            return "❌ **СПЕКТР:** OpenRouter API недоступен. Использую локальные ответы."
+        
+        # Где боссы
+        elif any(word in msg_lower for word in ["где боссы", "хочу босса", "битва", "босс"]):
+            return "👾 Боссы ждут тебя! Используй /bosses для списка."
+        
+        # Профиль
+        elif any(word in msg_lower for word in ["мой профиль", "моя статистика", "кто я", "профиль"]):
+            return "📊 Твой профиль в /profile. Там вся информация о тебе!"
+        
+        # Магазин
+        elif any(word in msg_lower for word in ["магазин", "где купить", "хочу купить", "шоп"]):
+            return "🛍 Магазин открыт! Заходи в /shop, там много полезного."
+        
+        # Награда
+        elif any(word in msg_lower for word in ["награда", "бонус", "хочу награду", "дейли"]):
+            return "🎁 Ежедневная награда ждёт! Используй /daily."
+        
+        # Топ
+        elif any(word in msg_lower for word in ["топ", "лидеры", "кто лучший"]):
+            return "🏆 Топ игроков в /top. Может, скоро увижу там тебя?"
+        
+        # Помощь
+        elif any(word in msg_lower for word in ["помощь", "что делать", "хелп", "команды"]):
+            return "📚 Все команды в /help. Если что-то непонятно - спрашивай!"
+        
+        # Клан
+        elif any(word in msg_lower for word in ["клан", "гильдия", "кланы"]):
+            return "👥 Информация о кланах в /clan. Создай свой или вступай в существующий!"
+        
+        # Владелец
+        elif any(word in msg_lower for word in ["кто создал", "твой создатель", "владелец"]):
+            return f"👑 Меня создал {OWNER_USERNAME}. Он же мой владелец и главный разработчик."
+        
+        # Всё остальное - умные ответы
         else:
             responses = [
-                "🤖 Я внимательно слушаю. Можешь уточнить?",
-                "🎯 Напиши /help, чтобы увидеть все команды.",
+                "🤖 Я внимательно слушаю. Можешь уточнить, что именно ты хочешь?",
+                "🎯 Напиши /help, чтобы увидеть все доступные команды.",
                 "💡 Если хочешь сразиться с боссом, используй /bosses",
-                "📊 Хочешь узнать свою статистику? /profile",
-                "🛍 Нужны предметы? /shop",
-                "🎁 Не забудь забрать награду: /daily",
-                "👥 Интересуют кланы? /clan",
-                "🎰 Попытай удачу в казино: /casino"
+                "📊 Хочешь узнать свою статистику? Зайди в /profile",
+                "🛍 Нужны предметы? Загляни в /shop",
+                "🎁 Не забудь забрать ежедневную награду: /daily",
+                "👥 Интересуют кланы? /clan поможет",
+                "👑 Есть вопросы к владельцу? Пиши @NobuCraft",
+                "⚔️ Хочешь в бой? Список боссов в /bosses",
+                "💰 Заработать монеты можно в битвах с боссами!"
             ]
             return random.choice(responses)
     
     async def close(self):
-        if self.session:
-            await self.session.close()
+        pass
 
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
@@ -863,22 +548,13 @@ class GameBot:
         self.application.add_handler(CommandHandler("clan_create", self.cmd_clan_create))
         self.application.add_handler(CommandHandler("clan_join", self.cmd_clan_join))
         self.application.add_handler(CommandHandler("clan_leave", self.cmd_clan_leave))
-        self.application.add_handler(CommandHandler("casino", self.cmd_casino))
-        self.application.add_handler(CommandHandler("roulette", self.cmd_roulette))
-        self.application.add_handler(CommandHandler("dice", self.cmd_dice_casino))
-        self.application.add_handler(CommandHandler("rr", self.cmd_rr))
-        self.application.add_handler(CommandHandler("rr_start", self.cmd_rr_start))
-        self.application.add_handler(CommandHandler("rr_join", self.cmd_rr_join))
-        self.application.add_handler(CommandHandler("rr_shot", self.cmd_rr_shot))
-        self.application.add_handler(CommandHandler("ttt", self.cmd_ttt))
-        self.application.add_handler(CommandHandler("rps", self.cmd_rps))
         self.application.add_handler(CommandHandler("mute", self.cmd_mute))
         self.application.add_handler(CommandHandler("warn", self.cmd_warn))
         self.application.add_handler(CommandHandler("ban", self.cmd_ban))
         self.application.add_handler(CommandHandler("unban", self.cmd_unban))
         self.application.add_handler(CommandHandler("give", self.cmd_give))
-        self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        
         logger.info("✅ Все обработчики зарегистрированы")
     
     def is_admin(self, user_id: int) -> bool:
@@ -920,10 +596,7 @@ class GameBot:
         
         if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
             self.db.mute_user(user_id, SPAM_MUTE_TIME, 0, "Автоматический спам")
-            await update.message.reply_text(
-                f"🚫 **СПАМ-ФИЛЬТР**\n\nВы замучены на {SPAM_MUTE_TIME} минут.",
-                parse_mode='Markdown'
-            )
+            await update.message.reply_text(f"🚫 **СПАМ-ФИЛЬТР**\n\nВы замучены на {SPAM_MUTE_TIME} минут.", parse_mode='Markdown')
             self.spam_tracker[user_id] = []
             return True
         return False
@@ -943,10 +616,7 @@ class GameBot:
             f"👾 /bosses - Битвы с боссами\n"
             f"🛍 /shop - Магазин\n"
             f"💎 /donate - Привилегии\n"
-            f"🎰 /casino - Казино\n"
-            f"💣 /rr - Русская рулетка\n"
-            f"⭕ /ttt - Крестики-нолики\n"
-            f"✊ /rps - Камень-ножницы-бумага\n"
+            f"👥 /clan - Кланы\n"
             f"📚 /help - Все команды\n\n"
             f"👑 **Владелец:** {OWNER_USERNAME}"
         )
@@ -981,23 +651,6 @@ class GameBot:
             "/clan_join [ID] - Вступить в клан\n"
             "/clan_leave - Покинуть клан\n\n"
             
-            "🎰 **КАЗИНО**\n"
-            "/casino - Меню казино\n"
-            "/roulette [ставка] [цвет/число] - Рулетка\n"
-            "/dice [ставка] - Кости\n\n"
-            
-            "💣 **РУССКАЯ РУЛЕТКА**\n"
-            "/rr - Инфо об игре\n"
-            "/rr_start [игроки] [ставка] - Создать лобби\n"
-            "/rr_join [ID] - Войти в лобби\n"
-            "/rr_shot - Сделать выстрел\n\n"
-            
-            "⭕ **КРЕСТИКИ-НОЛИКИ**\n"
-            "/ttt - Правила игры\n\n"
-            
-            "✊ **КАМЕНЬ-НОЖНИЦЫ-БУМАГА**\n"
-            "/rps - Сыграть в КНБ\n\n"
-            
             "👑 **АДМИН КОМАНДЫ**\n"
             "/mute [ID] [минут] - Замутить\n"
             "/warn [ID] - Выдать варн\n"
@@ -1028,8 +681,6 @@ class GameBot:
         
         clan = self.db.get_user_clan(user.id)
         clan_name = clan[1] if clan else "Нет"
-        
-        rr = self.db.rr_get_user(user.id)
         
         text = (
             f"👤 **ПРОФИЛЬ ИГРОКА**\n\n"
@@ -1095,10 +746,7 @@ class GameBot:
             await update.message.reply_text(f"🔇 Вы замучены. Осталось: {remaining}")
             return
         
-        self.db.cursor.execute(
-            "SELECT last_daily, daily_streak FROM stats WHERE user_id = ?",
-            (user.id,)
-        )
+        self.db.cursor.execute("SELECT last_daily, daily_streak FROM stats WHERE user_id = ?", (user.id,))
         result = self.db.cursor.fetchone()
         
         today = datetime.datetime.now().date()
@@ -1129,10 +777,7 @@ class GameBot:
         self.db.add_exp(user.id, exp)
         self.db.add_energy(user.id, energy)
         
-        self.db.cursor.execute(
-            "UPDATE stats SET last_daily = ?, daily_streak = ? WHERE user_id = ?",
-            (datetime.datetime.now(), streak, user.id)
-        )
+        self.db.cursor.execute("UPDATE stats SET last_daily = ?, daily_streak = ? WHERE user_id = ?", (datetime.datetime.now(), streak, user.id))
         self.db.conn.commit()
         
         await update.message.reply_text(
@@ -1304,18 +949,12 @@ class GameBot:
             await update.message.reply_text(f"✅ Здоровье +{item_data['heal']}❤️")
         
         elif 'damage' in item_data:
-            self.db.cursor.execute(
-                "UPDATE users SET damage = damage + ? WHERE user_id = ?",
-                (item_data['damage'], user.id)
-            )
+            self.db.cursor.execute("UPDATE users SET damage = damage + ? WHERE user_id = ?", (item_data['damage'], user.id))
             self.db.conn.commit()
             await update.message.reply_text(f"✅ Урон +{item_data['damage']}⚔️")
         
         elif 'armor' in item_data:
-            self.db.cursor.execute(
-                "UPDATE users SET armor = armor + ? WHERE user_id = ?",
-                (item_data['armor'], user.id)
-            )
+            self.db.cursor.execute("UPDATE users SET armor = armor + ? WHERE user_id = ?", (item_data['armor'], user.id))
             self.db.conn.commit()
             await update.message.reply_text(f"✅ Броня +{item_data['armor']}🛡")
         
@@ -1366,11 +1005,7 @@ class GameBot:
         self.db.add_coins(user.id, -VIP_PRICE)
         self.db.set_vip(user.id, VIP_DAYS)
         
-        await update.message.reply_text(
-            f"🌟 **ПОЗДРАВЛЯЮ!**\n\n"
-            f"Теперь у тебя VIP статус на {VIP_DAYS} дней!",
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(f"🌟 **ПОЗДРАВЛЯЮ!**\n\nТеперь у тебя VIP статус на {VIP_DAYS} дней!", parse_mode='Markdown')
     
     async def cmd_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1387,11 +1022,7 @@ class GameBot:
         self.db.add_coins(user.id, -PREMIUM_PRICE)
         self.db.set_premium(user.id, PREMIUM_DAYS)
         
-        await update.message.reply_text(
-            f"💎 **ПОЗДРАВЛЯЮ!**\n\n"
-            f"Теперь у тебя PREMIUM статус на {PREMIUM_DAYS} дней!",
-            parse_mode='Markdown'
-        )
+        await update.message.reply_text(f"💎 **ПОЗДРАВЛЯЮ!**\n\nТеперь у тебя PREMIUM статус на {PREMIUM_DAYS} дней!", parse_mode='Markdown')
     
     async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1500,260 +1131,6 @@ class GameBot:
         self.db.leave_clan(user.id, clan[0])
         await update.message.reply_text("✅ Ты покинул клан")
     
-    async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        keyboard = [
-            [InlineKeyboardButton("🎰 Рулетка", callback_data="casino_roulette"),
-             InlineKeyboardButton("🎲 Кости", callback_data="casino_dice")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "🎰 **ДОБРО ПОЖАЛОВАТЬ В КАЗИНО!** 🎰\n\n"
-            "Выбери игру:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id, user.first_name, user.last_name or "")
-        
-        bet = 10
-        choice = "red"
-        
-        if context.args:
-            try:
-                bet = int(context.args[0])
-                if len(context.args) > 1:
-                    choice = context.args[1].lower()
-            except:
-                pass
-        
-        if bet > user_data['coins']:
-            await update.message.reply_text(f"❌ Недостаточно монет! У тебя {user_data['coins']} 🪙")
-            return
-        
-        numbers = list(range(0, 37))
-        colors = {i: "red" if i in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "black" for i in range(1, 37)}
-        colors[0] = "green"
-        
-        result_num = random.choice(numbers)
-        result_color = colors[result_num]
-        
-        win = False
-        multiplier = 0
-        
-        if choice.isdigit():
-            num = int(choice)
-            if 0 <= num <= 36:
-                if result_num == num:
-                    win = True
-                    multiplier = 36
-        elif choice in ["red", "black", "green"]:
-            if result_color == choice:
-                win = True
-                multiplier = 2 if choice in ["red", "black"] else 36
-        
-        if win:
-            winnings = bet * multiplier
-            self.db.add_coins(user.id, winnings)
-            self.db.add_stat(user.id, "casino_wins", 1)
-            result_text = f"🎉 Ты выиграл {winnings} 🪙!"
-        else:
-            self.db.add_coins(user.id, -bet)
-            self.db.add_stat(user.id, "casino_losses", 1)
-            result_text = f"😢 Ты проиграл {bet} 🪙"
-        
-        await update.message.reply_text(
-            f"🎰 **РУЛЕТКА**\n\n"
-            f"Ставка: {bet} 🪙 на {choice}\n"
-            f"Выпало: {result_num} {result_color}\n\n"
-            f"{result_text}",
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_dice_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id, user.first_name, user.last_name or "")
-        
-        bet = 10
-        if context.args:
-            try:
-                bet = int(context.args[0])
-            except:
-                pass
-        
-        if bet > user_data['coins']:
-            await update.message.reply_text(f"❌ Недостаточно монет! У тебя {user_data['coins']} 🪙")
-            return
-        
-        dice1 = random.randint(1, 6)
-        dice2 = random.randint(1, 6)
-        total = dice1 + dice2
-        
-        if total in [7, 11]:
-            win = bet * 2
-            result_text = f"🎉 Ты выиграл {win} 🪙!"
-        elif total in [2, 3, 12]:
-            win = 0
-            result_text = f"😢 Ты проиграл {bet} 🪙"
-        else:
-            win = bet
-            result_text = f"🔄 Ничья, ставка возвращена: {bet} 🪙"
-        
-        if win > 0:
-            self.db.add_coins(user.id, win)
-            self.db.add_stat(user.id, "casino_wins", 1)
-        else:
-            self.db.add_coins(user.id, -bet)
-            self.db.add_stat(user.id, "casino_losses", 1)
-        
-        await update.message.reply_text(
-            f"🎲 **КОСТИ**\n\n"
-            f"{dice1} + {dice2} = {total}\n\n"
-            f"{result_text}",
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_rr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "💣 **РУССКАЯ РУЛЕТКА**\n\n"
-            "Команды:\n"
-            "/rr_start [игроки] [ставка] - Создать лобби\n"
-            "/rr_join [ID] - Войти в лобби\n"
-            "/rr_shot - Сделать выстрел",
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_rr_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ Использование: /rr_start [игроки (2-6)] [ставка]")
-            return
-        
-        try:
-            max_players = int(context.args[0])
-            bet = int(context.args[1])
-        except:
-            await update.message.reply_text("❌ Неправильный формат")
-            return
-        
-        if max_players < 2 or max_players > 6:
-            await update.message.reply_text("❌ Количество игроков должно быть от 2 до 6")
-            return
-        
-        if bet < 1 or bet > 10000:
-            await update.message.reply_text("❌ Ставка должна быть от 1 до 10000")
-            return
-        
-        user = update.effective_user
-        user_data = self.db.rr_get_user(user.id)
-        
-        if user_data['money'] < bet:
-            await update.message.reply_text(f"❌ Недостаточно черепков! У тебя {user_data['money']} 💀")
-            return
-        
-        lobby_id = self.db.rr_create_lobby(user.id, max_players, bet)
-        
-        await update.message.reply_text(
-            f"💣 **ЛОББИ СОЗДАНО!**\n\n"
-            f"ID: {lobby_id}\n"
-            f"Создатель: {user.first_name}\n"
-            f"Игроков: 1/{max_players}\n"
-            f"Ставка: {bet} 💀\n\n"
-            f"Присоединиться: /rr_join {lobby_id}",
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_rr_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /rr_join [ID]")
-            return
-        
-        try:
-            lobby_id = int(context.args[0])
-        except:
-            await update.message.reply_text("❌ Неправильный ID")
-            return
-        
-        user = update.effective_user
-        user_data = self.db.rr_get_user(user.id)
-        lobby = self.db.rr_get_lobby(lobby_id)
-        
-        if not lobby:
-            await update.message.reply_text("❌ Лобби не найдено")
-            return
-        
-        if lobby[5] != 'waiting':
-            await update.message.reply_text("❌ Игра уже началась")
-            return
-        
-        players = eval(lobby[4])
-        
-        if user.id in players:
-            await update.message.reply_text("❌ Ты уже в этом лобби")
-            return
-        
-        if len(players) >= lobby[2]:
-            await update.message.reply_text("❌ Лобби уже заполнено")
-            return
-        
-        if user_data['money'] < lobby[3]:
-            await update.message.reply_text(f"❌ Недостаточно черепков! Нужно {lobby[3]} 💀")
-            return
-        
-        if self.db.rr_join_lobby(lobby_id, user.id):
-            await update.message.reply_text(f"✅ Ты присоединился к лобби {lobby_id}!")
-        else:
-            await update.message.reply_text("❌ Не удалось присоединиться к лобби")
-    
-    async def cmd_rr_shot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        
-        self.db.cursor.execute(
-            "SELECT * FROM rr_games WHERE players LIKE ? AND phase = 'playing'",
-            (f'%{user.id}%',)
-        )
-        game = self.db.cursor.fetchone()
-        
-        if not game:
-            await update.message.reply_text("❌ Ты не участвуешь в активной игре")
-            return
-        
-        result = self.db.rr_make_shot(game[0], user.id)
-        
-        if result == "not_your_turn":
-            await update.message.reply_text("❌ Сейчас не твой ход")
-        elif result == "dead":
-            await update.message.reply_text("💀 **БАХ!** Ты погиб...")
-        elif result == "alive":
-            await update.message.reply_text("✅ **ЩЕЛК!** Ты выжил!")
-        elif isinstance(result, tuple) and result[0] == "game_over":
-            winner_id = result[1]
-            winner_data = await context.bot.get_chat(winner_id)
-            await update.message.reply_text(
-                f"🏆 **ИГРА ОКОНЧЕНА!**\n\n"
-                f"Победитель: {winner_data.first_name}",
-                parse_mode='Markdown'
-            )
-    
-    async def cmd_ttt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            "⭕ **КРЕСТИКИ-НОЛИКИ 3D**\n\n"
-            "Функция в разработке. Следите за обновлениями!",
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        keyboard = [
-            [
-                InlineKeyboardButton("🪨 Камень", callback_data="rps_rock"),
-                InlineKeyboardButton("✂️ Ножницы", callback_data="rps_scissors"),
-                InlineKeyboardButton("📄 Бумага", callback_data="rps_paper")
-            ]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text("✊ **ВЫБЕРИ ХОД:**", reply_markup=reply_markup, parse_mode='Markdown')
-    
     async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self.is_admin(update.effective_user.id):
             await update.message.reply_text("❌ Недостаточно прав")
@@ -1780,10 +1157,7 @@ class GameBot:
         await update.message.reply_text(f"🔇 Пользователь {target_id} замучен на {minutes} минут\nПричина: {reason}")
         
         try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text=f"🔇 Вы замучены на {minutes} минут.\nПричина: {reason}"
-            )
+            await context.bot.send_message(chat_id=target_id, text=f"🔇 Вы замучены на {minutes} минут.\nПричина: {reason}")
         except:
             pass
     
@@ -1811,10 +1185,7 @@ class GameBot:
         await update.message.reply_text(result)
         
         try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text=f"⚠️ Вам выдано предупреждение.\nПричина: {reason}"
-            )
+            await context.bot.send_message(chat_id=target_id, text=f"⚠️ Вам выдано предупреждение.\nПричина: {reason}")
         except:
             pass
     
@@ -1841,10 +1212,7 @@ class GameBot:
         await update.message.reply_text(f"🚫 Пользователь {target_id} забанен")
         
         try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text="🚫 Вы забанены в боте."
-            )
+            await context.bot.send_message(chat_id=target_id, text="🚫 Вы забанены в боте.")
         except:
             pass
     
@@ -1867,10 +1235,7 @@ class GameBot:
         await update.message.reply_text(f"✅ Пользователь {target_id} разбанен")
         
         try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text="✅ Вы разбанены в боте."
-            )
+            await context.bot.send_message(chat_id=target_id, text="✅ Вы разбанены в боте.")
         except:
             pass
     
@@ -1894,10 +1259,7 @@ class GameBot:
         await update.message.reply_text(f"✅ Пользователю {target_id} выдано {amount} 🪙")
         
         try:
-            await context.bot.send_message(
-                chat_id=target_id,
-                text=f"💰 Вам начислено {amount} 🪙 от администрации!"
-            )
+            await context.bot.send_message(chat_id=target_id, text=f"💰 Вам начислено {amount} 🪙 от администрации!")
         except:
             pass
     
@@ -1923,55 +1285,6 @@ class GameBot:
         
         self.db.add_exp(user.id, 1)
         self.db.add_stat(user.id, "messages_count")
-    
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        user = update.effective_user
-        data = query.data
-        
-        if data == "casino_roulette":
-            await self.cmd_roulette(update, context)
-        elif data == "casino_dice":
-            await self.cmd_dice_casino(update, context)
-        elif data.startswith("rps_"):
-            choice = data.split('_')[1]
-            bot_choice = random.choice(["rock", "scissors", "paper"])
-            
-            choices = {
-                "rock": "🪨 Камень",
-                "scissors": "✂️ Ножницы",
-                "paper": "📄 Бумага"
-            }
-            
-            result_map = {
-                ("rock", "scissors"): "win",
-                ("rock", "paper"): "lose",
-                ("scissors", "paper"): "win",
-                ("scissors", "rock"): "lose",
-                ("paper", "rock"): "win",
-                ("paper", "scissors"): "lose"
-            }
-            
-            if choice == bot_choice:
-                result = "draw"
-            else:
-                result = result_map.get((choice, bot_choice), "lose")
-            
-            if result == "win":
-                self.db.cursor.execute("UPDATE users SET rps_wins = rps_wins + 1 WHERE user_id = ?", (user.id,))
-                self.db.conn.commit()
-                text = f"{choices[choice]} vs {choices[bot_choice]}\n\n🎉 Ты выиграл!"
-            elif result == "lose":
-                self.db.cursor.execute("UPDATE users SET rps_losses = rps_losses + 1 WHERE user_id = ?", (user.id,))
-                self.db.conn.commit()
-                text = f"{choices[choice]} vs {choices[bot_choice]}\n\n😢 Ты проиграл!"
-            else:
-                self.db.cursor.execute("UPDATE users SET rps_draws = rps_draws + 1 WHERE user_id = ?", (user.id,))
-                self.db.conn.commit()
-                text = f"{choices[choice]} vs {choices[bot_choice]}\n\n🤝 Ничья!"
-            
-            await query.edit_message_text(text, parse_mode='Markdown')
     
     async def run(self):
         try:
