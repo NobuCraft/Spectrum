@@ -399,48 +399,39 @@ class Database:
 db = Database()
 
 # ===================== УМНЫЙ ИИ (ЛОКАЛЬНЫЙ) =====================
-import google.generativeai as genai
-
 class SpectrumAI:
     def __init__(self):
         try:
             self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel('gemini-pro')
+            
+            # Пробуем разные названия моделей
+            models_to_try = [
+                'gemini-1.5-pro',
+                'gemini-1.0-pro',
+                'gemini-pro'
+            ]
+            
+            self.model = None
+            for model_name in models_to_try:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    # Тестовый запрос
+                    test = self.model.generate_content("test")
+                    print(f"✅ Модель работает: {model_name}")
+                    break
+                except:
+                    continue
+            
+            if self.model is None:
+                raise Exception("Ни одна модель не работает")
+            
             self.chats = {}
             print("🤖 Gemini успешно инициализирован!")
+            
         except Exception as e:
             print(f"❌ Ошибка инициализации Gemini: {e}")
             self.model = None
-    
-    async def get_response(self, user_id: int, message: str) -> str:
-        print(f"📨 Получено: {message[:50]}...")
-        
-        if self.model is None:
-            return "❌ Gemini не настроен. Проверь логи."
-        
-        try:
-            # Создаем чат если нужно
-            if user_id not in self.chats:
-                self.chats[user_id] = self.model.start_chat()
-            
-            # Отправляем запрос
-            response = self.chats[user_id].send_message(
-                f"Ты игровой бот «СПЕКТР». Отвечай кратко и дружелюбно. Вопрос: {message}"
-            )
-            
-            if response and response.text:
-                print(f"✅ Gemini ответил")
-                return f"🤖 **СПЕКТР:** {response.text}"
-            else:
-                return "❌ Gemini вернул пустой ответ"
-                
-        except Exception as e:
-            print(f"❌ Ошибка Gemini: {e}")
-            return f"❌ Ошибка Gemini: {str(e)[:100]}"
-    
-    async def close(self):
-        pass
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
