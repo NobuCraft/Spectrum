@@ -407,49 +407,28 @@ class SpectrumAI:
             self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
             genai.configure(api_key=self.api_key)
             
-            # Пробуем разные названия моделей
-            models_to_try = [
-                'gemini-1.5-pro',
-                'gemini-1.0-pro',
-                'gemini-pro'
-            ]
+            # ТОЧНОЕ название модели для твоей версии API
+            self.model = genai.GenerativeModel('models/gemini-1.5-pro')
             
-            self.model = None
-            for model_name in models_to_try:
-                try:
-                    self.model = genai.GenerativeModel(model_name)
-                    # Тестовый запрос
-                    test = self.model.generate_content("test")
-                    print(f"✅ Модель работает: {model_name}")
-                    break
-                except Exception as e:
-                    print(f"❌ Модель {model_name} не работает: {e}")
-                    continue
-            
-            if self.model is None:
-                raise Exception("Ни одна модель не работает")
+            # Тестовый запрос для проверки
+            test = self.model.generate_content("test")
+            print("✅ Gemini успешно инициализирован с моделью gemini-1.5-pro!")
             
             self.chats = {}
-            print("🤖 Gemini успешно инициализирован!")
             
         except Exception as e:
             print(f"❌ Ошибка инициализации Gemini: {e}")
             self.model = None
     
     async def get_response(self, user_id: int, message: str) -> str:
-        """ОСНОВНОЙ МЕТОД, КОТОРЫЙ ВЫЗЫВАЕТ БОТ"""
         print(f"📨 Получено сообщение от {user_id}: {message[:50]}...")
         
         if self.model is None:
             return "❌ Gemini не настроен. Проверь логи."
         
         try:
-            # Создаем чат если нужно
-            if user_id not in self.chats:
-                self.chats[user_id] = self.model.start_chat()
-            
-            # Отправляем запрос
-            response = self.chats[user_id].send_message(
+            # Простой запрос без сохранения истории (для надёжности)
+            response = self.model.generate_content(
                 f"Ты игровой бот «СПЕКТР». Отвечай кратко и дружелюбно, с эмодзи. Вопрос: {message}"
             )
             
@@ -461,7 +440,7 @@ class SpectrumAI:
                 
         except Exception as e:
             print(f"❌ Ошибка Gemini: {e}")
-            return f"❌ Ошибка Gemini: {str(e)[:100]}"
+            return f"❌ Извини, я временно не могу ответить. Попробуй позже."
     
     async def close(self):
         pass
