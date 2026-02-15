@@ -403,44 +403,30 @@ import google.generativeai as genai
 
 class SpectrumAI:
     def __init__(self):
+        print("🔄 Инициализация Gemini...")
         try:
             self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
             genai.configure(api_key=self.api_key)
             
-            # ТОЧНОЕ название модели для твоей версии API
-            self.model = genai.GenerativeModel('models/gemini-1.5-pro')
+            # Самая базовая модель
+            self.model = genai.GenerativeModel('gemini-pro')
             
-            # Тестовый запрос для проверки
-            test = self.model.generate_content("test")
-            print("✅ Gemini успешно инициализирован с моделью gemini-1.5-pro!")
-            
-            self.chats = {}
+            print("✅ Gemini успешно инициализирован!")
             
         except Exception as e:
-            print(f"❌ Ошибка инициализации Gemini: {e}")
+            print(f"❌ Ошибка: {e}")
             self.model = None
     
     async def get_response(self, user_id: int, message: str) -> str:
-        print(f"📨 Получено сообщение от {user_id}: {message[:50]}...")
-        
         if self.model is None:
-            return "❌ Gemini не настроен. Проверь логи."
+            return "❌ ИИ временно недоступен"
         
         try:
-            # Простой запрос без сохранения истории (для надёжности)
-            response = self.model.generate_content(
-                f"Ты игровой бот «СПЕКТР». Отвечай кратко и дружелюбно, с эмодзи. Вопрос: {message}"
-            )
-            
-            if response and response.text:
-                print(f"✅ Gemini ответил")
-                return f"🤖 **СПЕКТР:** {response.text}"
-            else:
-                return "❌ Gemini вернул пустой ответ"
-                
+            response = self.model.generate_content(message)
+            return f"🤖 **СПЕКТР:** {response.text}"
         except Exception as e:
-            print(f"❌ Ошибка Gemini: {e}")
-            return f"❌ Извини, я временно не могу ответить. Попробуй позже."
+            print(f"❌ Ошибка: {e}")
+            return "❌ Ошибка при обращении к ИИ"
     
     async def close(self):
         pass
