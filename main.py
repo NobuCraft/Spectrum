@@ -399,112 +399,42 @@ class Database:
 db = Database()
 
 # ===================== УМНЫЙ ИИ (ЛОКАЛЬНЫЙ) =====================
+import google.generativeai as genai
+
 class SpectrumAI:
     def __init__(self):
         self.contexts = {}
-        self.session = None
-        self.api_key = "sk-1204a64fa30248ee972777d8bb10f6e3"  # Твой новый ключ
-        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
-        self.last_api_call = 0
-        self.api_calls = 0
-        self.failed_calls = 0
-        print("🤖 ИИ СПЕКТР инициализирован с новым ключом")
-    
-    async def get_session(self):
-        if not self.session:
-            self.session = aiohttp.ClientSession()
-        return self.session
-    
-    async def call_api(self, message: str, user_id: int) -> str:
-        """Пытается вызвать API, если не блокируется"""
-        try:
-            # Ограничиваем частоту вызовов
-            current_time = time.time()
-            if current_time - self.last_api_call < 3:  # Не чаще чем раз в 3 секунды
-                return None
-            
-            self.last_api_call = current_time
-            self.api_calls += 1
-            
-            session = await self.get_session()
-            
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {self.api_key}",
-                "HTTP-Referer": "https://railway.app",
-                "X-Title": "Spectrum Bot"
-            }
-            
-            # Пробуем разные модели по очереди
-            models = [
-                "deepseek/deepseek-chat",
-                "openai/gpt-3.5-turbo",
-                "anthropic/claude-3-haiku"
-            ]
-            
-            if user_id not in self.contexts:
-                self.contexts[user_id] = [
-                    {"role": "system", "content": "Ты - игровой бот «СПЕКТР». Отвечай кратко, дружелюбно, с эмодзи. Ты помогаешь с играми, боссами, кланами."}
-                ]
-            
-            self.contexts[user_id].append({"role": "user", "content": message})
-            
-            if len(self.contexts[user_id]) > 11:
-                self.contexts[user_id] = [self.contexts[user_id][0]] + self.contexts[user_id][-10:]
-            
-            # Пробуем каждую модель по очереди
-            for model in models:
-                try:
-                    data = {
-                        "model": model,
-                        "messages": self.contexts[user_id],
-                        "temperature": 0.8,
-                        "max_tokens": 100
-                    }
-                    
-                    async with session.post(self.api_url, json=data, headers=headers, timeout=8) as resp:
-                        if resp.status == 200:
-                            result = await resp.json()
-                            ai_response = result["choices"][0]["message"]["content"]
-                            self.contexts[user_id].append({"role": "assistant", "content": ai_response})
-                            print(f"✅ API ответил (модель: {model})")
-                            return ai_response
-                        else:
-                            print(f"❌ Модель {model} ошибка: {resp.status}")
-                            continue
-                except:
-                    continue
-            
-            self.failed_calls += 1
-            print(f"❌ Все модели недоступны. Всего ошибок: {self.failed_calls}")
-            return None
-                    
-        except asyncio.TimeoutError:
-            print("⏰ Таймаут API")
-            self.failed_calls += 1
-            return None
-        except Exception as e:
-            print(f"❌ Ошибка API: {e}")
-            self.failed_calls += 1
-            return None
+        # Настройка Gemini
+        self.gemini_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
+        genai.configure(api_key=self.gemini_key)
+        self.model = genai.GenerativeModel('gemini-pro')
+        self.chats = {}
+        print("🤖 ИИ СПЕКТР инициализирован с Gemini")
     
     async def get_response(self, user_id: int, message: str) -> str:
         msg_lower = message.lower().strip()
         
-        # Спецкоманда для проверки статуса
-        if msg_lower == "/ai_status":
-            status = "✅ РАБОТАЕТ" if self.api_calls > self.failed_calls else "⚠️ ПРОБЛЕМЫ"
-            return (f"🤖 **Статус ИИ:** {status}\n"
-                    f"📊 Успешных вызовов: {self.api_calls}\n"
-                    f"❌ Ошибок: {self.failed_calls}")
+        # Сначала пробуем Gemini
+        try:
+            # Создаем или получаем чат для пользователя
+            if user_id not in self.chats:
+                self.chats[user_id] = self.model.start_chat(history=[])
+            
+            # Отправляем запрос (в отдельном потоке, чтобы не блокировать)
+            response = await asyncio.to_thread(
+                self.chats[user_id].send_message,
+                f"Ты игровой бот «СПЕКТР». Отвечай кратко, с эмодзи. Вопрос: {message}"
+            )
+            
+            if response and response.text:
+                print(f"✅ Gemini ответил пользователю {user_id}")
+                return f"🤖 **СПЕКТР:** {response.text}"
+                
+        except Exception as e:
+            print(f"❌ Gemini ошибка: {e}")
         
-        # Пытаемся получить ответ от API
-        ai_response = await self.call_api(message, user_id)
-        if ai_response:
-            return f"🤖 **СПЕКТР:** {ai_response}"
-        
-        # Если API не сработал — умные заготовки
-        if any(word in msg_lower for word in ["привет", "здравствуй", "хай", "ку"]):
+        # Если Gemini не сработал — заготовки
+        if any(word in msg_lower for word in ["привет", "здравствуй", "хай"]):
             return random.choice([
                 "👋 Привет! Как настроение?",
                 "🌟 Здравствуй! Рад тебя видеть!",
@@ -574,8 +504,7 @@ class SpectrumAI:
             return random.choice(responses)
     
     async def close(self):
-        if self.session:
-            await self.session.close()
+        pass
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
