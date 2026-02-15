@@ -31,9 +31,8 @@ TELEGRAM_TOKEN = "8326390250:AAFuUVHZ6ucUtLy132Ep1pmteRr6tTk7u0Q"
 OWNER_ID = 1732658530
 OWNER_USERNAME = "@NobuCraft"
 
-# DeepSeek API
+# API ключи
 DEEPSEEK_KEY = "sk-97ac1d0de1844c449852a5470cbcae35"
-DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 
 # Настройки
 SPAM_LIMIT = 5
@@ -88,8 +87,6 @@ class Database:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN mafia_wins INTEGER DEFAULT 0")
             if 'mafia_games' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN mafia_games INTEGER DEFAULT 0")
-            if 'mafia_best_role' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN mafia_best_role TEXT DEFAULT 'none'")
             if 'rps_wins' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN rps_wins INTEGER DEFAULT 0")
             if 'rps_losses' not in columns:
@@ -106,16 +103,14 @@ class Database:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN rr_losses INTEGER DEFAULT 0")
             if 'rr_games' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN rr_games INTEGER DEFAULT 0")
+            if 'rr_money' not in columns:
+                self.cursor.execute("ALTER TABLE users ADD COLUMN rr_money INTEGER DEFAULT 100")
             if 'ttt_wins' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_wins INTEGER DEFAULT 0")
             if 'ttt_losses' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_losses INTEGER DEFAULT 0")
             if 'ttt_draws' not in columns:
                 self.cursor.execute("ALTER TABLE users ADD COLUMN ttt_draws INTEGER DEFAULT 0")
-            if 'gender' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN gender TEXT DEFAULT 'unknown'")
-            if 'nickname' not in columns:
-                self.cursor.execute("ALTER TABLE users ADD COLUMN nickname TEXT")
             self.conn.commit()
         except Exception as e:
             print(f"Ошибка миграции: {e}")
@@ -146,7 +141,6 @@ class Database:
                 clan_role TEXT DEFAULT 'member',
                 mafia_wins INTEGER DEFAULT 0,
                 mafia_games INTEGER DEFAULT 0,
-                mafia_best_role TEXT DEFAULT 'none',
                 rps_wins INTEGER DEFAULT 0,
                 rps_losses INTEGER DEFAULT 0,
                 rps_draws INTEGER DEFAULT 0,
@@ -155,11 +149,10 @@ class Database:
                 rr_wins INTEGER DEFAULT 0,
                 rr_losses INTEGER DEFAULT 0,
                 rr_games INTEGER DEFAULT 0,
+                rr_money INTEGER DEFAULT 100,
                 ttt_wins INTEGER DEFAULT 0,
                 ttt_losses INTEGER DEFAULT 0,
                 ttt_draws INTEGER DEFAULT 0,
-                gender TEXT DEFAULT 'unknown',
-                nickname TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -283,10 +276,8 @@ class Database:
         self.conn.commit()
     
     def init_data(self):
-        # Инициализация боссов
         self.init_bosses()
         
-        # Инициализация предметов для Русской рулетки
         self.cursor.execute("SELECT * FROM rr_inventory LIMIT 1")
         if not self.cursor.fetchone():
             items_data = [
@@ -626,61 +617,11 @@ class Database:
             "games": user.get('rr_games', 0)
         }
     
-    def rr_update_user(self, user_id, money=None, wins=None, losses=None, games=None):
-        updates = []
-        params = []
-        
-        if money is not None:
-            updates.append("rr_money = ?")
-            params.append(money)
-        if wins is not None:
-            updates.append("rr_wins = ?")
-            params.append(wins)
-        if losses is not None:
-            updates.append("rr_losses = ?")
-            params.append(losses)
-        if games is not None:
-            updates.append("rr_games = ?")
-            params.append(games)
-        
-        if updates:
-            params.append(user_id)
-            self.cursor.execute(
-                f"UPDATE users SET {', '.join(updates)} WHERE user_id = ?",
-                params
-            )
-            self.conn.commit()
-    
     def rr_add_money(self, user_id, amount):
         self.cursor.execute(
             "UPDATE users SET rr_money = rr_money + ? WHERE user_id = ?",
             (amount, user_id)
         )
-        self.conn.commit()
-    
-    def rr_get_inventory(self, user_id):
-        self.cursor.execute(
-            "SELECT id, item_name, quantity FROM rr_inventory WHERE user_id = ? AND quantity > 0",
-            (user_id,)
-        )
-        return self.cursor.fetchall()
-    
-    def rr_add_item(self, user_id, item_name, quantity=1):
-        self.cursor.execute(
-            "SELECT id, quantity FROM rr_inventory WHERE user_id = ? AND item_name = ?",
-            (user_id, item_name)
-        )
-        item = self.cursor.fetchone()
-        if item:
-            self.cursor.execute(
-                "UPDATE rr_inventory SET quantity = quantity + ? WHERE id = ?",
-                (quantity, item[0])
-            )
-        else:
-            self.cursor.execute(
-                "INSERT INTO rr_inventory (user_id, item_name, item_type, item_desc, quantity) VALUES (?, ?, ?, ?, ?)",
-                (user_id, item_name, "active", "Магический предмет", quantity)
-            )
         self.conn.commit()
     
     def rr_create_lobby(self, creator_id, max_players, bet):
@@ -703,21 +644,6 @@ class Database:
             max_players = result[1]
             if user_id not in players and len(players) < max_players:
                 players.append(user_id)
-                self.cursor.execute(
-                    "UPDATE rr_lobbies SET players = ? WHERE id = ?",
-                    (str(players), lobby_id)
-                )
-                self.conn.commit()
-                return True
-        return False
-    
-    def rr_leave_lobby(self, lobby_id, user_id):
-        self.cursor.execute("SELECT players, creator_id FROM rr_lobbies WHERE id = ?", (lobby_id,))
-        result = self.cursor.fetchone()
-        if result:
-            players = eval(result[0])
-            if user_id in players:
-                players.remove(user_id)
                 self.cursor.execute(
                     "UPDATE rr_lobbies SET players = ? WHERE id = ?",
                     (str(players), lobby_id)
@@ -781,11 +707,11 @@ class Database:
         if shot_result:
             alive_players.remove(user_id)
             result = "dead"
-            self.rr_update_user(user_id, losses=1)
+            self.rr_add_money(user_id, -game[5])
             
             if len(alive_players) == 1:
                 winner_id = alive_players[0]
-                self.rr_update_user(winner_id, wins=1)
+                self.rr_add_money(winner_id, game[5] * len(players))
                 self.cursor.execute(
                     "UPDATE rr_games SET phase = 'finished' WHERE id = ?",
                     (game_id,)
@@ -805,125 +731,13 @@ class Database:
         
         return result
     
-    def ttt_create_lobby(self, creator_id):
-        self.cursor.execute('''
-            INSERT INTO ttt_lobbies (creator_id, created_at)
-            VALUES (?, ?)
-        ''', (creator_id, datetime.datetime.now()))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def ttt_join_lobby(self, lobby_id, user_id):
-        self.cursor.execute(
-            "UPDATE ttt_lobbies SET opponent_id = ?, status = 'playing' WHERE id = ? AND opponent_id = 0",
-            (user_id, lobby_id)
-        )
-        self.conn.commit()
-        return self.cursor.rowcount > 0
-    
-    def ttt_start_game(self, lobby_id, player_x, player_o):
-        main_board = [[0, 0, 0] for _ in range(3)]
-        sub_boards = [[[0, 0, 0] for _ in range(3)] for _ in range(9)]
-        
-        self.cursor.execute('''
-            INSERT INTO ttt_games (lobby_id, player_x, player_o, current_player, main_board, sub_boards, last_move, status, started_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (lobby_id, player_x, player_o, player_x, str(main_board), str(sub_boards), -1, 'playing', datetime.datetime.now()))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def ttt_get_game(self, game_id):
-        self.cursor.execute("SELECT * FROM ttt_games WHERE id = ?", (game_id,))
-        return self.cursor.fetchone()
-    
-    def ttt_make_move(self, game_id, user_id, main_row, main_col, sub_row, sub_col):
-        game = self.ttt_get_game(game_id)
-        if not game:
-            return None
-        
-        import json
-        main_board = json.loads(game[5])
-        sub_boards = json.loads(game[6])
-        current_player = game[4]
-        last_move = game[7]
-        player_x = game[2]
-        player_o = game[3]
-        
-        if current_player != user_id:
-            return "not_your_turn"
-        
-        if sub_boards[main_row * 3 + main_col][sub_row][sub_col] != 0:
-            return "cell_occupied"
-        
-        marker = 1 if current_player == player_x else 2
-        sub_boards[main_row * 3 + main_col][sub_row][sub_col] = marker
-        
-        sub_winner = self.ttt_check_subboard_winner(sub_boards[main_row * 3 + main_col])
-        if sub_winner:
-            main_board[main_row][main_col] = sub_winner
-        
-        main_winner = self.ttt_check_mainboard_winner(main_board)
-        if main_winner:
-            status = 'finished'
-            winner = player_x if main_winner == 1 else player_o if main_winner == 2 else 'draw'
-        else:
-            if self.ttt_check_draw(main_board, sub_boards):
-                status = 'finished'
-                winner = 'draw'
-            else:
-                status = 'playing'
-                winner = None
-                current_player = player_o if current_player == player_x else player_x
-                last_move = main_row * 3 + main_col
-        
-        self.cursor.execute('''
-            UPDATE ttt_games SET main_board = ?, sub_boards = ?, current_player = ?, last_move = ?, status = ? WHERE id = ?
-        ''', (json.dumps(main_board), json.dumps(sub_boards), current_player, last_move, status, game_id))
-        self.conn.commit()
-        
-        return {
-            'status': status,
-            'winner': winner,
-            'main_board': main_board,
-            'sub_boards': sub_boards,
-            'last_move': last_move,
-            'current_player': current_player
-        }
-    
-    def ttt_check_subboard_winner(self, board):
-        for i in range(3):
-            if board[i][0] != 0 and board[i][0] == board[i][1] == board[i][2]:
-                return board[i][0]
-        for j in range(3):
-            if board[0][j] != 0 and board[0][j] == board[1][j] == board[2][j]:
-                return board[0][j]
-        if board[0][0] != 0 and board[0][0] == board[1][1] == board[2][2]:
-            return board[0][0]
-        if board[0][2] != 0 and board[0][2] == board[1][1] == board[2][0]:
-            return board[0][2]
-        return 0
-    
-    def ttt_check_mainboard_winner(self, board):
-        return self.ttt_check_subboard_winner(board)
-    
-    def ttt_check_draw(self, main_board, sub_boards):
-        for i in range(3):
-            for j in range(3):
-                if main_board[i][j] == 0:
-                    sub_idx = i * 3 + j
-                    for x in range(3):
-                        for y in range(3):
-                            if sub_boards[sub_idx][x][y] == 0:
-                                return False
-        return True
-    
     def close(self):
         self.conn.close()
 
 # ===================== БАЗА ДАННЫХ =====================
 db = Database()
 
-# ===================== ИИ С DEEPSEEK =====================
+# ===================== ИИ С OPENROUTER =====================
 class SpectrumAI:
     def __init__(self):
         self.contexts = {}
@@ -1033,70 +847,38 @@ class GameBot:
         logger.info("✅ Бот «СПЕКТР» инициализирован")
     
     def setup_handlers(self):
-        # Основные команды
         self.application.add_handler(CommandHandler("start", self.cmd_start))
         self.application.add_handler(CommandHandler("help", self.cmd_help))
         self.application.add_handler(CommandHandler("profile", self.cmd_profile))
         self.application.add_handler(CommandHandler("top", self.cmd_top))
         self.application.add_handler(CommandHandler("daily", self.cmd_daily))
-        
-        # Статистика по играм
-        self.application.add_handler(CommandHandler("mafia_stats", self.cmd_mafia_stats))
-        self.application.add_handler(CommandHandler("boss_stats", self.cmd_boss_stats))
-        self.application.add_handler(CommandHandler("rps_stats", self.cmd_rps_stats))
-        self.application.add_handler(CommandHandler("casino_stats", self.cmd_casino_stats))
-        self.application.add_handler(CommandHandler("rr_stats", self.cmd_rr_stats))
-        self.application.add_handler(CommandHandler("ttt_stats", self.cmd_ttt_stats))
-        
-        # Боссы
         self.application.add_handler(CommandHandler("bosses", self.cmd_boss_list))
         self.application.add_handler(CommandHandler("boss_fight", self.cmd_boss_fight))
-        
-        # Магазин
         self.application.add_handler(CommandHandler("shop", self.cmd_shop))
         self.application.add_handler(CommandHandler("buy", self.cmd_buy))
-        
-        # Привилегии
         self.application.add_handler(CommandHandler("donate", self.cmd_donate))
         self.application.add_handler(CommandHandler("vip", self.cmd_vip))
         self.application.add_handler(CommandHandler("premium", self.cmd_premium))
-        
-        # Кланы
         self.application.add_handler(CommandHandler("clan", self.cmd_clan))
         self.application.add_handler(CommandHandler("clan_create", self.cmd_clan_create))
         self.application.add_handler(CommandHandler("clan_join", self.cmd_clan_join))
         self.application.add_handler(CommandHandler("clan_leave", self.cmd_clan_leave))
-        
-        # Казино
         self.application.add_handler(CommandHandler("casino", self.cmd_casino))
         self.application.add_handler(CommandHandler("roulette", self.cmd_roulette))
         self.application.add_handler(CommandHandler("dice", self.cmd_dice_casino))
-        
-        # Русская рулетка
         self.application.add_handler(CommandHandler("rr", self.cmd_rr))
         self.application.add_handler(CommandHandler("rr_start", self.cmd_rr_start))
         self.application.add_handler(CommandHandler("rr_join", self.cmd_rr_join))
         self.application.add_handler(CommandHandler("rr_shot", self.cmd_rr_shot))
-        
-        # Крестики-нолики
         self.application.add_handler(CommandHandler("ttt", self.cmd_ttt))
-        self.application.add_handler(CommandHandler("ttt_challenge", self.cmd_ttt_challenge))
-        self.application.add_handler(CommandHandler("ttt_move", self.cmd_ttt_move))
-        
-        # Камень-ножницы-бумага
         self.application.add_handler(CommandHandler("rps", self.cmd_rps))
-        
-        # Админские
         self.application.add_handler(CommandHandler("mute", self.cmd_mute))
         self.application.add_handler(CommandHandler("warn", self.cmd_warn))
         self.application.add_handler(CommandHandler("ban", self.cmd_ban))
         self.application.add_handler(CommandHandler("unban", self.cmd_unban))
         self.application.add_handler(CommandHandler("give", self.cmd_give))
-        
-        # Обработчики
         self.application.add_handler(CallbackQueryHandler(self.button_callback))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        
         logger.info("✅ Все обработчики зарегистрированы")
     
     def is_admin(self, user_id: int) -> bool:
@@ -1163,11 +945,8 @@ class GameBot:
             f"💎 /donate - Привилегии\n"
             f"🎰 /casino - Казино\n"
             f"💣 /rr - Русская рулетка\n"
-            f"⭕ /ttt - Крестики-нолики 3D\n"
-            f"📊 /mafia_stats - Статистика мафии\n"
-            f"📊 /boss_stats - Статистика боссов\n"
-            f"📊 /rps_stats - Статистика КНБ\n"
-            f"📊 /casino_stats - Статистика казино\n"
+            f"⭕ /ttt - Крестики-нолики\n"
+            f"✊ /rps - Камень-ножницы-бумага\n"
             f"📚 /help - Все команды\n\n"
             f"👑 **Владелец:** {OWNER_USERNAME}"
         )
@@ -1180,25 +959,17 @@ class GameBot:
         text = (
             "📚 **ВСЕ КОМАНДЫ БОТА «СПЕКТР»**\n\n"
             
-            "👤 **ПРОФИЛЬ И СТАТИСТИКА**\n"
+            "👤 **ПРОФИЛЬ**\n"
             "/profile - Твой профиль\n"
             "/top - Топ игроков\n"
             "/daily - Ежедневная награда\n\n"
             
-            "📊 **СТАТИСТИКА ПО ИГРАМ**\n"
-            "/mafia_stats - Статистика в мафии\n"
-            "/boss_stats - Статистика по боссам\n"
-            "/rps_stats - Статистика КНБ\n"
-            "/casino_stats - Статистика в казино\n"
-            "/rr_stats - Статистика в русской рулетке\n"
-            "/ttt_stats - Статистика в крестиках-ноликах\n\n"
-            
-            "👾 **БИТВЫ С БОССАМИ**\n"
+            "👾 **БОССЫ**\n"
             "/bosses - Список боссов\n"
             "/boss_fight [ID] - Сразиться с боссом\n\n"
             
-            "🛍 **МАГАЗИН И ДОНАТ**\n"
-            "/shop - Магазин предметов\n"
+            "🛍 **МАГАЗИН**\n"
+            "/shop - Магазин\n"
             "/buy [предмет] - Купить предмет\n"
             "/donate - Привилегии\n"
             "/vip - Купить VIP (5000 🪙)\n"
@@ -1221,10 +992,8 @@ class GameBot:
             "/rr_join [ID] - Войти в лобби\n"
             "/rr_shot - Сделать выстрел\n\n"
             
-            "⭕ **КРЕСТИКИ-НОЛИКИ 3D**\n"
-            "/ttt - Правила игры\n"
-            "/ttt_challenge [ID] - Вызвать на игру\n"
-            "/ttt_move [клетка] - Сделать ход\n\n"
+            "⭕ **КРЕСТИКИ-НОЛИКИ**\n"
+            "/ttt - Правила игры\n\n"
             
             "✊ **КАМЕНЬ-НОЖНИЦЫ-БУМАГА**\n"
             "/rps - Сыграть в КНБ\n\n"
@@ -1275,7 +1044,8 @@ class GameBot:
             f"**Боевые характеристики:**\n"
             f"Здоровье: {user_data.get('health', 100)} ❤️\n"
             f"Броня: {user_data.get('armor', 0)} 🛡\n"
-            f"Урон: {user_data.get('damage', 10)} ⚔️\n\n"
+            f"Урон: {user_data.get('damage', 10)} ⚔️\n"
+            f"Боссов убито: {user_data.get('boss_kills', 0)} 👾\n\n"
             
             f"**Привилегии:**\n"
             f"VIP: {vip_status}\n"
@@ -1294,118 +1064,6 @@ class GameBot:
         
         await update.message.reply_text(text, parse_mode='Markdown')
         self.db.add_stat(user.id, "commands_used")
-    
-    async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        wins = user_data.get('mafia_wins', 0)
-        games = user_data.get('mafia_games', 0)
-        best_role = user_data.get('mafia_best_role', 'none')
-        
-        text = (
-            f"🔪 **СТАТИСТИКА МАФИИ**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"🏆 Побед: {wins}\n"
-            f"🎮 Игр сыграно: {games}\n"
-            f"📊 Винрейт: {self.calc_winrate(wins, games)}%\n"
-            f"⭐ Лучшая роль: {best_role}"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    async def cmd_boss_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        kills = user_data.get('boss_kills', 0)
-        
-        text = (
-            f"👾 **СТАТИСТИКА БОССОВ**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"💀 Боссов убито: {kills}\n"
-            f"⚔️ Урон: {user_data.get('damage', 10)}\n"
-            f"🛡 Броня: {user_data.get('armor', 0)}"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    async def cmd_rps_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        wins = user_data.get('rps_wins', 0)
-        losses = user_data.get('rps_losses', 0)
-        draws = user_data.get('rps_draws', 0)
-        total = wins + losses + draws
-        
-        text = (
-            f"✊ **СТАТИСТИКА КАМЕНЬ-НОЖНИЦЫ-БУМАГА**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"🏆 Побед: {wins}\n"
-            f"💔 Поражений: {losses}\n"
-            f"🤝 Ничьих: {draws}\n"
-            f"🎮 Всего игр: {total}\n"
-            f"📊 Винрейт: {self.calc_winrate(wins, total)}%"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    async def cmd_casino_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        wins = user_data.get('casino_wins', 0)
-        losses = user_data.get('casino_losses', 0)
-        total = wins + losses
-        
-        text = (
-            f"🎰 **СТАТИСТИКА КАЗИНО**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"🏆 Побед: {wins}\n"
-            f"💔 Поражений: {losses}\n"
-            f"🎮 Всего игр: {total}\n"
-            f"📊 Винрейт: {self.calc_winrate(wins, total)}%"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    async def cmd_rr_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        rr = self.db.rr_get_user(user.id)
-        
-        text = (
-            f"💣 **СТАТИСТИКА РУССКОЙ РУЛЕТКИ**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"💀 Черепки: {rr['money']}\n"
-            f"🏆 Побед: {rr['wins']}\n"
-            f"💔 Поражений: {rr['losses']}\n"
-            f"🎮 Игр: {rr['games']}\n"
-            f"📊 Винрейт: {self.calc_winrate(rr['wins'], rr['games'])}%"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-    
-    async def cmd_ttt_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        wins = user_data.get('ttt_wins', 0)
-        losses = user_data.get('ttt_losses', 0)
-        draws = user_data.get('ttt_draws', 0)
-        total = wins + losses + draws
-        
-        text = (
-            f"⭕ **СТАТИСТИКА КРЕСТИКОВ-НОЛИКОВ 3D**\n\n"
-            f"👤 Игрок: {user.first_name}\n"
-            f"🏆 Побед: {wins}\n"
-            f"💔 Поражений: {losses}\n"
-            f"🤝 Ничьих: {draws}\n"
-            f"🎮 Всего игр: {total}\n"
-            f"📊 Винрейт: {self.calc_winrate(wins, total)}%"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         top_coins = self.db.get_top("coins", 10)
@@ -1958,22 +1616,14 @@ class GameBot:
         )
     
     async def cmd_rr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not context.args:
-            await update.message.reply_text(
-                "💣 **РУССКАЯ РУЛЕТКА**\n\n"
-                "Команды:\n"
-                "/rr_start [игроки] [ставка] - Создать лобби\n"
-                "/rr_join [ID] - Войти в лобби\n"
-                "/rr_shot - Сделать выстрел\n"
-                "/rr_stats - Моя статистика",
-                parse_mode='Markdown'
-            )
-            return
-        
-        subcmd = context.args[0].lower()
-        
-        if subcmd == "stats":
-            await self.cmd_rr_stats(update, context)
+        await update.message.reply_text(
+            "💣 **РУССКАЯ РУЛЕТКА**\n\n"
+            "Команды:\n"
+            "/rr_start [игроки] [ставка] - Создать лобби\n"
+            "/rr_join [ID] - Войти в лобби\n"
+            "/rr_shot - Сделать выстрел",
+            parse_mode='Markdown'
+        )
     
     async def cmd_rr_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -2089,22 +1739,9 @@ class GameBot:
     async def cmd_ttt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "⭕ **КРЕСТИКИ-НОЛИКИ 3D**\n\n"
-            "Правила: В каждой клетке обычного поля находится ещё одно поле. Нужно выиграть на 3 малых полях в ряд.\n\n"
-            "Команды:\n"
-            "/ttt_challenge [ID] - Вызвать игрока\n"
-            "/ttt_move [клетка] - Сделать ход",
+            "Функция в разработке. Следите за обновлениями!",
             parse_mode='Markdown'
         )
-    
-    async def cmd_ttt_challenge(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /ttt_challenge [ID]")
-            return
-        
-        await update.message.reply_text("⭕ Функция вызова будет доступна в следующем обновлении!")
-    
-    async def cmd_ttt_move(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("⭕ Функция хода будет доступна в следующем обновлении!")
     
     async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
@@ -2280,23 +1917,6 @@ class GameBot:
         if await self.check_spam(update):
             return
         
-        # Обработка команд с точкой
-        if message_text.startswith('.'):
-            parts = message_text[1:].split()
-            cmd = parts[0].lower()
-            
-            if cmd == "rps":
-                await self.cmd_rps(update, context)
-            elif cmd == "rr":
-                await self.cmd_rr(update, context)
-            elif cmd == "ttt":
-                await self.cmd_ttt(update, context)
-            else:
-                await update.message.reply_text("❓ Неизвестная команда.")
-            
-            self.db.add_stat(user.id, "commands_used")
-            return
-        
         # Получаем ответ от ИИ
         response = await self.ai.get_response(user.id, message_text)
         await update.message.reply_text(response, parse_mode='Markdown')
@@ -2340,15 +1960,17 @@ class GameBot:
             
             if result == "win":
                 self.db.cursor.execute("UPDATE users SET rps_wins = rps_wins + 1 WHERE user_id = ?", (user.id,))
+                self.db.conn.commit()
                 text = f"{choices[choice]} vs {choices[bot_choice]}\n\n🎉 Ты выиграл!"
             elif result == "lose":
                 self.db.cursor.execute("UPDATE users SET rps_losses = rps_losses + 1 WHERE user_id = ?", (user.id,))
+                self.db.conn.commit()
                 text = f"{choices[choice]} vs {choices[bot_choice]}\n\n😢 Ты проиграл!"
             else:
                 self.db.cursor.execute("UPDATE users SET rps_draws = rps_draws + 1 WHERE user_id = ?", (user.id,))
+                self.db.conn.commit()
                 text = f"{choices[choice]} vs {choices[bot_choice]}\n\n🤝 Ничья!"
             
-            self.db.conn.commit()
             await query.edit_message_text(text, parse_mode='Markdown')
     
     async def run(self):
