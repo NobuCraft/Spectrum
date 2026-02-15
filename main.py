@@ -399,109 +399,40 @@ class Database:
 db = Database()
 
 # ===================== УМНЫЙ ИИ (ЛОКАЛЬНЫЙ) =====================
-import google.generativeai as genai
-
 class SpectrumAI:
     def __init__(self):
-        self.contexts = {}
-        # Настройка Gemini
-        self.gemini_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
-        genai.configure(api_key=self.gemini_key)
+        import google.generativeai as genai
+        self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
+        genai.configure(api_key=self.api_key)
         self.model = genai.GenerativeModel('gemini-pro')
         self.chats = {}
-        print("🤖 ИИ СПЕКТР инициализирован с Gemini")
+        print("🤖 Gemini ИНИЦИАЛИЗИРОВАН!")
     
     async def get_response(self, user_id: int, message: str) -> str:
-        msg_lower = message.lower().strip()
+        print(f"📨 Получено сообщение: {message}")
         
-        # Сначала пробуем Gemini
+        # Пробуем Gemini
         try:
-            # Создаем или получаем чат для пользователя
+            # Создаем чат если нужно
             if user_id not in self.chats:
-                self.chats[user_id] = self.model.start_chat(history=[])
+                self.chats[user_id] = self.model.start_chat()
             
-            # Отправляем запрос (в отдельном потоке, чтобы не блокировать)
-            response = await asyncio.to_thread(
-                self.chats[user_id].send_message,
-                f"Ты игровой бот «СПЕКТР». Отвечай кратко, с эмодзи. Вопрос: {message}"
+            # Отправляем запрос
+            response = self.chats[user_id].send_message(
+                f"Ты игровой бот «СПЕКТР». Отвечай кратко и дружелюбно. Вопрос: {message}"
             )
             
             if response and response.text:
-                print(f"✅ Gemini ответил пользователю {user_id}")
+                print(f"✅ Gemini ответил: {response.text[:50]}...")
                 return f"🤖 **СПЕКТР:** {response.text}"
+            else:
+                print("❌ Gemini вернул пустой ответ")
                 
         except Exception as e:
-            print(f"❌ Gemini ошибка: {e}")
+            print(f"❌ Ошибка Gemini: {e}")
         
-        # Если Gemini не сработал — заготовки
-        if any(word in msg_lower for word in ["привет", "здравствуй", "хай"]):
-            return random.choice([
-                "👋 Привет! Как настроение?",
-                "🌟 Здравствуй! Рад тебя видеть!",
-                "😊 Привет-привет! Чем займемся?",
-                "🎯 Хай! Готов к приключениям?",
-                "🤗 О, привет! Давно не виделись!"
-            ])
-        
-        elif any(word in msg_lower for word in ["как дела", "как ты"]):
-            return random.choice([
-                "⚙️ Всё отлично! А у тебя?",
-                "💫 Супер! Боссы ждут!",
-                "✨ Хорошо! Хочешь сыграть?",
-                "🎮 Работаю! А у тебя?"
-            ])
-        
-        elif any(word in msg_lower for word in ["стих", "стихи"]):
-            poems = [
-                "В мире «СПЕКТРА» живут игроки,\nСражаются с боссами, ловки и легки. ✨",
-                "Босс дракон огнём пылает,\nНо игрок не унывает! 🐉",
-                "В клане дружба и почёт,\nКаждый здесь герой живёт! 👥"
-            ]
-            return random.choice(poems)
-        
-        elif any(word in msg_lower for word in ["хаха", "лол", "😂"]):
-            return random.choice([
-                "😄 Рад, что тебе весело!",
-                "😂 Твой смех заразителен!",
-                "🤣 Отличное настроение!"
-            ])
-        
-        elif any(word in msg_lower for word in ["что ты умеешь", "твои функции"]):
-            return "📋 Мои возможности в /help"
-        
-        elif any(word in msg_lower for word in ["босс", "битва"]):
-            return "👾 Боссы ждут! /bosses"
-        
-        elif any(word in msg_lower for word in ["профиль", "статистика"]):
-            return "📊 Твой профиль: /profile"
-        
-        elif any(word in msg_lower for word in ["магазин", "купить"]):
-            return "🛍 Магазин: /shop"
-        
-        elif any(word in msg_lower for word in ["награда", "бонус"]):
-            return "🎁 Ежедневная награда: /daily"
-        
-        elif any(word in msg_lower for word in ["помощь", "хелп"]):
-            return "📚 Все команды: /help"
-        
-        elif any(word in msg_lower for word in ["клан", "гильдия"]):
-            return "👥 Кланы: /clan"
-        
-        elif any(word in msg_lower for word in ["кто создал", "владелец"]):
-            return f"👑 Владелец: {OWNER_USERNAME}"
-        
-        else:
-            responses = [
-                "🤖 Я внимательно слушаю. Можешь уточнить?",
-                "🎯 Напиши /help, чтобы увидеть команды.",
-                "💡 Хочешь сразиться с боссом? /bosses",
-                "📊 Хочешь узнать статистику? /profile",
-                "🛍 Нужны предметы? /shop",
-                "🎁 Не забудь /daily!",
-                "👥 Интересуют кланы? /clan",
-                "💰 Заработать монеты можно в битвах с боссами!"
-            ]
-            return random.choice(responses)
+        # Если Gemini не сработал
+        return "❌ Gemini временно недоступен. Попробуй позже."
     
     async def close(self):
         pass
