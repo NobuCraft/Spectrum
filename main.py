@@ -403,11 +403,12 @@ class SpectrumAI:
     def __init__(self):
         self.contexts = {}
         self.session = None
-        self.api_key = "sk-97ac1d0de1844c449852a5470cbcae35"
+        self.api_key = "sk-1204a64fa30248ee972777d8bb10f6e3"  # Твой новый ключ
         self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         self.last_api_call = 0
         self.api_calls = 0
-        print("🤖 ИИ СПЕКТР инициализирован")
+        self.failed_calls = 0
+        print("🤖 ИИ СПЕКТР инициализирован с новым ключом")
     
     async def get_session(self):
         if not self.session:
@@ -419,7 +420,7 @@ class SpectrumAI:
         try:
             # Ограничиваем частоту вызовов
             current_time = time.time()
-            if current_time - self.last_api_call < 5:  # Не чаще чем раз в 5 секунд
+            if current_time - self.last_api_call < 3:  # Не чаще чем раз в 3 секунды
                 return None
             
             self.last_api_call = current_time
@@ -434,9 +435,16 @@ class SpectrumAI:
                 "X-Title": "Spectrum Bot"
             }
             
+            # Пробуем разные модели по очереди
+            models = [
+                "deepseek/deepseek-chat",
+                "openai/gpt-3.5-turbo",
+                "anthropic/claude-3-haiku"
+            ]
+            
             if user_id not in self.contexts:
                 self.contexts[user_id] = [
-                    {"role": "system", "content": "Ты - игровой бот «СПЕКТР». Отвечай кратко, дружелюбно, с эмодзи. Помогай с играми."}
+                    {"role": "system", "content": "Ты - игровой бот «СПЕКТР». Отвечай кратко, дружелюбно, с эмодзи. Ты помогаешь с играми, боссами, кланами."}
                 ]
             
             self.contexts[user_id].append({"role": "user", "content": message})
@@ -444,38 +452,51 @@ class SpectrumAI:
             if len(self.contexts[user_id]) > 11:
                 self.contexts[user_id] = [self.contexts[user_id][0]] + self.contexts[user_id][-10:]
             
-            data = {
-                "model": "deepseek/deepseek-chat",
-                "messages": self.contexts[user_id],
-                "temperature": 0.8,
-                "max_tokens": 100
-            }
+            # Пробуем каждую модель по очереди
+            for model in models:
+                try:
+                    data = {
+                        "model": model,
+                        "messages": self.contexts[user_id],
+                        "temperature": 0.8,
+                        "max_tokens": 100
+                    }
+                    
+                    async with session.post(self.api_url, json=data, headers=headers, timeout=8) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            ai_response = result["choices"][0]["message"]["content"]
+                            self.contexts[user_id].append({"role": "assistant", "content": ai_response})
+                            print(f"✅ API ответил (модель: {model})")
+                            return ai_response
+                        else:
+                            print(f"❌ Модель {model} ошибка: {resp.status}")
+                            continue
+                except:
+                    continue
             
-            async with session.post(self.api_url, json=data, headers=headers, timeout=10) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    ai_response = result["choices"][0]["message"]["content"]
-                    self.contexts[user_id].append({"role": "assistant", "content": ai_response})
-                    print(f"✅ ИИ ответил (вызов #{self.api_calls})")
-                    return ai_response
-                else:
-                    print(f"❌ API ошибка: {resp.status}")
-                    return None
+            self.failed_calls += 1
+            print(f"❌ Все модели недоступны. Всего ошибок: {self.failed_calls}")
+            return None
                     
         except asyncio.TimeoutError:
             print("⏰ Таймаут API")
+            self.failed_calls += 1
             return None
         except Exception as e:
             print(f"❌ Ошибка API: {e}")
+            self.failed_calls += 1
             return None
     
     async def get_response(self, user_id: int, message: str) -> str:
         msg_lower = message.lower().strip()
         
-        # Спецкоманда для проверки
+        # Спецкоманда для проверки статуса
         if msg_lower == "/ai_status":
-            status = "✅ РАБОТАЕТ" if self.api_calls > 0 else "⚠️ НЕ ИСПОЛЬЗОВАЛСЯ"
-            return f"🤖 **Статус ИИ:** {status}\n📊 Вызовов API: {self.api_calls}"
+            status = "✅ РАБОТАЕТ" if self.api_calls > self.failed_calls else "⚠️ ПРОБЛЕМЫ"
+            return (f"🤖 **Статус ИИ:** {status}\n"
+                    f"📊 Успешных вызовов: {self.api_calls}\n"
+                    f"❌ Ошибок: {self.failed_calls}")
         
         # Пытаемся получить ответ от API
         ai_response = await self.call_api(message, user_id)
@@ -495,54 +516,40 @@ class SpectrumAI:
         elif any(word in msg_lower for word in ["как дела", "как ты"]):
             return random.choice([
                 "⚙️ Всё отлично! А у тебя?",
-                "💫 Супер! Игры работают, боссы ждут!",
-                "✨ Хорошо! Есть идеи для игр?",
-                "🎮 Работаю! Хочешь сыграть?"
+                "💫 Супер! Боссы ждут!",
+                "✨ Хорошо! Хочешь сыграть?",
+                "🎮 Работаю! А у тебя?"
             ])
         
-        elif any(word in msg_lower for word in ["спасибо", "благодарю"]):
+        elif any(word in msg_lower for word in ["стих", "стихи"]):
+            poems = [
+                "В мире «СПЕКТРА» живут игроки,\nСражаются с боссами, ловки и легки. ✨",
+                "Босс дракон огнём пылает,\nНо игрок не унывает! 🐉",
+                "В клане дружба и почёт,\nКаждый здесь герой живёт! 👥"
+            ]
+            return random.choice(poems)
+        
+        elif any(word in msg_lower for word in ["хаха", "лол", "😂"]):
             return random.choice([
-                "🤝 Всегда пожалуйста!",
-                "😊 Рад помочь!",
-                "🌟 Обращайся ещё!"
+                "😄 Рад, что тебе весело!",
+                "😂 Твой смех заразителен!",
+                "🤣 Отличное настроение!"
             ])
-        
-        elif any(word in msg_lower for word in ["пока", "до свидания"]):
-            return random.choice([
-                "👋 Пока! Заходи ещё!",
-                "🌟 До встречи!",
-                "💫 Удачи!"
-            ])
-        
-        elif any(word in msg_lower for word in ["кто ты", "ты кто"]):
-            return "🤖 Я — СПЕКТР, твой игровой помощник!"
         
         elif any(word in msg_lower for word in ["что ты умеешь", "твои функции"]):
-            return (
-                "📋 Мои возможности:\n"
-                "• 👾 Битвы с боссами\n"
-                "• 📊 Статистика\n"
-                "• 🛍 Магазин\n"
-                "• 💎 Привилегии\n"
-                "• 👥 Кланы\n"
-                "• 👑 Админка\n\n"
-                "Полный список: /help"
-            )
+            return "📋 Мои возможности в /help"
         
         elif any(word in msg_lower for word in ["босс", "битва"]):
             return "👾 Боссы ждут! /bosses"
         
         elif any(word in msg_lower for word in ["профиль", "статистика"]):
-            return "📊 Твой профиль в /profile"
+            return "📊 Твой профиль: /profile"
         
         elif any(word in msg_lower for word in ["магазин", "купить"]):
             return "🛍 Магазин: /shop"
         
         elif any(word in msg_lower for word in ["награда", "бонус"]):
             return "🎁 Ежедневная награда: /daily"
-        
-        elif any(word in msg_lower for word in ["топ", "лидеры"]):
-            return "🏆 Топ игроков: /top"
         
         elif any(word in msg_lower for word in ["помощь", "хелп"]):
             return "📚 Все команды: /help"
@@ -553,7 +560,6 @@ class SpectrumAI:
         elif any(word in msg_lower for word in ["кто создал", "владелец"]):
             return f"👑 Владелец: {OWNER_USERNAME}"
         
-        # Умные ответы на всё остальное
         else:
             responses = [
                 "🤖 Я внимательно слушаю. Можешь уточнить?",
