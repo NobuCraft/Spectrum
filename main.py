@@ -403,55 +403,58 @@ import google.generativeai as genai
 
 class SpectrumAI:
     def __init__(self):
-        print("🔄 Инициализация Gemini...")
+        print("🔴🔴🔴 SPECTRUMAI INIT STARTED 🔴🔴🔴")
         try:
             self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
             genai.configure(api_key=self.api_key)
             
-            # Список возможных названий моделей
-            model_names = [
-                'models/gemini-1.5-pro',
+            # Пробуем разные модели
+            models_to_try = [
                 'gemini-1.5-pro',
-                'models/gemini-1.0-pro',
                 'gemini-1.0-pro',
-                'models/gemini-pro',
-                'gemini-pro'
+                'gemini-pro',
+                'models/gemini-pro'
             ]
             
             self.model = None
-            for model_name in model_names:
+            for model_name in models_to_try:
                 try:
                     print(f"🔄 Пробую модель: {model_name}")
-                    test_model = genai.GenerativeModel(model_name)
+                    self.model = genai.GenerativeModel(model_name)
                     # Пробный запрос
-                    test_model.generate_content("test")
-                    self.model = test_model
-                    print(f"✅ Модель работает: {model_name}")
+                    test = self.model.generate_content("test")
+                    print(f"✅ Модель {model_name} работает!")
                     break
                 except Exception as e:
-                    print(f"❌ Модель {model_name} не работает: {e}")
+                    print(f"❌ Модель {model_name} ошибка: {e}")
                     continue
             
             if self.model is None:
-                raise Exception("Ни одна модель не работает")
-            
-            print("✅ Gemini готов к работе!")
-            
+                print("❌ НИ ОДНА МОДЕЛЬ НЕ РАБОТАЕТ!")
+            else:
+                print("✅ Gemini успешно инициализирован!")
+                
         except Exception as e:
-            print(f"❌ Ошибка инициализации: {e}")
+            print(f"❌ Ошибка инициализации Gemini: {e}")
             self.model = None
+        
+        print("🔴🔴🔴 SPECTRUMAI INIT COMPLETED 🔴🔴🔴")
     
     async def get_response(self, user_id: int, message: str) -> str:
+        print(f"📨 get_response вызван для user {user_id}: {message[:50]}...")
+        
         if self.model is None:
-            return "❌ ИИ временно недоступен (модель не загружена)"
+            print("❌ self.model = None")
+            return "❌ ИИ временно недоступен"
         
         try:
             response = self.model.generate_content(
                 f"Ты игровой бот «СПЕКТР». Ответь кратко, дружелюбно, с эмодзи: {message}"
             )
+            print(f"✅ Gemini ответил: {response.text[:50]}...")
             return f"🤖 **СПЕКТР:** {response.text}"
         except Exception as e:
-            print(f"❌ Ошибка при запросе: {e}")
+            print(f"❌ Ошибка генерации: {e}")
             return "❌ Ошибка при обращении к ИИ"
     
     async def close(self):
