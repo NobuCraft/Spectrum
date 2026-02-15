@@ -408,24 +408,50 @@ class SpectrumAI:
             self.api_key = "AIzaSyBG0pZQqm8JXhhmfosxh0G4ksddcDe6P5M"
             genai.configure(api_key=self.api_key)
             
-            # Самая базовая модель
-            self.model = genai.GenerativeModel('gemini-pro')
+            # Список возможных названий моделей
+            model_names = [
+                'models/gemini-1.5-pro',
+                'gemini-1.5-pro',
+                'models/gemini-1.0-pro',
+                'gemini-1.0-pro',
+                'models/gemini-pro',
+                'gemini-pro'
+            ]
             
-            print("✅ Gemini успешно инициализирован!")
+            self.model = None
+            for model_name in model_names:
+                try:
+                    print(f"🔄 Пробую модель: {model_name}")
+                    test_model = genai.GenerativeModel(model_name)
+                    # Пробный запрос
+                    test_model.generate_content("test")
+                    self.model = test_model
+                    print(f"✅ Модель работает: {model_name}")
+                    break
+                except Exception as e:
+                    print(f"❌ Модель {model_name} не работает: {e}")
+                    continue
+            
+            if self.model is None:
+                raise Exception("Ни одна модель не работает")
+            
+            print("✅ Gemini готов к работе!")
             
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f"❌ Ошибка инициализации: {e}")
             self.model = None
     
     async def get_response(self, user_id: int, message: str) -> str:
         if self.model is None:
-            return "❌ ИИ временно недоступен"
+            return "❌ ИИ временно недоступен (модель не загружена)"
         
         try:
-            response = self.model.generate_content(message)
+            response = self.model.generate_content(
+                f"Ты игровой бот «СПЕКТР». Ответь кратко, дружелюбно, с эмодзи: {message}"
+            )
             return f"🤖 **СПЕКТР:** {response.text}"
         except Exception as e:
-            print(f"❌ Ошибка: {e}")
+            print(f"❌ Ошибка при запросе: {e}")
             return "❌ Ошибка при обращении к ИИ"
     
     async def close(self):
