@@ -351,34 +351,74 @@ class Database:
 db = Database()
 
 # ===================== GEMINI AI =====================
-class GeminiAI:
+class OpenRouterAI:
     def __init__(self):
-        print("🔄 Инициализация Gemini...")
-        try:
-            genai.configure(api_key=GEMINI_KEY)
-            self.model = genai.GenerativeModel('gemini-1.5-pro')
-            print("✅ Gemini готов к работе!")
-        except Exception as e:
-            print(f"❌ Ошибка Gemini: {e}")
-            self.model = None
+        self.api_key = "sk-97ac1d0de1844c449852a5470cbcae35"  # Твой ключ DeepSeek (работает!)
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
+        self.session = None
+        print("🔄 Инициализация OpenRouter...")
+    
+    async def get_session(self):
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+        return self.session
     
     async def get_response(self, message: str) -> str:
-        if self.model is None:
-            return None
-        
         try:
-            response = self.model.generate_content(
-                f"Ты игровой бот «СПЕКТР». Отвечай кратко, дружелюбно, с эмодзи. Сообщение: {message}"
-            )
-            return response.text if response and response.text else None
-        except:
+            session = await self.get_session()
+            
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+                "HTTP-Referer": "https://railway.app",
+                "X-Title": "Spectrum Bot"
+            }
+            
+            # Пробуем разные модели по очереди
+            models = [
+                "deepseek/deepseek-chat",
+                "mistralai/mistral-7b-instruct",
+                "openai/gpt-3.5-turbo"
+            ]
+            
+            for model in models:
+                try:
+                    data = {
+                        "model": model,
+                        "messages": [
+                            {"role": "system", "content": "Ты игровой бот «СПЕКТР». Отвечай кратко, дружелюбно, с эмодзи."},
+                            {"role": "user", "content": message}
+                        ],
+                        "temperature": 0.7,
+                        "max_tokens": 150
+                    }
+                    
+                    async with session.post(self.api_url, json=data, headers=headers, timeout=10) as resp:
+                        if resp.status == 200:
+                            result = await resp.json()
+                            return result["choices"][0]["message"]["content"]
+                        else:
+                            print(f"❌ Модель {model} ошибка: {resp.status}")
+                            continue
+                except Exception as e:
+                    print(f"❌ Модель {model} исключение: {e}")
+                    continue
+            
             return None
+            
+        except Exception as e:
+            print(f"❌ OpenRouter ошибка: {e}")
+            return None
+    
+    async def close(self):
+        if self.session:
+            await self.session.close()
 
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
         self.db = db
-        self.ai = GeminiAI()
+        self.ai = OpenRouterAI()
         self.spam_tracker = defaultdict(list)
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.setup_handlers()
@@ -1172,12 +1212,12 @@ class GameBot:
             return
         
         # Сначала пробуем Gemini
-        if self.ai.model:
-            response = await self.ai.get_response(message_text)
-            if response:
-                await update.message.reply_text(f"🤖 **СПЕКТР:** {response}", parse_mode='Markdown')
-                self.db.add_stat(user.id, "messages_count")
-                return
+       # Сначала пробуем OpenRouter
+response = await self.ai.get_response(message_text)
+if response:
+    await update.message.reply_text(f"🤖 **СПЕКТР:** {response}", parse_mode='Markdown')
+    self.db.add_stat(user.id, "messages_count")
+    return
         
         # Если Gemini не ответил — заготовки
         msg_lower = message_text.lower()
