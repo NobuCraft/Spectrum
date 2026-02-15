@@ -11,6 +11,9 @@ import re
 from collections import defaultdict
 import time
 
+print("🔴🔴🔴 ФАЙЛ main.py ЗАГРУЖЕН 🔴🔴🔴")
+import sys
+sys.stdout.flush()
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -463,7 +466,9 @@ class SpectrumAI:
 class GameBot:
     def __init__(self):
         self.db = db
+        print("🔴🔴🔴 GameBot.__init__ НАЧАЛО 🔴🔴🔴")
         self.ai = SpectrumAI()
+        print("🔴🔴🔴 GameBot.__init__ КОНЕЦ 🔴🔴🔴")
         self.spam_tracker = defaultdict(list)
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.setup_handlers()
