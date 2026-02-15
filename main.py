@@ -33,7 +33,7 @@ TELEGRAM_TOKEN = "8326390250:AAFuUVHZ6ucUtLy132Ep1pmteRr6tTk7u0Q"
 OWNER_ID = 1732658530
 OWNER_USERNAME = "@NobuCraft"
 
-# OpenRouter API (используем твой DeepSeek ключ)
+# OpenRouter API
 OPENROUTER_KEY = "sk-97ac1d0de1844c449852a5470cbcae35"
 
 # Настройки
@@ -44,7 +44,6 @@ SPAM_MUTE_TIME = 120
 # Цены на привилегии
 VIP_PRICE = 5000
 PREMIUM_PRICE = 15000
-ADMIN_PRICE = 50000
 
 # Длительность привилегий (в днях)
 VIP_DAYS = 30
@@ -64,7 +63,6 @@ class Database:
             self.cursor.execute("PRAGMA table_info(users)")
             columns = [col[1] for col in self.cursor.fetchall()]
             
-            # Проверяем и добавляем все необходимые колонки
             required_columns = {
                 'role': "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'",
                 'warns': "ALTER TABLE users ADD COLUMN warns INTEGER DEFAULT 0",
@@ -472,22 +470,17 @@ class Database:
     def init_data(self):
         self.init_bosses()
         self.init_cases()
-        self.init_achievements()
     
     def init_bosses(self):
         self.cursor.execute("SELECT * FROM bosses")
         if not self.cursor.fetchone():
             bosses_data = [
-                ("🌲 Лесной тролль", 5, 200, 20, 100, "https://i.imgur.com/troll.jpg"),
-                ("🐉 Огненный дракон", 10, 500, 40, 250, "https://i.imgur.com/dragon.jpg"),
-                ("❄️ Ледяной великан", 15, 1000, 60, 500, "https://i.imgur.com/giant.jpg"),
-                ("⚔️ Темный рыцарь", 20, 2000, 80, 1000, "https://i.imgur.com/knight.jpg"),
-                ("👾 Король демонов", 25, 5000, 150, 2500, "https://i.imgur.com/demon.jpg"),
-                ("💀 Бог разрушения", 30, 10000, 300, 5000, "https://i.imgur.com/god.jpg"),
-                ("🌪️ Повелитель бурь", 35, 20000, 400, 10000, "https://i.imgur.com/storm.jpg"),
-                ("🔥 Феникс", 40, 50000, 600, 25000, "https://i.imgur.com/phoenix.jpg"),
-                ("👁️ Древний ужас", 45, 100000, 1000, 50000, "https://i.imgur.com/ancient.jpg"),
-                ("⚡ Бог грома", 50, 200000, 2000, 100000, "https://i.imgur.com/thunder.jpg")
+                ("🌲 Лесной тролль", 5, 200, 20, 100, ""),
+                ("🐉 Огненный дракон", 10, 500, 40, 250, ""),
+                ("❄️ Ледяной великан", 15, 1000, 60, 500, ""),
+                ("⚔️ Темный рыцарь", 20, 2000, 80, 1000, ""),
+                ("👾 Король демонов", 25, 5000, 150, 2500, ""),
+                ("💀 Бог разрушения", 30, 10000, 300, 5000, "")
             ]
             for name, level, health, damage, reward, image in bosses_data:
                 self.cursor.execute('''
@@ -510,10 +503,6 @@ class Database:
                     (name, price, items)
                 )
             self.conn.commit()
-    
-    def init_achievements(self):
-        # Достижения будут добавляться динамически
-        pass
     
     def respawn_bosses(self):
         self.cursor.execute("UPDATE bosses SET is_alive = 1, boss_health = boss_max_health")
@@ -1395,7 +1384,7 @@ class GameBot:
         self.application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
         self.application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
         
-        logger.info("✅ Все 70+ обработчиков зарегистрированы")
+        logger.info("✅ Все 80+ обработчиков зарегистрированы")
     
     def is_admin(self, user_id: int) -> bool:
         user = self.db.get_user(user_id)
@@ -1449,7 +1438,6 @@ class GameBot:
         user_data = self.db.get_user(user.id, user.first_name, user.last_name or "")
         self.db.update_last_seen(user.id)
         
-        # Проверка на реферала
         if context.args and context.args[0].isdigit():
             referrer_id = int(context.args[0])
             if referrer_id != user.id:
@@ -1467,54 +1455,25 @@ class GameBot:
             f"║  ⚔️ **ДОБРО ПОЖАЛОВАТЬ** ⚔️  ║\n"
             f"╚══════════════════════════════╝\n\n"
             f"🌟 **Привет, {user.first_name}!**\n\n"
-            f"Я — **«СПЕКТР»**, твой игровой бот с искусственным интеллектом!\n"
-            f"У меня есть ВСЁ, что нужно для отличного времяпрепровождения.\n\n"
+            f"Я — **«СПЕКТР»**, твой игровой бот с искусственным интеллектом!\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"👤 **ТВОЙ ПРОФИЛЬ**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"▫️ **Роль:** {self.get_role_emoji(user_data.get('role', 'user'))} {user_data.get('role', 'user')}\n"
             f"▫️ **Монеты:** {user_data.get('coins', 1000)} 🪙\n"
-            f"▫️ **Уровень:** {user_data.get('level', 1)}\n"
-            f"▫️ **Репутация:** {user_data.get('rep', 0)} ⭐\n\n"
+            f"▫️ **Уровень:** {user_data.get('level', 1)}\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 **ГЛАВНОЕ МЕНЮ**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             
-            f"👤 **ПРОФИЛЬ**\n"
-            f"└ /profile — твой профиль\n"
-            f"└ /editprofile — редактировать\n"
-            f"└ /top — топ игроков\n"
-            f"└ /daily — ежедневная награда\n\n"
-            
-            f"💍 **ОТНОШЕНИЯ**\n"
-            f"└ /marry [ID] — сделать предложение\n"
-            f"└ /love — очки любви\n"
-            f"└ /compliment — сказать комплимент\n\n"
-            
-            f"👾 **БИТВЫ**\n"
-            f"└ /bosses — список боссов\n"
-            f"└ /boss_fight [ID] — битва\n"
-            f"└ /rps — камень-ножницы-бумага\n\n"
-            
-            f"🎰 **КАЗИНО**\n"
-            f"└ /casino — меню казино\n"
-            f"└ /roulette [ставка] — рулетка\n"
-            f"└ /dice [ставка] — кости\n\n"
-            
-            f"👥 **КЛАНЫ**\n"
-            f"└ /clan — информация\n"
-            f"└ /clan_create [название] — создать клан\n\n"
-            
-            f"🎁 **ЭКОНОМИКА**\n"
-            f"└ /cases — кейсы\n"
-            f"└ /shop — магазин\n"
-            f"└ /inventory — инвентарь\n\n"
-            
-            f"💎 **ПРИВИЛЕГИИ**\n"
-            f"└ /donate — информация\n"
-            f"└ /vip — купить VIP\n"
-            f"└ /premium — купить Premium\n\n"
+            f"👤 **ПРОФИЛЬ** — /profile\n"
+            f"💍 **ОТНОШЕНИЯ** — /marry, /love\n"
+            f"👾 **БОССЫ** — /bosses\n"
+            f"🎰 **КАЗИНО** — /casino\n"
+            f"👥 **КЛАНЫ** — /clan\n"
+            f"🎁 **МАГАЗИН** — /shop\n"
+            f"💎 **ПРИВИЛЕГИИ** — /donate\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"👑 **Владелец:** {OWNER_USERNAME}\n"
@@ -1526,6 +1485,16 @@ class GameBot:
         self.db.add_stat(user.id, "commands_used")
     
     async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        keyboard = self.get_main_menu_keyboard()
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыбери раздел:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    
+    def get_main_menu_keyboard(self):
         keyboard = [
             [InlineKeyboardButton("👤 Профиль", callback_data="menu_profile"),
              InlineKeyboardButton("💍 Отношения", callback_data="menu_marry")],
@@ -1539,185 +1508,38 @@ class GameBot:
              InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")],
             [InlineKeyboardButton("📚 Помощь", callback_data="menu_help")]
         ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыбери раздел:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+        return keyboard
     
-        async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда помощи с красивым оформлением"""
+    def get_back_button(self):
+        return [InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]
+    
+    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         
+        keyboard = [
+            [InlineKeyboardButton("👤 Профиль", callback_data="help_profile"),
+             InlineKeyboardButton("💍 Отношения", callback_data="help_marry")],
+            [InlineKeyboardButton("👾 Боссы", callback_data="help_bosses"),
+             InlineKeyboardButton("🎰 Казино", callback_data="help_casino")],
+            [InlineKeyboardButton("👥 Кланы", callback_data="help_clan"),
+             InlineKeyboardButton("🔪 Мафия", callback_data="help_mafia")],
+            [InlineKeyboardButton("🎁 Кейсы", callback_data="help_cases"),
+             InlineKeyboardButton("🛍 Магазин", callback_data="help_shop")],
+            [InlineKeyboardButton("💎 Привилегии", callback_data="help_donate"),
+             InlineKeyboardButton("👑 Админ", callback_data="help_admin")],
+            [InlineKeyboardButton("📋 Все команды", callback_data="help_all")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         text = (
-            "╔════════════════════════════════════╗\n"
-            "║      📚 **ВСЕ КОМАНДЫ БОТА**      ║\n"
-            "╚════════════════════════════════════╝\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👤 **ПРОФИЛЬ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/profile` — твой профиль\n"
-            "▫️ `/editprofile` — редактировать профиль\n"
-            "▫️ `/top` — топ игроков\n"
-            "▫️ `/daily` — ежедневная награда\n"
-            "▫️ `/rep` [ID] — дать репутацию\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 **СТАТИСТИКА ПО ИГРАМ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/boss_stats` — статистика боссов\n"
-            "▫️ `/mafia_stats` — статистика мафии\n"
-            "▫️ `/rps_stats` — статистика КНБ\n"
-            "▫️ `/casino_stats` — статистика казино\n"
-            "▫️ `/rr_stats` — статистика русской рулетки\n"
-            "▫️ `/ttt_stats` — статистика крестиков-ноликов\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "💍 **ОТНОШЕНИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/marry` [ID] — сделать предложение\n"
-            "▫️ `/divorce` — развестись\n"
-            "▫️ `/love` — очки любви\n"
-            "▫️ `/children` — завести ребенка\n"
-            "▫️ `/compliment` [ID] [текст] — сказать комплимент\n"
-            "▫️ `/compliments` — мои комплименты\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👾 **БОССЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/bosses` — список боссов\n"
-            "▫️ `/boss` [ID] — информация о боссе\n"
-            "▫️ `/boss_fight` [ID] — сразиться с боссом\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎰 **КАЗИНО**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/casino` — меню казино\n"
-            "▫️ `/roulette` [ставка] [цвет] — рулетка\n"
-            "▫️ `/dice` [ставка] — кости\n"
-            "▫️ `/blackjack` [ставка] — блэкджек\n"
-            "▫️ `/slots` [ставка] — слоты\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✊ **КАМЕНЬ-НОЖНИЦЫ-БУМАГА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/rps` — сыграть в КНБ\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "💣 **РУССКАЯ РУЛЕТКА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/rr` — информация\n"
-            "▫️ `/rr_start` [игроки] [ставка] — создать лобби\n"
-            "▫️ `/rr_join` [ID] — присоединиться\n"
-            "▫️ `/rr_shot` — сделать выстрел\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "⭕ **КРЕСТИКИ-НОЛИКИ 3D**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/ttt` — информация\n"
-            "▫️ `/ttt_challenge` [ID] — вызвать на игру\n"
-            "▫️ `/ttt_move` [клетка] — сделать ход\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👥 **КЛАНЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/clan` — информация о клане\n"
-            "▫️ `/clan_create` [название] — создать клан\n"
-            "▫️ `/clan_join` [ID] — вступить в клан\n"
-            "▫️ `/clan_leave` — покинуть клан\n"
-            "▫️ `/clan_top` — топ кланов\n"
-            "▫️ `/clan_war` — клановая война\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🔪 **МАФИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/mafia` — информация\n"
-            "▫️ `/mafia_create` — создать игру\n"
-            "▫️ `/mafia_join` [ID] — присоединиться\n"
-            "▫️ `/mafia_start` — начать игру\n"
-            "▫️ `/mafia_vote` [ID] — проголосовать\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎁 **КЕЙСЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/cases` — список кейсов\n"
-            "▫️ `/open` [ID] — открыть кейс\n"
-            "▫️ `/keys` — мои ключи\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🛍 **МАГАЗИН**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/shop` — магазин\n"
-            "▫️ `/buy` [предмет] — купить предмет\n"
-            "▫️ `/inventory` — инвентарь\n"
-            "▫️ `/use` [ID] — использовать предмет\n"
-            "▫️ `/market` — торговая площадка\n"
-            "▫️ `/sell` [предмет] [цена] — продать предмет\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "💎 **ПРИВИЛЕГИИ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/donate` — информация\n"
-            "▫️ `/vip` — купить VIP (5000 🪙)\n"
-            "▫️ `/premium` — купить Premium (15000 🪙)\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🎁 **ПОДАРКИ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/gift` [ID] [предмет] — отправить подарок\n"
-            "▫️ `/gifts` — мои подарки\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👥 **РЕФЕРАЛЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/referral` — реферальная ссылка\n"
-            "▫️ `/referrals` — мои рефералы\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "💰 **ДОЛГИ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/debt` [ID] [сумма] [причина] — дать в долг\n"
-            "▫️ `/debts` — мои долги\n"
-            "▫️ `/pay` [ID] — оплатить долг\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📋 **ЗАДАНИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/dailies` — ежедневные задания\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🏆 **ДОСТИЖЕНИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/achievements` — мои достижения\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👑 **АДМИН-КОМАНДЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/mute` [ID] [минут] — замутить\n"
-            "▫️ `/warn` [ID] [причина] — выдать варн\n"
-            "▫️ `/ban` [ID] — забанить\n"
-            "▫️ `/unban` [ID] — разбанить\n"
-            "▫️ `/give` [ID] [сумма] — выдать монеты\n"
-            "▫️ `/clear` [количество] — очистить чат\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "👥 **НАСТРОЙКИ ГРУПП**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "▫️ `/rules` — правила чата\n"
-            "▫️ `/set_rules` [текст] — установить правила\n"
-            "▫️ `/group_settings` — настройки группы\n"
-            "▫️ `/set_welcome` [текст] — приветствие\n"
-            "▫️ `/set_goodbye` [текст] — прощание\n\n"
-            
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👑 **Владелец:** {OWNER_USERNAME}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            "╔══════════════════════════════╗\n"
+            f"║   📚 **СПРАВКА**           ║\n"
+            f"╚══════════════════════════════╝\n\n"
+            f"👤 **Владелец:** {OWNER_USERNAME}\n\n"
+            f"Выберите раздел для просмотра команд:"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         self.db.add_stat(user.id, "commands_used")
     
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1733,24 +1555,12 @@ class GameBot:
         self.db.cursor.execute("SELECT * FROM stats WHERE user_id = ?", (user.id,))
         stats = self.db.cursor.fetchone()
         
-        # Проверка на привилегии
         vip_status = "✅ Активен" if self.is_vip(user.id) else "❌ Нет"
         premium_status = "✅ Активен" if self.is_premium(user.id) else "❌ Нет"
         
-        # Клан
         clan = self.db.get_user_clan(user.id)
         clan_name = clan[1] if clan else "Нет"
         
-        # Статистика игр
-        boss_kills = user_data.get('boss_kills', 0)
-        rps_wins = user_data.get('rps_wins', 0)
-        rps_losses = user_data.get('rps_losses', 0)
-        rps_total = rps_wins + rps_losses + user_data.get('rps_draws', 0)
-        casino_wins = user_data.get('casino_wins', 0)
-        casino_losses = user_data.get('casino_losses', 0)
-        casino_total = casino_wins + casino_losses
-        
-        # Семья
         marry_id = user_data.get('marry_id', 0)
         if marry_id:
             self.db.cursor.execute("SELECT first_name FROM users WHERE user_id = ?", (marry_id,))
@@ -1759,15 +1569,6 @@ class GameBot:
         else:
             marry_text = "Нет"
         
-        # Последний визит
-        last_seen = user_data.get('last_seen', '')
-        if last_seen:
-            last_seen_date = datetime.datetime.fromisoformat(last_seen)
-            last_seen_str = last_seen_date.strftime("%d.%m.%Y %H:%M")
-        else:
-            last_seen_str = "Неизвестно"
-        
-        # Имя и ник
         display_name = user_data.get('nickname') or user.first_name
         gender_emoji = "♂️" if user_data.get('gender') == 'м' else "♀️" if user_data.get('gender') == 'ж' else "❓"
         
@@ -1784,9 +1585,7 @@ class GameBot:
             f"▫️ **Уровень:** {user_data.get('level', 1)}\n"
             f"▫️ **Опыт:** {user_data.get('exp', 0)}/{user_data.get('level', 1) * 100}\n"
             f"▫️ **Монеты:** {user_data.get('coins', 1000)} 🪙\n"
-            f"▫️ **Энергия:** {user_data.get('energy', 100)} ⚡\n"
-            f"▫️ **Репутация:** {user_data.get('rep', 0)} ⭐\n"
-            f"▫️ **Последний визит:** {last_seen_str}\n\n"
+            f"▫️ **Энергия:** {user_data.get('energy', 100)} ⚡\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**БОЕВЫЕ ХАРАКТЕРИСТИКИ**\n"
@@ -1794,7 +1593,7 @@ class GameBot:
             f"▫️ **Здоровье:** {user_data.get('health', 100)} ❤️\n"
             f"▫️ **Броня:** {user_data.get('armor', 0)} 🛡\n"
             f"▫️ **Урон:** {user_data.get('damage', 10)} ⚔️\n"
-            f"▫️ **Боссов убито:** {boss_kills} 👾\n\n"
+            f"▫️ **Боссов убито:** {user_data.get('boss_kills', 0)} 👾\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**ПРИВИЛЕГИИ**\n"
@@ -1818,39 +1617,35 @@ class GameBot:
             f"▫️ **Дети:** {user_data.get('children', 0)} 👶\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**СТАТИСТИКА ИГР**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"▫️ **КНБ:** {rps_wins} побед, {rps_losses} поражений, всего {rps_total} игр\n"
-            f"▫️ **Казино:** {casino_wins} побед, {casino_losses} поражений, всего {casino_total} игр\n\n"
-            
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**АКТИВНОСТЬ**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"▫️ **Сообщений:** {stats[1] if stats else 0}\n"
             f"▫️ **Команд:** {stats[2] if stats else 0}\n"
-            f"▫️ **Игр сыграно:** {stats[3] if stats else 0}\n"
-            f"▫️ **Голосовых:** {user_data.get('voice_count', 0)}\n"
-            f"▫️ **Фото:** {user_data.get('photo_count', 0)}\n"
-            f"▫️ **Стикеров:** {user_data.get('sticker_count', 0)}"
+            f"▫️ **Игр сыграно:** {stats[3] if stats else 0}"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         self.db.add_stat(user.id, "commands_used")
     
     async def cmd_edit_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
         text = (
             "✏️ **РЕДАКТИРОВАНИЕ ПРОФИЛЯ**\n\n"
             "Выбери, что хочешь изменить:\n\n"
-            "▫️ .nick [ник] — установить никнейм\n"
-            "▫️ .gender [м/ж] — установить пол\n"
-            "▫️ .birthday [ДД.ММ.ГГГГ] — день рождения\n"
-            "▫️ .city [город] — город\n"
-            "▫️ .bio [текст] — о себе\n\n"
+            "▫️ `.nick [ник]` — установить никнейм\n"
+            "▫️ `.gender [м/ж]` — установить пол\n"
+            "▫️ `.birthday [ДД.ММ.ГГГГ]` — день рождения\n"
+            "▫️ `.city [город]` — город\n"
+            "▫️ `.bio [текст]` — о себе\n\n"
             "Пример: `.nick Spectr`"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_boss_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1867,7 +1662,10 @@ class GameBot:
             f"▫️ **Здоровье:** {user_data.get('health', 100)} ❤️"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1886,7 +1684,10 @@ class GameBot:
             f"▫️ **Винрейт:** {self.calc_winrate(wins, games)}% 📊"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_rps_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1909,7 +1710,10 @@ class GameBot:
             f"▫️ **Винрейт:** {self.calc_winrate(wins, total)}% 📊"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_casino_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1930,7 +1734,10 @@ class GameBot:
             f"▫️ **Винрейт:** {self.calc_winrate(wins, total)}% 📊"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_rr_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1951,7 +1758,10 @@ class GameBot:
             f"▫️ **Винрейт:** {self.calc_winrate(wins, total)}% 📊"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_ttt_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1974,13 +1784,15 @@ class GameBot:
             f"▫️ **Винрейт:** {self.calc_winrate(wins, total)}% 📊"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         top_coins = self.db.get_top("coins", 10)
         top_level = self.db.get_top("level", 10)
         top_boss = self.db.get_top("boss_kills", 10)
-        top_rep = self.db.get_top("rep", 10)
         
         text = (
             f"╔══════════════════════════════╗\n"
@@ -2009,14 +1821,10 @@ class GameBot:
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
             text += f"{medal} **{i}.** {name} — {value} боссов\n"
         
-        text += "\n━━━━━━━━━━━━━━━━━━━━━━━\n"
-        text += "⭐ **ПО РЕПУТАЦИИ**\n"
-        text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
-        for i, (name, value) in enumerate(top_rep, 1):
-            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
-            text += f"{medal} **{i}.** {name} — {value} ⭐\n"
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2035,18 +1843,14 @@ class GameBot:
                 await update.message.reply_text("❌ Ты уже получал награду сегодня!")
                 return
         
-        # Базовая награда
         coins = random.randint(100, 300)
         exp = random.randint(20, 60)
         energy = random.randint(10, 30)
         
         streak = user_data.get('daily_streak', 0) + 1
-        
-        # Бонус за стрик
         coins = int(coins * (1 + min(streak, 30) * 0.05))
         exp = int(exp * (1 + min(streak, 30) * 0.05))
         
-        # Бонус за привилегии
         if self.is_vip(user.id):
             coins = int(coins * 1.5)
             exp = int(exp * 1.5)
@@ -2064,14 +1868,6 @@ class GameBot:
         )
         self.db.conn.commit()
         
-        # Достижение за стрик
-        if streak == 7:
-            self.db.add_achievement(user.id, "📅 Неделя", "7 дней подряд", 500)
-        elif streak == 30:
-            self.db.add_achievement(user.id, "📅 Месяц", "30 дней подряд", 2000)
-        elif streak == 365:
-            self.db.add_achievement(user.id, "📅 Год", "365 дней подряд", 10000)
-        
         text = (
             f"╔══════════════════════════════╗\n"
             f"║    🎁 **ЕЖЕДНЕВНАЯ НАГРАДА**   ║\n"
@@ -2083,7 +1879,10 @@ class GameBot:
             f"🌟 Заходи завтра за новой наградой!"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_rep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2101,9 +1900,6 @@ class GameBot:
         if user.id == target_id:
             await update.message.reply_text("❌ Нельзя дать репутацию самому себе")
             return
-        
-        # Проверяем, можно ли дать репутацию (раз в 24 часа)
-        # В реальном коде нужно добавить проверку
         
         self.db.cursor.execute("UPDATE users SET rep = rep + 1 WHERE user_id = ?", (target_id,))
         self.db.conn.commit()
@@ -2161,7 +1957,10 @@ class GameBot:
             date_str = datetime.datetime.fromisoformat(created_at).strftime("%d.%m.%Y")
             text += f"▫️ «{compliment}»\n  — от {from_name}, {date_str}\n\n"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_boss_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         bosses = self.db.get_bosses(alive_only=True)
@@ -2184,7 +1983,10 @@ class GameBot:
         text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
         text += "⚔️ **Сразиться:** /boss_fight [ID]"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_boss_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2212,17 +2014,10 @@ class GameBot:
             f"📊 Статус: {status}"
         )
         
-        if boss[7]:
-            try:
-                await context.bot.send_photo(
-                    chat_id=update.effective_chat.id,
-                    photo=boss[7],
-                    caption=text
-                )
-            except:
-                await update.message.reply_text(text, parse_mode='Markdown')
-        else:
-            await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_boss_fight(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2255,12 +2050,10 @@ class GameBot:
         
         self.db.add_energy(user.id, -10)
         
-        # Расчет урона
         player_damage = user_data['damage'] + random.randint(-5, 5)
         boss_damage = boss[5] + random.randint(-5, 5)
         player_taken = max(1, boss_damage - user_data['armor'] // 2)
         
-        # Бонус за привилегии
         if self.is_vip(user.id):
             player_damage = int(player_damage * 1.2)
         if self.is_premium(user.id):
@@ -2299,14 +2092,19 @@ class GameBot:
             text += "\n\n💀 Ты погиб в бою, но воскрешен с 50❤️"
         
         self.db.add_stat(user.id, "games_played")
-        await update.message.reply_text(text, parse_mode='Markdown')
+        
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
             [InlineKeyboardButton("🎰 Рулетка", callback_data="casino_roulette"),
              InlineKeyboardButton("🎲 Кости", callback_data="casino_dice")],
             [InlineKeyboardButton("🃏 Блэкджек", callback_data="casino_blackjack"),
-             InlineKeyboardButton("🎰 Слоты", callback_data="casino_slots")]
+             InlineKeyboardButton("🎰 Слоты", callback_data="casino_slots")],
+            self.get_back_button()
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -2373,16 +2171,20 @@ class GameBot:
             self.db.add_stat(user.id, "casino_losses", 1)
             result_text = f"😢 **Ты проиграл {bet} 🪙**"
         
-        await update.message.reply_text(
+        text = (
             f"🎰 **РУЛЕТКА**\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"▫️ **Ставка:** {bet} 🪙\n"
             f"▫️ **Выбрано:** {choice}\n"
             f"▫️ **Выпало:** {result_num} {result_color}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{result_text}",
-            parse_mode='Markdown'
+            f"{result_text}"
         )
+        
+        keyboard = [[InlineKeyboardButton("🔙 В казино", callback_data="menu_casino")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2420,16 +2222,20 @@ class GameBot:
             self.db.add_coins(user.id, -bet)
             self.db.add_stat(user.id, "casino_losses", 1)
         
-        await update.message.reply_text(
+        text = (
             f"🎲 **КОСТИ**\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"▫️ **Ставка:** {bet} 🪙\n"
             f"▫️ **Кубики:** {dice1} + {dice2}\n"
             f"▫️ **Сумма:** {total}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{result_text}",
-            parse_mode='Markdown'
+            f"{result_text}"
         )
+        
+        keyboard = [[InlineKeyboardButton("🔙 В казино", callback_data="menu_casino")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_blackjack(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2446,7 +2252,6 @@ class GameBot:
             await update.message.reply_text(f"❌ У тебя только {user_data['coins']} 🪙")
             return
         
-        # Упрощенная версия блэкджека
         player_card1 = random.randint(1, 11)
         player_card2 = random.randint(1, 11)
         player_total = player_card1 + player_card2
@@ -2480,15 +2285,19 @@ class GameBot:
             self.db.add_coins(user.id, -bet)
             self.db.add_stat(user.id, "casino_losses", 1)
         
-        await update.message.reply_text(
+        text = (
             f"🃏 **БЛЭКДЖЕК**\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**Твои карты:** {player_card1} + {player_card2} = {player_total}\n"
             f"**Карты дилера:** {dealer_card1} + {dealer_card2} = {dealer_total}\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{result_text}",
-            parse_mode='Markdown'
+            f"{result_text}"
         )
+        
+        keyboard = [[InlineKeyboardButton("🔙 В казино", callback_data="menu_casino")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2532,15 +2341,19 @@ class GameBot:
             self.db.add_coins(user.id, -bet)
             self.db.add_stat(user.id, "casino_losses", 1)
         
-        await update.message.reply_text(
+        text = (
             f"🎰 **СЛОТЫ**\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"**{' '.join(spin)}**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             f"{result_text}\n"
-            f"{'💰 +' + str(win) + ' 🪙' if win > 0 else '💸 -' + str(bet) + ' 🪙'}",
-            parse_mode='Markdown'
+            f"{'💰 +' + str(win) + ' 🪙' if win > 0 else '💸 -' + str(bet) + ' 🪙'}"
         )
+        
+        keyboard = [[InlineKeyboardButton("🔙 В казино", callback_data="menu_casino")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = [
@@ -2548,7 +2361,8 @@ class GameBot:
                 InlineKeyboardButton("🪨 Камень", callback_data="rps_rock"),
                 InlineKeyboardButton("✂️ Ножницы", callback_data="rps_scissors"),
                 InlineKeyboardButton("📄 Бумага", callback_data="rps_paper")
-            ]
+            ],
+            self.get_back_button()
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -2579,7 +2393,10 @@ class GameBot:
             "▫️ /rr_shot — сделать выстрел"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_rr_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -2645,7 +2462,6 @@ class GameBot:
             return
         
         if self.db.rr_join_lobby(lobby_id, user.id):
-            players.append(user.id)
             await update.message.reply_text(f"✅ Ты присоединился к лобби {lobby_id}!")
         else:
             await update.message.reply_text("❌ Не удалось присоединиться")
@@ -2693,7 +2509,10 @@ class GameBot:
             "▫️ /ttt_move [клетка] — сделать ход"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_ttt_challenge(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2766,7 +2585,10 @@ class GameBot:
             role_emoji = "👑" if member[5] == 'owner' else "🛡" if member[5] == 'admin' else "👤"
             text += f"{role_emoji} {member[1]} (ур.{member[3]})\n"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_clan_create(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2862,7 +2684,10 @@ class GameBot:
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
             text += f"{medal} **{i}. {name}** — {level} ур., {members} уч., {rating} ⭐, {wins} побед\n"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_clan_war(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚔️ Клановые войны будут доступны в следующем обновлении!")
@@ -2884,7 +2709,10 @@ class GameBot:
             "▫️ /mafia_vote [ID] — проголосовать"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_mafia_create(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2972,7 +2800,10 @@ class GameBot:
         text += "Открыть: /open [ID]\n"
         text += "Твои ключи: /keys"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_open(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3022,7 +2853,10 @@ class GameBot:
         else:
             text = "❌ Ошибка при открытии кейса"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_keys(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3030,7 +2864,12 @@ class GameBot:
         
         keys = user_data.get('keys', 0)
         
-        await update.message.reply_text(f"🔑 **Твои ключи:** {keys}")
+        text = f"🔑 **Твои ключи:** {keys}"
+        
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_inventory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3050,7 +2889,10 @@ class GameBot:
         
         text += "Использовать: /use [ID]"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
@@ -3090,7 +2932,10 @@ class GameBot:
             "Купить: /buy [название]"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3192,7 +3037,10 @@ class GameBot:
         
         text += "Купить: /buy_market [ID]"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_sell(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -3208,7 +3056,6 @@ class GameBot:
         
         user = update.effective_user
         
-        # Проверяем, есть ли предмет в инвентаре
         items = self.db.get_inventory(user.id)
         has_item = any(item_name.lower() in item[1].lower() for item in items)
         
@@ -3244,14 +3091,16 @@ class GameBot:
             "  • Все бонусы VIP\n"
             "  • Урон в битвах +50%\n"
             "  • Награда с боссов +100%\n"
-            "  • Ежедневный бонус +100%\n"
-            "  • Доступ к эксклюзивным командам\n\n"
+            "  • Ежедневный бонус +100%\n\n"
             
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"👑 По вопросам доната: {OWNER_USERNAME}"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3315,7 +3164,6 @@ class GameBot:
             await update.message.reply_text("❌ Нельзя дарить подарки самому себе")
             return
         
-        # Проверяем, есть ли предмет в инвентаре
         items = self.db.get_inventory(user.id)
         has_item = any(item_name.lower() in item[1].lower() for item in items)
         
@@ -3358,7 +3206,10 @@ class GameBot:
             
             self.db.read_gift(gift[0])
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_referral(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3375,7 +3226,10 @@ class GameBot:
             "Отправь эту ссылку друзьям. Когда они зарегистрируются, ты получишь награду!"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_referrals(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3398,7 +3252,10 @@ class GameBot:
         
         text += f"\n💰 **Всего получено:** {total_reward} 🪙"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_marry(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -3485,7 +3342,10 @@ class GameBot:
             f"💡 Дарите подарки и проводите время вместе, чтобы повысить очки любви!"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_children(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3599,7 +3459,10 @@ class GameBot:
         
         text += "Оплатить: /pay [ID]"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -3656,13 +3519,6 @@ class GameBot:
         dailies = self.db.get_dailies(user.id)
         
         if not dailies:
-            # Создаем задания на сегодня
-            tasks = [
-                ("messages", 10, 50, "Отправить 10 сообщений"),
-                ("boss_fights", 3, 100, "Сразиться с боссами 3 раза"),
-                ("casino", 5, 75, "Сыграть в казино 5 раз")
-            ]
-            
             text = "📋 **ЕЖЕДНЕВНЫЕ ЗАДАНИЯ**\n\n"
             text += "У тебя пока нет активных заданий. Они появятся после первого действия.\n\n"
             text += "Примеры заданий:\n"
@@ -3678,7 +3534,10 @@ class GameBot:
                 text += f"▫️ **{task_type}:** {progress}/{target} {bar} {percent}%\n"
                 text += f"  Награда: {reward} 🪙\n\n"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3700,7 +3559,10 @@ class GameBot:
                 text += f" (+{reward} 🪙)"
             text += "\n\n"
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not self.is_admin(update.effective_user.id):
@@ -3871,7 +3733,6 @@ class GameBot:
         
         try:
             await context.bot.delete_message(chat_id, update.message.message_id)
-            # Здесь нужно использовать client.delete_messages, но в telegram.ext нет прямого доступа
             await update.message.reply_text(f"✅ Удалено {count} сообщений")
         except:
             await update.message.reply_text("❌ Не удалось удалить сообщения")
@@ -3881,18 +3742,14 @@ class GameBot:
         rules = self.db.get_group_rules(chat_id)
         
         if rules:
-            await update.message.reply_text(
-                f"📜 **ПРАВИЛА ЧАТА**\n\n"
-                f"{rules}",
-                parse_mode='Markdown'
-            )
+            text = f"📜 **ПРАВИЛА ЧАТА**\n\n{rules}"
         else:
-            await update.message.reply_text(
-                "📜 **ПРАВИЛА ЧАТА**\n\n"
-                "В этом чате ещё нет правил.\n"
-                "Установите их командой:\n"
-                "/set_rules [текст]"
-            )
+            text = "📜 **ПРАВИЛА ЧАТА**\n\nВ этом чате ещё нет правил.\nУстановите их командой: /set_rules [текст]"
+        
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -3910,9 +3767,7 @@ class GameBot:
         rules = " ".join(context.args)
         self.db.set_group_rules(chat_id, rules, user_id)
         
-        await update.message.reply_text(
-            f"✅ **Правила установлены!**\n\n{rules}"
-        )
+        await update.message.reply_text(f"✅ **Правила установлены!**\n\n{rules}")
     
     async def cmd_group_settings(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -3940,7 +3795,10 @@ class GameBot:
             f"⚠️ **Лимит варнов:** {settings['warn_limit']}"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        keyboard = [self.get_back_button()]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -4041,10 +3899,8 @@ class GameBot:
         if await self.check_spam(update):
             return
         
-        # Обновляем ежедневные задания
         self.db.update_daily(user.id, "messages")
         
-        # Пробуем OpenRouter
         response = await self.ai.get_response(user.id, message_text)
         if response:
             await update.message.reply_text(f"🤖 **СПЕКТР:** {response}", parse_mode='Markdown')
@@ -4052,7 +3908,6 @@ class GameBot:
             self.db.add_exp(user.id, 1)
             return
         
-        # Если OpenRouter не ответил — заготовки
         msg_lower = message_text.lower()
         
         if any(word in msg_lower for word in ["привет", "здравствуй", "хай"]):
@@ -4107,27 +3962,33 @@ class GameBot:
         user = update.effective_user
         data = query.data
         
-        if data == "menu_profile":
+        if data == "menu_back":
+            keyboard = self.get_main_menu_keyboard()
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыбери раздел:",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
+        
+        elif data == "menu_profile":
             await self.cmd_profile(update, context)
         elif data == "menu_marry":
+            keyboard = [
+                [InlineKeyboardButton("💍 Заключить брак", callback_data="marry_info"),
+                 InlineKeyboardButton("💔 Развод", callback_data="divorce_info")],
+                [InlineKeyboardButton("💕 Очки любви", callback_data="love_info"),
+                 InlineKeyboardButton("👶 Дети", callback_data="children_info")],
+                self.get_back_button()
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
                 "💍 **ОТНОШЕНИЯ**\n\n"
                 "▫️ /marry [ID] — сделать предложение\n"
                 "▫️ /divorce — развестись\n"
                 "▫️ /love — очки любви\n"
-                "▫️ /children — завести ребенка\n"
-                "▫️ /compliment — сказать комплимент",
-                parse_mode='Markdown'
-            )
-        elif data == "menu_stats":
-            await query.edit_message_text(
-                "📊 **СТАТИСТИКА**\n\n"
-                "▫️ /boss_stats — боссы\n"
-                "▫️ /mafia_stats — мафия\n"
-                "▫️ /rps_stats — КНБ\n"
-                "▫️ /casino_stats — казино\n"
-                "▫️ /rr_stats — русская рулетка\n"
-                "▫️ /ttt_stats — крестики-нолики",
+                "▫️ /children — завести ребенка",
+                reply_markup=reply_markup,
                 parse_mode='Markdown'
             )
         elif data == "menu_bosses":
@@ -4144,8 +4005,74 @@ class GameBot:
             await self.cmd_shop(update, context)
         elif data == "menu_donate":
             await self.cmd_donate(update, context)
+        elif data == "menu_stats":
+            keyboard = [
+                [InlineKeyboardButton("👾 Боссы", callback_data="boss_stats"),
+                 InlineKeyboardButton("🔪 Мафия", callback_data="mafia_stats")],
+                [InlineKeyboardButton("✊ КНБ", callback_data="rps_stats"),
+                 InlineKeyboardButton("🎰 Казино", callback_data="casino_stats")],
+                [InlineKeyboardButton("💣 Русская рулетка", callback_data="rr_stats"),
+                 InlineKeyboardButton("⭕ Крестики-нолики", callback_data="ttt_stats")],
+                [InlineKeyboardButton("🏆 Топ игроков", callback_data="top")],
+                self.get_back_button()
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await query.edit_message_text(
+                "📊 **СТАТИСТИКА**\n\nВыберите раздел:",
+                reply_markup=reply_markup,
+                parse_mode='Markdown'
+            )
         elif data == "menu_help":
             await self.cmd_help(update, context)
+        
+        elif data == "boss_stats":
+            await self.cmd_boss_stats(update, context)
+        elif data == "mafia_stats":
+            await self.cmd_mafia_stats(update, context)
+        elif data == "rps_stats":
+            await self.cmd_rps_stats(update, context)
+        elif data == "casino_stats":
+            await self.cmd_casino_stats(update, context)
+        elif data == "rr_stats":
+            await self.cmd_rr_stats(update, context)
+        elif data == "ttt_stats":
+            await self.cmd_ttt_stats(update, context)
+        elif data == "top":
+            await self.cmd_top(update, context)
+        
+        elif data == "marry_info":
+            await query.edit_message_text(
+                "💍 **КАК ЗАКЛЮЧИТЬ БРАК**\n\n"
+                "1. Найди ID пользователя (/profile)\n"
+                "2. Отправь /marry [ID]\n"
+                "3. Дождись согласия\n"
+                "4. Получи +500 🪙 и достижение!",
+                reply_markup=InlineKeyboardMarkup([self.get_back_button()])
+            )
+        elif data == "divorce_info":
+            await query.edit_message_text(
+                "💔 **РАЗВОД**\n\n"
+                "Отправь /divorce\n"
+                "Штраф: -500 🪙",
+                reply_markup=InlineKeyboardMarkup([self.get_back_button()])
+            )
+        elif data == "love_info":
+            await query.edit_message_text(
+                "💕 **ОЧКИ ЛЮБВИ**\n\n"
+                "• Растут от подарков\n"
+                "• Нужны для детей\n"
+                "• Проверить: /love",
+                reply_markup=InlineKeyboardMarkup([self.get_back_button()])
+            )
+        elif data == "children_info":
+            await query.edit_message_text(
+                "👶 **ДЕТИ**\n\n"
+                "• Нужно 100+ очков любви\n"
+                "• Шанс 30-70%\n"
+                "• Максимум 5 детей",
+                reply_markup=InlineKeyboardMarkup([self.get_back_button()])
+            )
+        
         elif data == "casino_roulette":
             await self.cmd_roulette(update, context)
         elif data == "casino_dice":
@@ -4154,6 +4081,7 @@ class GameBot:
             await self.cmd_blackjack(update, context)
         elif data == "casino_slots":
             await self.cmd_slots(update, context)
+        
         elif data.startswith("rps_"):
             choice = data.split('_')[1]
             bot_choice = random.choice(["rock", "scissors", "paper"])
@@ -4180,7 +4108,12 @@ class GameBot:
                     text = f"{choices[choice]} vs {choices[bot_choice]}\n\n😢 **Ты проиграл!**"
             
             self.db.conn.commit()
-            await query.edit_message_text(text, parse_mode='Markdown')
+            
+            keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_rps")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+        
         elif data.startswith("ttt_accept_"):
             lobby_id = int(data.split('_')[2])
             if self.db.ttt_join_lobby(lobby_id, user.id):
