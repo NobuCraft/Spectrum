@@ -399,6 +399,8 @@ class Database:
 db = Database()
 
 # ===================== УМНЫЙ ИИ (ЛОКАЛЬНЫЙ) =====================
+import google.generativeai as genai
+
 class SpectrumAI:
     def __init__(self):
         try:
@@ -420,7 +422,8 @@ class SpectrumAI:
                     test = self.model.generate_content("test")
                     print(f"✅ Модель работает: {model_name}")
                     break
-                except:
+                except Exception as e:
+                    print(f"❌ Модель {model_name} не работает: {e}")
                     continue
             
             if self.model is None:
@@ -432,6 +435,36 @@ class SpectrumAI:
         except Exception as e:
             print(f"❌ Ошибка инициализации Gemini: {e}")
             self.model = None
+    
+    async def get_response(self, user_id: int, message: str) -> str:
+        """ОСНОВНОЙ МЕТОД, КОТОРЫЙ ВЫЗЫВАЕТ БОТ"""
+        print(f"📨 Получено сообщение от {user_id}: {message[:50]}...")
+        
+        if self.model is None:
+            return "❌ Gemini не настроен. Проверь логи."
+        
+        try:
+            # Создаем чат если нужно
+            if user_id not in self.chats:
+                self.chats[user_id] = self.model.start_chat()
+            
+            # Отправляем запрос
+            response = self.chats[user_id].send_message(
+                f"Ты игровой бот «СПЕКТР». Отвечай кратко и дружелюбно, с эмодзи. Вопрос: {message}"
+            )
+            
+            if response and response.text:
+                print(f"✅ Gemini ответил")
+                return f"🤖 **СПЕКТР:** {response.text}"
+            else:
+                return "❌ Gemini вернул пустой ответ"
+                
+        except Exception as e:
+            print(f"❌ Ошибка Gemini: {e}")
+            return f"❌ Ошибка Gemini: {str(e)[:100]}"
+    
+    async def close(self):
+        pass
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
