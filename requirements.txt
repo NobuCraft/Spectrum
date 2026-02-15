@@ -1,7 +1,2 @@
 python-telegram-bot==20.6
 aiohttp==3.9.1
-requests
-beautifulsoup4
-wikipedia
-Pillow
-aiofiles
