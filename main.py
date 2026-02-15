@@ -929,7 +929,8 @@ class SpectrumAI:
         self.contexts = {}
         self.user_state = {}
         self.session = None
-        self.deepseek_working = False
+        self.api_key = "sk-97ac1d0de1844c449852a5470cbcae35"
+        self.api_url = "https://openrouter.ai/api/v1/chat/completions"
         print("🤖 ИИ СПЕКТР инициализирован")
     
     async def get_session(self):
@@ -937,24 +938,23 @@ class SpectrumAI:
             self.session = aiohttp.ClientSession()
         return self.session
     
-    async def get_deepseek_response(self, message: str, user_id: int) -> str:
+    async def get_response(self, user_id: int, message: str) -> str:
+        msg_lower = message.lower().strip()
+        
+        # Сначала пробуем OpenRouter
         try:
             session = await self.get_session()
             
             headers = {
                 "Content-Type": "application/json",
-                "Authorization": f"Bearer {DEEPSEEK_KEY}"
+                "Authorization": f"Bearer {self.api_key}",
+                "HTTP-Referer": "https://railway.app",
+                "X-Title": "Spectrum Bot"
             }
-            
-            system_prompt = (
-                "Ты - игровой бот «СПЕКТР». Ты помогаешь игрокам сражаться с боссами, "
-                "играть в казино, русскую рулетку, крестики-нолики и мафию. "
-                "Отвечай кратко, с эмодзи, по-русски. Ты дружелюбный помощник."
-            )
             
             if user_id not in self.contexts:
                 self.contexts[user_id] = [
-                    {"role": "system", "content": system_prompt}
+                    {"role": "system", "content": "Ты - игровой бот «СПЕКТР». Ты помогаешь игрокам сражаться с боссами, играть в казино, русскую рулетку, крестики-нолики. Отвечай кратко, с эмодзи, по-русски. Ты дружелюбный помощник."}
                 ]
             
             self.contexts[user_id].append({"role": "user", "content": message})
@@ -963,52 +963,35 @@ class SpectrumAI:
                 self.contexts[user_id] = [self.contexts[user_id][0]] + self.contexts[user_id][-10:]
             
             data = {
-                "model": "deepseek-chat",
+                "model": "deepseek/deepseek-chat",
                 "messages": self.contexts[user_id],
                 "temperature": 0.7,
                 "max_tokens": 150
             }
             
-            async with session.post(DEEPSEEK_URL, json=data, headers=headers, timeout=15) as resp:
+            async with session.post(self.api_url, json=data, headers=headers, timeout=15) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     ai_response = result["choices"][0]["message"]["content"]
                     self.contexts[user_id].append({"role": "assistant", "content": ai_response})
-                    self.deepseek_working = True
-                    return ai_response
+                    print(f"✅ OpenRouter ответил")
+                    return f"🤖 **СПЕКТР:** {ai_response}"
                 else:
-                    print(f"DeepSeek ошибка: {resp.status}")
-                    self.deepseek_working = False
-                    return None
+                    print(f"OpenRouter ошибка: {resp.status}")
         except Exception as e:
-            print(f"DeepSeek ошибка: {e}")
-            self.deepseek_working = False
-            return None
-    
-    async def get_response(self, user_id: int, message: str) -> str:
-        msg_lower = message.lower().strip()
+            print(f"OpenRouter ошибка: {e}")
         
-        # Сначала пробуем DeepSeek
-        deepseek_response = await self.get_deepseek_response(message, user_id)
-        if deepseek_response:
-            return f"🤖 **СПЕКТР:** {deepseek_response}"
-        
-        # Если DeepSeek не работает — встроенные ответы
+        # Если OpenRouter не работает — запасные ответы
         if any(word in msg_lower for word in ["привет", "здравствуй", "хай"]):
             return "👋 **СПЕКТР:** Приветствую, игрок. Чем могу помочь?"
-        
         elif any(word in msg_lower for word in ["как дела", "как ты"]):
             return "⚙️ **СПЕКТР:** Всё отлично! Анализирую твой прогресс."
-        
         elif any(word in msg_lower for word in ["спасибо", "благодарю"]):
             return "🤝 **СПЕКТР:** Обращайся. Удачных сражений!"
-        
         elif any(word in msg_lower for word in ["пока", "до свидания"]):
             return "👋 **СПЕКТР:** До встречи! Не забывай забирать /daily!"
-        
         elif any(word in msg_lower for word in ["кто ты", "ты кто"]):
             return "🤖 **СПЕКТР:** Я — искусственный интеллект, созданный для помощи в играх."
-        
         elif any(word in msg_lower for word in ["что ты умеешь", "твои функции"]):
             return (
                 "📋 **СПЕКТР:** Мои возможности:\n"
@@ -1016,15 +999,12 @@ class SpectrumAI:
                 "• 🎰 Казино\n"
                 "• 💣 Русская рулетка\n"
                 "• ⭕ Крестики-нолики 3D\n"
-                "• 🔪 Мафия\n"
                 "• 👥 Кланы\n"
                 "• 💎 Привилегии\n\n"
                 "Полный список: /help"
             )
-        
-        elif any(word in msg_lower for word in ["помощь", "что делать"]):
-            return "📚 **СПЕКТР:** Используй /help для списка всех команд."
-        
+        elif msg_lower == "/test_deepseek":
+            return "❌ **СПЕКТР:** OpenRouter API недоступен. Использую локальные ответы."
         else:
             responses = [
                 "🤖 Я внимательно слушаю. Можешь уточнить?",
@@ -1034,9 +1014,7 @@ class SpectrumAI:
                 "🛍 Нужны предметы? /shop",
                 "🎁 Не забудь забрать награду: /daily",
                 "👥 Интересуют кланы? /clan",
-                "🎰 Попытай удачу в казино: /casino",
-                "💣 Русская рулетка: .rr",
-                "⭕ Крестики-нолики: .кн"
+                "🎰 Попытай удачу в казино: /casino"
             ]
             return random.choice(responses)
     
