@@ -15,7 +15,7 @@ import base64
 import math
 
 # Для Telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes
@@ -57,7 +57,7 @@ SPAM_LIMIT = 5
 SPAM_WINDOW = 3
 SPAM_MUTE_TIME = 120
 
-# Ранги модераторов (как в Iris)
+# Ранги модераторов
 MODER_RANKS = {
     0: "👤 Пользователь",
     1: "🛡️ Младший модератор",
@@ -67,36 +67,36 @@ MODER_RANKS = {
     5: "⭐ Создатель"
 }
 
-# Привилегии (ваши)
+# Привилегии
 PRIVILEGES = {
-    "вип": {"price": 5000, "days": 30, "emoji": "🌟", "commands": ["/regen_x2", "/boss_fight_x2"]},
-    "премиум": {"price": 15000, "days": 30, "emoji": "💎", "commands": ["/regen_x3", "/boss_fight_x3", "/heal_all"]},
-    "лорд": {"price": 30000, "days": 30, "emoji": "👑", "commands": ["/god_mode", "/boss_instant"]},
-    "ультра": {"price": 50000, "days": 60, "emoji": "⚡", "commands": ["/super_attack", "/boss_double"]},
-    "легенда": {"price": 100000, "days": 90, "emoji": "🏆", "commands": ["/legendary_skill"]},
-    "эврольд": {"price": 200000, "days": 180, "emoji": "🌌", "commands": ["/cosmic_power"]},
-    "властелин": {"price": 500000, "days": 365, "emoji": "👾", "commands": ["/master_control"]},
-    "титан": {"price": 1000000, "days": 365, "emoji": "🗿", "commands": ["/titan_strike"]},
-    "терминатор": {"price": 2000000, "days": 365, "emoji": "🤖", "commands": ["/terminate"]},
-    "маг": {"price": 75000, "days": 60, "emoji": "🔮", "commands": ["/spell", "/magic_shield"]}
+    "вип": {"price": 5000, "days": 30, "emoji": "🌟", "color": "⭐"},
+    "премиум": {"price": 15000, "days": 30, "emoji": "💎", "color": "🔷"},
+    "лорд": {"price": 30000, "days": 30, "emoji": "👑", "color": "👑"},
+    "ультра": {"price": 50000, "days": 60, "emoji": "⚡", "color": "⚡"},
+    "легенда": {"price": 100000, "days": 90, "emoji": "🏆", "color": "🏆"},
+    "эврольд": {"price": 200000, "days": 180, "emoji": "🌌", "color": "🌌"},
+    "властелин": {"price": 500000, "days": 365, "emoji": "👾", "color": "👾"},
+    "титан": {"price": 1000000, "days": 365, "emoji": "🗿", "color": "🗿"},
+    "терминатор": {"price": 2000000, "days": 365, "emoji": "🤖", "color": "🤖"},
+    "маг": {"price": 75000, "days": 60, "emoji": "🔮", "color": "🔮"}
 }
 
 # Валюты
 CURRENCIES = {
-    "монеты": {"emoji": "🪙", "name": "Монеты"},
-    "алмазы": {"emoji": "💎", "name": "Алмазы"},
-    "кристаллы": {"emoji": "🔮", "name": "Кристаллы"},
-    "черепки": {"emoji": "💀", "name": "Черепки (для русской рулетки)"}
+    "монеты": "🪙",
+    "алмазы": "💎",
+    "кристаллы": "🔮",
+    "черепки": "💀"
 }
 
 # Боссы
 BOSSES = [
-    {"id": 1, "name": "🦟 Ядовитый комар", "level": 5, "health": 2780, "max_health": 2780, "damage": 34, "reward": 500},
-    {"id": 2, "name": "🐉 Огненный дракон", "level": 10, "health": 5000, "max_health": 5000, "damage": 50, "reward": 1000},
-    {"id": 3, "name": "❄️ Ледяной великан", "level": 15, "health": 8000, "max_health": 8000, "damage": 70, "reward": 1500},
-    {"id": 4, "name": "⚔️ Темный рыцарь", "level": 20, "health": 12000, "max_health": 12000, "damage": 90, "reward": 2000},
-    {"id": 5, "name": "👾 Король демонов", "level": 25, "health": 20000, "max_health": 20000, "damage": 120, "reward": 3000},
-    {"id": 6, "name": "💀 Бог разрушения", "level": 30, "health": 30000, "max_health": 30000, "damage": 150, "reward": 5000}
+    {"id": 1, "name": "Ядовитый комар", "level": 5, "health": 2780, "max_health": 2780, "damage": 34, "reward": 500, "emoji": "🦟"},
+    {"id": 2, "name": "Огненный дракон", "level": 10, "health": 5000, "max_health": 5000, "damage": 50, "reward": 1000, "emoji": "🐉"},
+    {"id": 3, "name": "Ледяной великан", "level": 15, "health": 8000, "max_health": 8000, "damage": 70, "reward": 1500, "emoji": "❄️"},
+    {"id": 4, "name": "Темный рыцарь", "level": 20, "health": 12000, "max_health": 12000, "damage": 90, "reward": 2000, "emoji": "⚔️"},
+    {"id": 5, "name": "Король демонов", "level": 25, "health": 20000, "max_health": 20000, "damage": 120, "reward": 3000, "emoji": "👾"},
+    {"id": 6, "name": "Бог разрушения", "level": 30, "health": 30000, "max_health": 30000, "damage": 150, "reward": 5000, "emoji": "💀"}
 ]
 
 # ===================== БАЗА ДАННЫХ =====================
@@ -164,7 +164,8 @@ class Database:
                 rr_wins INTEGER DEFAULT 0,
                 rr_losses INTEGER DEFAULT 0,
                 minesweeper_wins INTEGER DEFAULT 0,
-                minesweeper_games INTEGER DEFAULT 0
+                minesweeper_games INTEGER DEFAULT 0,
+                activity_data TEXT DEFAULT '{}'
             )
         ''')
         
@@ -223,6 +224,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS bosses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 boss_name TEXT,
+                boss_emoji TEXT,
                 boss_level INTEGER,
                 boss_health INTEGER,
                 boss_max_health INTEGER,
@@ -322,17 +324,6 @@ class Database:
             )
         ''')
         
-        # Предметы для русской рулетки
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS rr_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT,
-                item_name TEXT,
-                item_type TEXT,
-                quantity INTEGER DEFAULT 1
-            )
-        ''')
-        
         # Крестики-нолики 3D - игры
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS ttt_games (
@@ -386,9 +377,9 @@ class Database:
         if self.cursor.fetchone()[0] == 0:
             for boss in BOSSES:
                 self.cursor.execute('''
-                    INSERT INTO bosses (boss_name, boss_level, boss_health, boss_max_health, boss_damage, boss_reward)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                ''', (boss['name'], boss['level'], boss['health'], boss['max_health'], boss['damage'], boss['reward']))
+                    INSERT INTO bosses (boss_name, boss_emoji, boss_level, boss_health, boss_max_health, boss_damage, boss_reward)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (boss['name'], boss['emoji'], boss['level'], boss['health'], boss['max_health'], boss['damage'], boss['reward']))
             self.conn.commit()
     
     def respawn_bosses(self):
@@ -420,6 +411,55 @@ class Database:
             (datetime.datetime.now(), platform, platform_id)
         )
         self.conn.commit()
+    
+    def update_activity_data(self, platform, platform_id):
+        """Обновляет данные для диаграммы активности"""
+        self.cursor.execute("SELECT activity_data FROM users WHERE platform = ? AND platform_id = ?", (platform, platform_id))
+        result = self.cursor.fetchone()
+        if result and result[0]:
+            activity_data = json.loads(result[0])
+        else:
+            activity_data = {}
+        
+        today = datetime.datetime.now().strftime("%Y-%m-%d")
+        activity_data[today] = activity_data.get(today, 0) + 1
+        
+        # Оставляем только последние 30 дней
+        keys = sorted(activity_data.keys(), reverse=True)
+        if len(keys) > 30:
+            for key in keys[30:]:
+                del activity_data[key]
+        
+        self.cursor.execute("UPDATE users SET activity_data = ? WHERE platform = ? AND platform_id = ?", (json.dumps(activity_data), platform, platform_id))
+        self.conn.commit()
+    
+    def get_activity_chart(self, platform, platform_id):
+        """Возвращает ASCII диаграмму активности"""
+        self.cursor.execute("SELECT activity_data FROM users WHERE platform = ? AND platform_id = ?", (platform, platform_id))
+        result = self.cursor.fetchone()
+        if not result or not result[0]:
+            return "📊 Нет данных об активности"
+        
+        activity_data = json.loads(result[0])
+        if not activity_data:
+            return "📊 Нет данных об активности"
+        
+        # Получаем данные за последние 7 дней
+        today = datetime.datetime.now()
+        dates = [(today - datetime.timedelta(days=i)).strftime("%Y-%m-%d") for i in range(6, -1, -1)]
+        
+        max_value = max(activity_data.values()) if activity_data else 1
+        max_value = max(max_value, 1)
+        
+        chart = "📊 Активность за неделю:\n"
+        for date in dates:
+            count = activity_data.get(date, 0)
+            day_name = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][datetime.datetime.strptime(date, "%Y-%m-%d").weekday()]
+            bar_length = int((count / max_value) * 10)
+            bar = "█" * bar_length + "░" * (10 - bar_length)
+            chart += f"{day_name}: {bar} {count}\n"
+        
+        return chart
     
     def add_coins(self, platform, platform_id, amount, currency="coins"):
         if currency == "coins":
@@ -958,6 +998,20 @@ class Database:
             return dict(zip(columns, game))
         return None
     
+    def mafia_next_phase(self, game_id):
+        game = self.mafia_get_game(game_id)
+        if not game:
+            return None
+        
+        if game['phase'] == 'night':
+            self.cursor.execute("UPDATE mafia_games SET phase = 'day' WHERE id = ?", (game_id,))
+            self.conn.commit()
+            return 'day'
+        else:
+            self.cursor.execute("UPDATE mafia_games SET phase = 'night', day_count = day_count + 1 WHERE id = ?", (game_id,))
+            self.conn.commit()
+            return 'night'
+    
     # ===================== САПЁР =====================
     def minesweeper_create_game(self, user_id, width=8, height=8, mines=10):
         board = [[0 for _ in range(width)] for _ in range(height)]
@@ -1089,6 +1143,7 @@ class GameBot:
         self.vk_api = None
         self.last_activity = defaultdict(dict)
         self.spam_tracker = defaultdict(list)
+        self.mafia_games = {}
         
         if TELEGRAM_TOKEN:
             self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -1100,6 +1155,55 @@ class GameBot:
             self.vk_api = API(VK_TOKEN)
             self.setup_vk_handlers()
             logger.info("✅ VK бот инициализирован")
+    
+    # ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
+    def format_help_section(self, title, commands, color="🔷"):
+        """Форматирует секцию помощи с красивым оформлением"""
+        section = f"\n{color} **{title}** {color}\n"
+        section += "▰" * 25 + "\n"
+        for cmd, desc in commands.items():
+            section += f"  {cmd} — {desc}\n"
+        return section
+    
+    def format_text(self, text, style="normal"):
+        """Форматирует текст с эмодзи"""
+        styles = {
+            "title": "╔══════════════════════════════╗\n║{:^30}║\n╚══════════════════════════════╝",
+            "section": "▰" * 30,
+            "item": "  • "
+        }
+        return text
+    
+    async def send_with_typing(self, update: Update, text: str, parse_mode='Markdown', reply_markup=None):
+        """Отправляет сообщение с имитацией печатания"""
+        await update.message.chat.send_action(action="typing")
+        await asyncio.sleep(0.5)
+        await update.message.reply_text(text, parse_mode=parse_mode, reply_markup=reply_markup)
+    
+    async def _resolve_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mention: str) -> Optional[str]:
+        """Преобразует упоминание в ID пользователя"""
+        if mention.isdigit():
+            return mention
+        
+        if mention.startswith('@'):
+            username = mention[1:]
+            user = db.get_user_by_username('tg', username)
+            if user:
+                return user[2]
+        
+        if update.message and update.message.reply_to_message:
+            return str(update.message.reply_to_message.from_user.id)
+        
+        return None
+    
+    async def _check_moder_rank(self, update: Update, required_rank: int) -> bool:
+        """Проверяет, имеет ли пользователь достаточный ранг"""
+        user_id = str(update.effective_user.id)
+        rank = db.get_mod_rank('tg', user_id)
+        if rank >= required_rank:
+            return True
+        await update.message.reply_text("❌ Недостаточно прав")
+        return False
     
     # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
     def setup_tg_handlers(self):
@@ -1125,7 +1229,7 @@ class GameBot:
         self.tg_application.add_handler(CommandHandler("pay", self.tg_cmd_pay))
         self.tg_application.add_handler(CommandHandler("cmd", self.tg_cmd_privilege_commands))
         
-        # Система модерации (Iris-like)
+        # Система модерации
         self.tg_application.add_handler(CommandHandler("moder", self.tg_cmd_moder))
         self.tg_application.add_handler(CommandHandler("moder2", self.tg_cmd_moder2))
         self.tg_application.add_handler(CommandHandler("moder3", self.tg_cmd_moder3))
@@ -1137,7 +1241,7 @@ class GameBot:
         self.tg_application.add_handler(CommandHandler("staff", self.tg_cmd_staff))
         self.tg_application.add_handler(CommandHandler("who_invited", self.tg_cmd_who_invited))
         
-        # Предупреждения (варны)
+        # Предупреждения
         self.tg_application.add_handler(CommandHandler("warn", self.tg_cmd_warn))
         self.tg_application.add_handler(CommandHandler("warns", self.tg_cmd_warns))
         self.tg_application.add_handler(CommandHandler("my_warns", self.tg_cmd_my_warns))
@@ -1179,6 +1283,8 @@ class GameBot:
         self.tg_application.add_handler(CommandHandler("mafia_create", self.tg_cmd_mafia_create))
         self.tg_application.add_handler(CommandHandler("mafia_join", self.tg_cmd_mafia_join))
         self.tg_application.add_handler(CommandHandler("mafia_start", self.tg_cmd_mafia_start))
+        self.tg_application.add_handler(CommandHandler("mafia_vote", self.tg_cmd_mafia_vote))
+        self.tg_application.add_handler(CommandHandler("mafia_kill", self.tg_cmd_mafia_kill))
         
         # Сапёр
         self.tg_application.add_handler(CommandHandler("minesweeper", self.tg_cmd_minesweeper))
@@ -1221,24 +1327,23 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         text = (
-            f"╔══════════════════════════════╗\n"
-            f"║   ⚔️ **СПЕКТР БОТ** ⚔️       ║\n"
-            f"╚══════════════════════════════╝\n\n"
+            "╔══════════════════════════════╗\n"
+            "║     ⚔️ **СПЕКТР БОТ** ⚔️     ║\n"
+            "╚══════════════════════════════╝\n\n"
             f"🌟 **Привет, {user.first_name}!**\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**ОСНОВНЫЕ КОМАНДЫ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 /profile - твой профиль\n"
-            f"👾 /boss - битва с боссом\n"
-            f"💰 /shop - магазин\n"
-            f"💎 /donate - привилегии\n"
-            f"📊 /top - топ игроков\n"
-            f"👥 /players - онлайн\n"
-            f"🛡️ /staff - список модераторов\n"
-            f"📚 /help - все команды\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👑 Владелец: {OWNER_USERNAME_TG}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "        **ОСНОВНЫЕ КОМАНДЫ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "👤 /profile — твой профиль\n"
+            "👾 /boss — битва с боссом\n"
+            "💰 /shop — магазин\n"
+            "💎 /donate — привилегии\n"
+            "📊 /top — топ игроков\n"
+            "👥 /players — онлайн\n"
+            "🛡️ /staff — модераторы\n"
+            "📚 /help — все команды\n\n"
+            f"👑 **Владелец:** {OWNER_USERNAME_TG}\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
         )
         
         keyboard = [
@@ -1289,101 +1394,91 @@ class GameBot:
         platform_id = str(user.id)
         db.update_activity('tg', platform_id)
         
-        text = (
-            "📚 **ВСЕ КОМАНДЫ БОТА**\n\n"
+        help_text = (
+            "📚 **СПРАВОЧНИК КОМАНД** 📚\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ОСНОВНЫЕ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/start - запуск бота\n"
-            "/menu - главное меню\n"
-            "/help - эта справка\n"
-            "/profile - твой профиль\n"
-            "/whoami - информация о себе\n"
-            "/top - топ игроков\n"
-            "/players - количество игроков\n\n"
+            "🔰 **ОСНОВНЫЕ** 🔰\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /start — запуск бота\n"
+            "▫️ /menu — главное меню\n"
+            "▫️ /help — эта справка\n"
+            "▫️ /profile — твой профиль\n"
+            "▫️ /whoami — информация о себе\n"
+            "▫️ /top — топ игроков\n"
+            "▫️ /players — количество игроков\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**БИТВА С БОССОМ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/boss - информация о боссе\n"
-            "/boss_fight [id] - ударить босса\n"
-            "/regen - восстановить здоровье\n\n"
+            "⚔️ **БИТВА С БОССОМ** ⚔️\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /boss — информация о боссе\n"
+            "▫️ /boss_fight [id] — ударить босса\n"
+            "▫️ /regen — восстановить здоровье\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ЭКОНОМИКА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/shop - магазин\n"
-            "/donate - привилегии\n"
-            "/pay [ник] [сумма] - перевести монеты\n"
-            "/cmd [привилегия] - команды доната\n\n"
+            "💰 **ЭКОНОМИКА** 💰\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /shop — магазин\n"
+            "▫️ /donate — привилегии\n"
+            "▫️ /pay [ник] [сумма] — перевести монеты\n"
+            "▫️ /cmd [привилегия] — команды доната\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**СИСТЕМА МОДЕРАЦИИ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/staff - список модераторов\n"
-            "/moder [ссылка] - назначить младшим модератором\n"
-            "/promote [ссылка] - повысить ранг\n"
-            "/demote [ссылка] - понизить ранг\n"
-            "/remove_moder [ссылка] - снять модератора\n"
-            "/who_invited [ссылка] - кто назначил\n\n"
+            "🛡️ **МОДЕРАЦИЯ** 🛡️\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /staff — список модераторов\n"
+            "▫️ /moder [ссылка] — назначить модератором\n"
+            "▫️ /promote [ссылка] — повысить ранг\n"
+            "▫️ /demote [ссылка] — понизить ранг\n"
+            "▫️ /remove_moder [ссылка] — снять модератора\n"
+            "▫️ /who_invited [ссылка] — кто назначил\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ПРЕДУПРЕЖДЕНИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/warn [ссылка] [время] [причина] - выдать варн\n"
-            "/warns [ссылка] - список варнов\n"
-            "/my_warns - мои варны\n"
-            "/warnlist - список последних варнов\n"
-            "/remove_warn [ссылка] - снять последний варн\n"
-            "/clear_warns [ссылка] - снять все варны\n\n"
+            "⚠️ **ПРЕДУПРЕЖДЕНИЯ** ⚠️\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /warn [ссылка] [время] [причина] — варн\n"
+            "▫️ /warns [ссылка] — список варнов\n"
+            "▫️ /my_warns — мои варны\n"
+            "▫️ /warnlist — список варнов\n"
+            "▫️ /remove_warn [ссылка] — снять варн\n"
+            "▫️ /clear_warns [ссылка] — снять все варны\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**МУТ И БАН**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/mute [ссылка] [время] [причина] - замутить\n"
-            "/unmute [ссылка] - снять мут\n"
-            "/mutelist - список замученных\n"
-            "/check_mute [ссылка] - проверить мут\n"
-            "/ban [ссылка] [время] [причина] - забанить\n"
-            "/unban [ссылка] - разбанить\n"
-            "/banlist - список банов\n\n"
+            "🔇 **МУТ И БАН** 🔇\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /mute [ссылка] [время] [причина] — мут\n"
+            "▫️ /unmute [ссылка] — снять мут\n"
+            "▫️ /mutelist — список замученных\n"
+            "▫️ /check_mute [ссылка] — проверить мут\n"
+            "▫️ /ban [ссылка] [время] [причина] — бан\n"
+            "▫️ /unban [ссылка] — разбан\n"
+            "▫️ /banlist — список банов\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ИГРЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/rr - русская рулетка\n"
-            "/ttt - крестики-нолики 3D\n"
-            "/mafia - мафия\n"
-            "/minesweeper [сложность] - сапёр\n"
-            "/rps - камень-ножницы-бумага\n\n"
+            "🎮 **ИГРЫ** 🎮\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /rr — русская рулетка\n"
+            "▫️ /ttt — крестики-нолики 3D\n"
+            "▫️ /mafia — мафия\n"
+            "▫️ /minesweeper [сложность] — сапёр\n"
+            "▫️ /rps — камень-ножницы-бумага\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ПОЛЕЗНОЕ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/info [событие] - правдивость события\n"
-            "/holidays - праздники сегодня\n"
-            "/fact - случайный факт\n"
-            "/wisdom - мудрая цитата\n"
-            "/population - население Земли\n"
-            "/bitcoin - курс биткоина\n\n"
+            "📌 **ЗАКЛАДКИ И НАГРАДЫ** 📌\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /bookmark [описание] — создать закладку\n"
+            "▫️ /bookmarks — список закладок\n"
+            "▫️ /award [ник] [название] — дать награду\n"
+            "▫️ /awards — список наград\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ЗАКЛАДКИ И НАГРАДЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/bookmark [описание] - создать закладку\n"
-            "/bookmarks - список закладок\n"
-            "/award [ник] [название] - дать награду (админ)\n"
-            "/awards - список наград\n\n"
+            "📖 **ПРАВИЛА** 📖\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /rules — показать правила\n"
+            "▫️ /set_rules [текст] — установить правила\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ПРАВИЛА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/rules - показать правила\n"
-            "/set_rules [текст] - установить правила (админ)"
+            "ℹ️ **ПОЛЕЗНОЕ** ℹ️\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "▫️ /info [событие] — правдивость события\n"
+            "▫️ /holidays — праздники сегодня\n"
+            "▫️ /fact — случайный факт\n"
+            "▫️ /wisdom — мудрая цитата\n"
+            "▫️ /population — население Земли\n"
+            "▫️ /bitcoin — курс биткоина"
         )
         
-        await update.message.reply_text(text, parse_mode='Markdown')
+        await update.message.reply_text(help_text, parse_mode='Markdown')
     
     async def tg_cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1391,16 +1486,17 @@ class GameBot:
         
         user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
         db.update_activity('tg', platform_id)
+        db.update_activity_data('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text("🚫 Вы забанены в боте.")
+            await update.message.reply_text("🚫 **Вы забанены в боте**")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
+            await update.message.reply_text(f"🔇 **Вы замучены**\nОсталось: {minutes} мин")
             return
         
         mod_rank = user_data.get('mod_rank', 0)
@@ -1409,6 +1505,7 @@ class GameBot:
         privilege = user_data.get('privilege', 'user')
         privilege_text = f" | {PRIVILEGES.get(privilege, {}).get('emoji', '')} {privilege}" if privilege != 'user' else ""
         
+        # Активность
         last_activity = "Неизвестно"
         if user_data.get('last_activity'):
             last = datetime.datetime.fromisoformat(user_data['last_activity'])
@@ -1429,53 +1526,57 @@ class GameBot:
             days = delta.days % 30
             first_seen = f"{first.strftime('%d.%m.%Y')} ({years} г {months} мес {days} дн)"
         
+        # Диаграмма активности
+        activity_chart = db.get_activity_chart('tg', platform_id)
+        
         text = (
-            f"╔══════════════════════════════╗\n"
-            f"║   👤 **ПРОФИЛЬ ИГРОКА**      ║\n"
-            f"╚══════════════════════════════╝\n\n"
+            "╔══════════════════════════════╗\n"
+            f"║      👤 **ПРОФИЛЬ** 👤      ║\n"
+            "╚══════════════════════════════╝\n\n"
             
             f"**{user_data.get('nickname') or user.first_name}**\n"
             f"{rank_name}{privilege_text}\n"
             f"ID: {user.id}\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**РЕСУРСЫ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "        **РЕСУРСЫ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"🪙 Монеты: {user_data['coins']:,}\n"
             f"💎 Алмазы: {user_data['diamonds']:,}\n"
             f"💀 Черепки: {user_data['rr_money']}\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**ХАРАКТЕРИСТИКИ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "     **ХАРАКТЕРИСТИКИ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"❤️ Здоровье: {user_data['health']}/{user_data['max_health']}\n"
             f"⚔️ Урон: {user_data['damage']}\n"
             f"⚡ Энергия: {user_data['energy']}\n"
             f"📊 Уровень: {user_data['level']}\n"
             f"👾 Боссов убито: {user_data['boss_kills']}\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**СТАТИСТИКА ИГР**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "     **СТАТИСТИКА ИГР**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"🔪 Мафия: {user_data['mafia_wins']}/{user_data['mafia_games']}\n"
             f"✊ КНБ: {user_data['rps_wins']}-{user_data['rps_losses']}-{user_data['rps_draws']}\n"
             f"⭕ TTT: {user_data['ttt_wins']}-{user_data['ttt_losses']}-{user_data['ttt_draws']}\n"
             f"💣 Рулетка: {user_data['rr_wins']}-{user_data['rr_losses']}\n"
             f"💥 Сапёр: {user_data['minesweeper_wins']}/{user_data['minesweeper_games']}\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**АКТИВНОСТЬ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "      **АКТИВНОСТЬ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"📝 Сообщений: {user_data['messages_count']}\n"
             f"⌨️ Команд: {user_data['commands_used']}\n"
             f"⭐ Репутация: {user_data['reputation']}\n"
             f"⚠️ Варнов: {user_data['warns']}\n"
             f"⏱ Последний визит: {last_activity}\n"
-            f"📅 Первое появление: {first_seen}"
+            f"📅 Первое появление: {first_seen}\n\n"
+            f"{activity_chart}"
         )
         
         if user_data.get('description'):
-            text += f"\n\n📝 **О себе:** {user_data['description']}"
+            text += f"\n📝 **О себе:** {user_data['description']}"
         
         keyboard = [
             [InlineKeyboardButton("🏅 Награды", callback_data="awards"),
@@ -1491,6 +1592,7 @@ class GameBot:
         platform_id = str(user.id)
         
         user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
+        db.update_activity_data('tg', platform_id)
         
         mod_rank = user_data.get('mod_rank', 0)
         rank_name = MODER_RANKS.get(mod_rank, "👤 Пользователь")
@@ -1501,7 +1603,7 @@ class GameBot:
         awards = db.get_awards('tg', platform_id)
         awards_text = ""
         if awards:
-            awards_text = "\n🏅 Награды:\n"
+            awards_text = "\n🏅 **Награды:**\n"
             for award in awards[:3]:
                 awards_text += f"   • {award[3]}\n"
         
@@ -1525,15 +1627,23 @@ class GameBot:
             else:
                 last_activity = f"{delta.seconds // 60} мин назад"
         
+        # Диаграмма активности
+        activity_chart = db.get_activity_chart('tg', platform_id)
+        
         text = (
-            f"Это [{user.id}|{user.first_name}]\n"
+            f"╔══════════════════════════════╗\n"
+            f"║        👤 **КТО Я** 👤       ║\n"
+            f"╚══════════════════════════════╝\n\n"
+            
+            f"Это [id{user.id}|{user.first_name}]\n"
             f"{rank_name}{privilege_text}\n"
             f"Репутация: ✨ {user_data['reputation']} | ➕ {user_data['reputation_given']}\n"
             f"⚠️ Варнов: {user_data['warns']}\n"
             f"Первое появление: {first_seen}\n"
             f"Последний актив: {last_activity}\n"
-            f"Актив (д|н|м|весь): {user_data['messages_count']} | {user_data['commands_used']} | {user_data['games_played']} | {delta.days if 'delta' in locals() else 0}"
-            f"{awards_text}"
+            f"Актив (д|н|м|весь): {user_data['messages_count']} | {user_data['commands_used']} | {user_data['games_played']} | {delta.days if 'delta' in locals() else 0}\n"
+            f"{awards_text}\n"
+            f"{activity_chart}"
         )
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]]
@@ -1547,30 +1657,30 @@ class GameBot:
         top_boss = db.get_top("boss_kills", 10)
         
         text = (
-            f"╔══════════════════════════════╗\n"
-            f"║    🏆 **ТОП ИГРОКОВ**        ║\n"
-            f"╚══════════════════════════════╝\n\n"
+            "╔══════════════════════════════╗\n"
+            "║      🏆 **ТОП ИГРОКОВ**      ║\n"
+            "╚══════════════════════════════╝\n\n"
         )
         
-        text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         text += "💰 **ПО МОНЕТАМ**\n"
-        text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         for i, (username, first_name, value) in enumerate(top_coins, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
             text += f"{medal} {name} — {value:,} 🪙\n"
         
-        text += "\n━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         text += "📊 **ПО УРОВНЮ**\n"
-        text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         for i, (username, first_name, value) in enumerate(top_level, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
             text += f"{medal} {name} — {value} ур.\n"
         
-        text += "\n━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "\n▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         text += "👾 **ПО УБИЙСТВУ БОССОВ**\n"
-        text += "━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
         for i, (username, first_name, value) in enumerate(top_boss, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
@@ -1611,28 +1721,28 @@ class GameBot:
         player_damage = user_data['damage'] * (1 + user_data['level'] * 0.1)
         
         text = (
-            f"╔══════════════════════════════╗\n"
-            f"║   👾 **БИТВА С БОССОМ**      ║\n"
-            f"╚══════════════════════════════╝\n\n"
+            "╔══════════════════════════════╗\n"
+            f"║   👾 **БИТВА С БОССОМ** 👾   ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            f"🔥 **{boss['boss_name']}**\n"
-            f"Уровень: {boss['boss_level']}\n\n"
+            f"{boss['boss_emoji']} **{boss['boss_name']}**\n"
+            f"📊 Уровень: {boss['boss_level']}\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**ХАРАКТЕРИСТИКИ БОССА**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "**ХАРАКТЕРИСТИКИ БОССА**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"💀 Здоровье: {boss['boss_health']} / {boss['boss_max_health']} HP\n"
             f"⚔️ Урон: {boss['boss_damage']} HP\n"
             f"💰 Награда: {boss['boss_reward']} 🪙\n\n"
             
-            f"**ТВОИ ХАРАКТЕРИСТИКИ**\n"
+            "**ТВОИ ХАРАКТЕРИСТИКИ**\n"
             f"❤️ Здоровье: {user_data['health']} HP\n"
             f"🗡 Урон: {player_damage:.1f} ({user_data['damage']} базовый)\n"
             f"📊 Сила: {((player_damage / boss['boss_damage']) * 100):.1f}%\n\n"
             
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**ДЕЙСТВИЯ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "**ДЕЙСТВИЯ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             f"👊 /boss_fight {boss['id']} - ударить босса\n"
             f"➕ /regen - восстановить здоровье"
         )
@@ -1783,34 +1893,36 @@ class GameBot:
             return
         
         text = (
-            "💰 **МАГАЗИН «СПЕКТР»**\n\n"
+            "╔══════════════════════════════╗\n"
+            "║     🏪 **МАГАЗИН** 🏪        ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "💊 **ЗЕЛЬЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "▫️ Зелье здоровья — 50 🪙 (❤️+30)\n"
             "▫️ Большое зелье — 100 🪙 (❤️+70)\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "⚔️ **ОРУЖИЕ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "▫️ Меч — 200 🪙 (⚔️+10)\n"
             "▫️ Легендарный меч — 500 🪙 (⚔️+30)\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "⚡ **ЭНЕРГИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "▫️ Энергетик — 30 🪙 (⚡+20)\n"
             "▫️ Батарейка — 80 🪙 (⚡+50)\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "💎 **ВАЛЮТА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "▫️ Алмаз — 100 🪙 (💎+1)\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "**ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "🎲 **ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "▫️ Монета Демона — 500 🪙\n"
             "▫️ Кровавый Глаз — 300 🪙\n"
             "▫️ Маска Клоуна — 1000 🪙\n\n"
@@ -1839,17 +1951,16 @@ class GameBot:
             await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
-        text = "💎 **ПРИВИЛЕГИИ «СПЕКТР»** 💎\n\n"
+        text = "╔══════════════════════════════╗\n"
+        text += "║   💎 **ПРИВИЛЕГИИ** 💎     ║\n"
+        text += "╚══════════════════════════════╝\n\n"
         
         for priv_name, priv_data in PRIVILEGES.items():
             text += f"{priv_data['emoji']} **{priv_name.upper()}**\n"
             text += f"└ 💰 Цена: {priv_data['price']} 🪙\n"
-            text += f"└ 📅 Длительность: {priv_data['days']} дн\n"
-            for cmd in priv_data['commands']:
-                text += f"└ {cmd}\n"
-            text += "\n"
+            text += f"└ 📅 Длительность: {priv_data['days']} дн\n\n"
         
-        text += "👑 **АДМИН-ПРИВИЛЕГИИ** (ранги модерации)\n"
+        text += "👑 **АДМИН-ПРИВИЛЕГИИ**\n"
         text += "🛡️ Младший модератор, ⚔️ Старший модератор, 👑 Администратор\n\n"
         text += f"💳 Приобрести: напишите {OWNER_USERNAME_TG}"
         
@@ -1940,6 +2051,7 @@ class GameBot:
         if privilege in PRIVILEGES:
             priv_data = PRIVILEGES[privilege]
             text = f"{priv_data['emoji']} **КОМАНДЫ {privilege.upper()}** {priv_data['emoji']}\n\n"
+            text += "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             for cmd in priv_data['commands']:
                 text += f"▫️ {cmd}\n"
         else:
@@ -1948,31 +2060,6 @@ class GameBot:
         await update.message.reply_text(text, parse_mode='Markdown')
     
     # ===================== СИСТЕМА МОДЕРАЦИИ =====================
-    async def _resolve_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mention: str) -> Optional[str]:
-        """Преобразует упоминание (@username или ссылку) в ID пользователя"""
-        if mention.isdigit():
-            return mention
-        
-        if mention.startswith('@'):
-            username = mention[1:]
-            user = db.get_user_by_username('tg', username)
-            if user:
-                return user[2]
-        
-        if update.message.reply_to_message:
-            return str(update.message.reply_to_message.from_user.id)
-        
-        return None
-    
-    async def _check_moder_rank(self, update: Update, required_rank: int) -> bool:
-        """Проверяет, имеет ли пользователь достаточный ранг"""
-        user_id = str(update.effective_user.id)
-        rank = db.get_mod_rank('tg', user_id)
-        if rank >= required_rank:
-            return True
-        await update.message.reply_text("❌ Недостаточно прав")
-        return False
-    
     async def tg_cmd_moder(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Назначить младшим модератором (ранг 1)"""
         await self._assign_moder_rank(update, context, 1)
@@ -2085,7 +2172,7 @@ class GameBot:
         )
     
     async def tg_cmd_remove_moder(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Снять модератора (понизить до 0 ранга)"""
+        """Снять модератора"""
         if not await self._check_moder_rank(update, 5):
             return
         
@@ -2584,7 +2671,14 @@ class GameBot:
         settings = db.get_group_settings(chat_id, 'tg')
         rules = settings.get('rules', 'Правила не установлены')
         
-        await update.message.reply_text(f"📖 **ПРАВИЛА ЧАТА**\n\n{rules}", parse_mode='Markdown')
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     📖 **ПРАВИЛА ЧАТА** 📖   ║\n"
+            "╚══════════════════════════════╝\n\n"
+            f"{rules}"
+        )
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Установить правила чата"""
@@ -2656,22 +2750,36 @@ class GameBot:
     async def tg_cmd_rr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о русской рулетке"""
         text = (
-            "💣 **РУССКАЯ РУЛЕТКА**\n\n"
+            "╔══════════════════════════════╗\n"
+            "║     💣 **РУССКАЯ РУЛЕТКА** 💣 ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**ПРАВИЛА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "• В барабане 1-3 патрона\n"
             "• Размер барабана: 6-10 позиций\n"
             "• Игроки по очереди стреляют\n"
             "• Победитель забирает все ставки\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "**МАГИЧЕСКИЕ ПРЕДМЕТЫ**\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "🪙 Монета Демона — убирает/добавляет патрон\n"
+            "👁️ Кровавый Глаз — показывает патроны\n"
+            "🔄 Обратный Спин — меняет направление\n"
+            "⏳ Песочные часы — пропускает ход\n"
+            "🎲 Кубик Судьбы — меняет количество патронов\n"
+            "🤡 Маска Клоуна — перезаряжает оружие\n"
+            "👁️ Глаз Провидца — показывает текущую позицию\n"
+            "🧲 Магнит Пули — сдвигает патроны\n\n"
+            
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**КОМАНДЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/rr_start [игроки] [ставка] - создать лобби\n"
-            "/rr_join [ID] - присоединиться\n"
-            "/rr_shot - сделать выстрел"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "/rr_start [игроки] [ставка] — создать лобби\n"
+            "/rr_join [ID] — присоединиться\n"
+            "/rr_shot — сделать выстрел"
         )
         
         keyboard = [
@@ -2794,7 +2902,6 @@ class GameBot:
             winner_id = result[1]
             winner_data = await context.bot.get_chat(int(winner_id))
             
-            # Начисляем выигрыш
             db.cursor.execute("SELECT bet FROM rr_lobbies WHERE id = ?", (game_dict['lobby_id'],))
             bet = db.cursor.fetchone()[0]
             total_pot = bet * len(json.loads(game_dict['players']))
@@ -2811,21 +2918,23 @@ class GameBot:
     async def tg_cmd_ttt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о крестиках-ноликах 3D"""
         text = (
-            "⭕ **КРЕСТИКИ-НОЛИКИ 3D**\n\n"
+            "╔══════════════════════════════╗\n"
+            "║   ⭕ **КРЕСТИКИ-НОЛИКИ 3D** ⭕ ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**ПРАВИЛА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "• В каждой клетке поля находится ещё одно поле\n"
             "• Нужно выиграть на 3 малых полях в ряд\n"
             "• Победа на малом поле делает его вашим\n"
             "• Игра продолжается пока кто-то не победит\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**КОМАНДЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/ttt_challenge [ник] - вызвать игрока\n"
-            "/ttt_move [клетка] - сделать ход (клетка: ряд_колонка_подряд_подколонка, например 1_1_2_2)"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "/ttt_challenge [ник] — вызвать игрока\n"
+            "/ttt_move [клетка] — сделать ход (клетка: ряд_колонка_подряд_подколонка, например 1_1_2_2)"
         )
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
@@ -2918,29 +3027,33 @@ class GameBot:
     async def tg_cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о мафии"""
         text = (
-            "🔪 **МАФИЯ**\n\n"
+            "╔══════════════════════════════╗\n"
+            "║     🔪 **МАФИЯ** 🔪          ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**ПРАВИЛА**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "• Игроки делятся на мафию и мирных\n"
             "• Ночью мафия убивает, днем все обсуждают\n"
-            "• Цель мафии - убить всех мирных\n"
-            "• Цель мирных - найти мафию\n\n"
+            "• Цель мафии — убить всех мирных\n"
+            "• Цель мирных — найти мафию\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**ФАЗЫ ИГРЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🌙 **Ночь** - мафия выбирает жертву\n"
-            "☀️ **День** - обсуждение и голосование\n"
-            "⚰️ **Смерть** - игрок покидает игру\n\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "🌙 **Ночь** — мафия выбирает жертву\n"
+            "☀️ **День** — обсуждение и голосование\n"
+            "⚰️ **Смерть** — игрок покидает игру\n\n"
             
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
             "**КОМАНДЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/mafia_create - создать игру\n"
-            "/mafia_join [ID] - присоединиться\n"
-            "/mafia_start - начать игру"
+            "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰\n"
+            "/mafia_create — создать игру\n"
+            "/mafia_join [ID] — присоединиться\n"
+            "/mafia_start — начать игру\n"
+            "/mafia_vote [ник] — проголосовать днем\n"
+            "/mafia_kill [ник] — убить ночью (для мафии)"
         )
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
@@ -2954,6 +3067,10 @@ class GameBot:
         platform_id = str(user.id)
         
         game_id = db.mafia_create_game(platform_id)
+        self.mafia_games[game_id] = {
+            'votes': {},
+            'kill_votes': {}
+        }
         
         await update.message.reply_text(
             f"🔪 **ИГРА МАФИЯ СОЗДАНА!**\n\n"
@@ -3007,22 +3124,224 @@ class GameBot:
         
         players = json.loads(game_dict['players'])
         
+        # Отправляем гифки и роли
+        night_gif = "https://media.giphy.com/media/3o7abB06u9bNzA8LC8/giphy.gif"  # Ночь
+        day_gif = "https://media.giphy.com/media/l0HlNQ03J5JxX6lva/giphy.gif"    # День
+        
         for player_id in players:
             role = roles[player_id]
-            role_text = "🔪 Мафия" if role == 'mafia' else "👨‍🌾 Мирный"
+            role_text = "🔪 **Мафия**" if role == 'mafia' else "👨‍🌾 **Мирный житель**"
+            role_desc = "Ты просыпаешься ночью и можешь убивать" if role == 'mafia' else "Ты просыпаешься днем и ищешь мафию"
             
             try:
-                if player_id == platform_id:
-                    await update.message.reply_text(f"🔪 **ИГРА НАЧАЛАСЬ!**\n\nТвоя роль: {role_text}")
-                else:
-                    await context.bot.send_message(
-                        chat_id=int(player_id),
-                        text=f"🔪 **ИГРА НАЧАЛАСЬ!**\n\nТвоя роль: {role_text}"
-                    )
+                await context.bot.send_animation(
+                    chat_id=int(player_id),
+                    animation=night_gif,
+                    caption=f"🌙 **НОЧЬ НАСТУПАЕТ...**\n\nТвоя роль: {role_text}\n{role_desc}"
+                )
             except:
                 pass
         
-        await update.message.reply_text("🌙 **Наступила ночь**\nМафия просыпается и выбирает жертву...")
+        await update.message.reply_text(
+            "🌙 **НАСТУПИЛА НОЧЬ**\n"
+            "Мафия просыпается и выбирает жертву.\n"
+            "Используйте: /mafia_kill [ник]"
+        )
+    
+    async def tg_cmd_mafia_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проголосовать днем"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /mafia_vote [ник]")
+            return
+        
+        user = update.effective_user
+        platform_id = str(user.id)
+        
+        # Ищем активную игру
+        db.cursor.execute(
+            "SELECT * FROM mafia_games WHERE players LIKE ? AND status = 'playing' AND phase = 'day'",
+            (f'%{platform_id}%',)
+        )
+        game = db.cursor.fetchone()
+        
+        if not game:
+            await update.message.reply_text("❌ Ты не участвуешь в активной игре или сейчас ночь")
+            return
+        
+        columns = [description[0] for description in db.cursor.description]
+        game_dict = dict(zip(columns, game))
+        
+        target_name = context.args[0]
+        target_user = db.get_user_by_username('tg', target_name)
+        
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        target_id = target_user[2]
+        
+        if target_id not in json.loads(game_dict['players']):
+            await update.message.reply_text("❌ Этот игрок не в игре")
+            return
+        
+        if game_dict['id'] not in self.mafia_games:
+            self.mafia_games[game_dict['id']] = {'votes': {}, 'kill_votes': {}}
+        
+        self.mafia_games[game_dict['id']]['votes'][platform_id] = target_id
+        
+        # Подсчет голосов
+        votes = self.mafia_games[game_dict['id']]['votes']
+        players = json.loads(game_dict['players'])
+        
+        if len(votes) >= len(players):
+            # Подводим итоги голосования
+            vote_count = defaultdict(int)
+            for voter, voted in votes.items():
+                vote_count[voted] += 1
+            
+            max_votes = max(vote_count.values())
+            candidates = [p for p, c in vote_count.items() if c == max_votes]
+            
+            if len(candidates) == 1:
+                killed_id = candidates[0]
+                killed_user = db.get_user('tg', killed_id)
+                killed_name = killed_user.get('first_name', f"ID {killed_id}")
+                
+                # Удаляем игрока
+                players.remove(killed_id)
+                db.cursor.execute("UPDATE mafia_games SET players = ? WHERE id = ?", (json.dumps(players), game_dict['id']))
+                
+                # Меняем фазу на ночь
+                db.mafia_next_phase(game_dict['id'])
+                
+                await update.message.reply_text(
+                    f"⚰️ **ИТОГИ ДНЯ**\n\n"
+                    f"По результатам голосования казнен: {killed_name}\n\n"
+                    f"🌙 **НАСТУПАЕТ НОЧЬ**"
+                )
+                
+                # Отправляем гифку ночи
+                night_gif = "https://media.giphy.com/media/3o7abB06u9bNzA8LC8/giphy.gif"
+                for player_id in players:
+                    try:
+                        await context.bot.send_animation(
+                            chat_id=int(player_id),
+                            animation=night_gif,
+                            caption="🌙 Ночь. Мафия, просыпайтесь!"
+                        )
+                    except:
+                        pass
+            else:
+                await update.message.reply_text("🔄 Ничья в голосовании. Никто не казнен.")
+                db.mafia_next_phase(game_dict['id'])
+        
+        await update.message.reply_text(f"✅ Голос учтен")
+    
+    async def tg_cmd_mafia_kill(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Убить игрока ночью (только для мафии)"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /mafia_kill [ник]")
+            return
+        
+        user = update.effective_user
+        platform_id = str(user.id)
+        
+        # Ищем активную игру
+        db.cursor.execute(
+            "SELECT * FROM mafia_games WHERE players LIKE ? AND status = 'playing' AND phase = 'night'",
+            (f'%{platform_id}%',)
+        )
+        game = db.cursor.fetchone()
+        
+        if not game:
+            await update.message.reply_text("❌ Ты не участвуешь в активной игре или сейчас день")
+            return
+        
+        columns = [description[0] for description in db.cursor.description]
+        game_dict = dict(zip(columns, game))
+        
+        roles = json.loads(game_dict['roles'])
+        if roles.get(platform_id) != 'mafia':
+            await update.message.reply_text("❌ Только мафия может убивать ночью")
+            return
+        
+        target_name = context.args[0]
+        target_user = db.get_user_by_username('tg', target_name)
+        
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        target_id = target_user[2]
+        players = json.loads(game_dict['players'])
+        
+        if target_id not in players:
+            await update.message.reply_text("❌ Этот игрок не в игре")
+            return
+        
+        if game_dict['id'] not in self.mafia_games:
+            self.mafia_games[game_dict['id']] = {'votes': {}, 'kill_votes': {}}
+        
+        self.mafia_games[game_dict['id']]['kill_votes'][platform_id] = target_id
+        
+        # Подсчет голосов мафии
+        kill_votes = self.mafia_games[game_dict['id']]['kill_votes']
+        mafia_count = sum(1 for r in roles.values() if r == 'mafia')
+        
+        if len(kill_votes) >= mafia_count:
+            # Определяем жертву
+            vote_count = defaultdict(int)
+            for voter, voted in kill_votes.items():
+                vote_count[voted] += 1
+            
+            max_votes = max(vote_count.values())
+            killed_id = max(vote_count.items(), key=lambda x: x[1])[0]
+            
+            killed_user = db.get_user('tg', killed_id)
+            killed_name = killed_user.get('first_name', f"ID {killed_id}")
+            
+            # Удаляем игрока
+            players.remove(killed_id)
+            db.cursor.execute("UPDATE mafia_games SET players = ? WHERE id = ?", (json.dumps(players), game_dict['id']))
+            
+            # Проверяем условия победы
+            alive_mafia = sum(1 for p in players if roles.get(p) == 'mafia')
+            alive_civilians = sum(1 for p in players if roles.get(p) != 'mafia')
+            
+            if alive_mafia == 0:
+                await update.message.reply_text(
+                    "🏆 **ИГРА ОКОНЧЕНА!**\n\n"
+                    "👨‍🌾 **Мирные жители победили!**"
+                )
+                db.cursor.execute("UPDATE mafia_games SET status = 'finished' WHERE id = ?", (game_dict['id'],))
+                return
+            elif alive_mafia >= alive_civilians:
+                await update.message.reply_text(
+                    "🏆 **ИГРА ОКОНЧЕНА!**\n\n"
+                    "🔪 **Мафия победила!**"
+                )
+                db.cursor.execute("UPDATE mafia_games SET status = 'finished' WHERE id = ?", (game_dict['id'],))
+                return
+            
+            # Меняем фазу на день
+            db.mafia_next_phase(game_dict['id'])
+            
+            day_gif = "https://media.giphy.com/media/l0HlNQ03J5JxX6lva/giphy.gif"
+            for player_id in players:
+                try:
+                    await context.bot.send_animation(
+                        chat_id=int(player_id),
+                        animation=day_gif,
+                        caption=f"☀️ **НАСТУПИЛО УТРО**\n\nНочью был убит: {killed_name}\n\nОбсудите и голосуйте!"
+                    )
+                except:
+                    pass
+            
+            await update.message.reply_text(
+                f"💀 **ИТОГИ НОЧИ**\n\n"
+                f"Мафия убила: {killed_name}\n\n"
+                f"☀️ **НАСТУПАЕТ ДЕНЬ**"
+            )
     
     # ===================== САПЁР =====================
     async def tg_cmd_minesweeper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3054,8 +3373,8 @@ class GameBot:
             f"💣 **САПЁР** (сложность: {difficulty})\n\n"
             f"{board_display}\n\n"
             f"Команды:\n"
-            f"/ms_reveal X Y - открыть клетку\n"
-            f"/ms_flag X Y - поставить флаг",
+            f"/ms_reveal X Y — открыть клетку\n"
+            f"/ms_flag X Y — поставить флаг",
             parse_mode='Markdown'
         )
     
@@ -3251,7 +3570,7 @@ class GameBot:
             "🐝 Пчелы могут узнавать человеческие лица.",
             "🌍 В Антарктиде есть только один постоянный вид насекомых.",
             "🦑 Кальмары имеют три сердца.",
-            "🐘 Слоны - единственные млекопитающие, которые не могут прыгать.",
+            "🐘 Слоны — единственные млекопитающие, которые не могут прыгать.",
             "🍌 Бананы технически являются ягодами.",
             "🌊 Океаны покрывают 71% поверхности Земли.",
             "🚀 Следы на Луне останутся на миллионы лет.",
@@ -3267,7 +3586,7 @@ class GameBot:
     async def tg_cmd_wisdom(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Мудрая цитата"""
         quotes = [
-            "🌟 Жизнь - это то, что с тобой происходит, пока ты строишь планы.",
+            "🌟 Жизнь — это то, что с тобой происходит, пока ты строишь планы.",
             "💫 Будь тем изменением, которое хочешь увидеть в мире.",
             "✨ Счастье не в том, чтобы делать всегда, что хочешь, а в том, чтобы всегда хотеть того, что делаешь.",
             "⭐ Самая большая слава не в том, чтобы никогда не падать, а в том, чтобы вставать каждый раз, когда падаешь.",
@@ -3401,6 +3720,7 @@ class GameBot:
         user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
         db.update_activity('tg', platform_id)
         db.add_message_count('tg', platform_id)
+        db.update_activity_data('tg', platform_id)
         
         if db.is_banned('tg', platform_id) or db.is_muted('tg', platform_id):
             return
@@ -3411,8 +3731,9 @@ class GameBot:
         
         if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
             await update.message.reply_text(
-                f"⚡️⚡️⚡️ Святые угодники!\n"
-                f"{user.first_name} заговорил после более, чем месячного молчания!!! Поприветствуйте молчуна! 👏"
+                f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
+                f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
+                f"Поприветствуйте молчуна! 👏"
             )
         
         self.last_activity['tg'][platform_id] = current_time
@@ -3455,7 +3776,7 @@ class GameBot:
         await update.message.reply_text(goodbye_text, parse_mode='Markdown')
     
     # ===================== ОБРАБОТКА КНОПОК =====================
-            async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий на инлайн-кнопки"""
         query = update.callback_query
         await query.answer()
