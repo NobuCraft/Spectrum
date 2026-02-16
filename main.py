@@ -13,6 +13,19 @@ import time
 import hashlib
 import base64
 import math
+import sys
+import fcntl
+import os
+
+# Защита от множественного запуска
+lock_file = '/tmp/spectrum_bot.lock'
+try:
+    lock_fd = open(lock_file, 'w')
+    fcntl.lockf(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    print("✅ Бот запущен (только один экземпляр)")
+except IOError:
+    print("❌ Бот уже запущен! Завершите предыдущий экземпляр.")
+    sys.exit(1)
 
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
