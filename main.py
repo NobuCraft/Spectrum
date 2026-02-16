@@ -6,7 +6,6 @@ import datetime
 from typing import Optional, Dict, Any, List, Tuple
 import aiohttp
 import json
-import os
 import re
 from collections import defaultdict
 import time
@@ -15,6 +14,9 @@ import base64
 import math
 import io
 import requests
+import os
+import sys
+import time
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # Для Telegram
@@ -31,6 +33,41 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ===================== ЖЕСТКАЯ ЗАЩИТА =====================
+print("🛡️ Активация защиты от множественного запуска...")
+
+# Убиваем все другие процессы бота
+try:
+    import subprocess
+    result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+    lines = result.stdout.split('\n')
+    current_pid = os.getpid()
+    
+    killed = 0
+    for line in lines:
+        if 'python' in line and 'main.py' in line:
+            parts = line.split()
+            if len(parts) > 1:
+                pid = int(parts[1])
+                if pid != current_pid:
+                    try:
+                        os.kill(pid, 9)
+                        print(f"💀 Убит процесс {pid}")
+                        killed += 1
+                        time.sleep(0.5)
+                    except:
+                        pass
+    
+    if killed > 0:
+        print(f"✅ Убито {killed} процессов")
+    else:
+        print("✅ Конфликтов не найдено")
+        
+except Exception as e:
+    print(f"⚠️ Ошибка при очистке: {e}")
+
+print("🚀 Продолжаем запуск...\n")
 
 # ===================== КОНФИГУРАЦИЯ =====================
 TELEGRAM_TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ"
