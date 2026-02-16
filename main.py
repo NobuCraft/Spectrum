@@ -868,64 +868,71 @@ class GameBot:
         logger.info("✅ Telegram обработчики зарегистрированы")
     
     async def tg_cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        platform_id = str(user.id)
-        
-        # Получаем или создаем пользователя
-        db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
-        db.update_activity('tg', platform_id)
-        db.add_command_count('tg', platform_id)
-        
-        text = (
-            f"╔══════════════════════════════╗\n"
-            f"║   ⚔️ **СПЕКТР БОТ** ⚔️       ║\n"
-            f"╚══════════════════════════════╝\n\n"
-            f"🌟 **Привет, {user.first_name}!**\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"**ОСНОВНЫЕ КОМАНДЫ**\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 /profile - твой профиль\n"
-            f"👾 /boss - битва с боссом\n"
-            f"💰 /shop - магазин\n"
-            f"💎 /donate - привилегии\n"
-            f"📊 /top - топ игроков\n"
-            f"👥 /players - онлайн\n"
-            f"📚 /help - все команды\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"👑 Владелец: {OWNER_USERNAME_TG}\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━"
-        )
-        
-        keyboard = [
-            [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
-             InlineKeyboardButton("👾 Босс", callback_data="boss")],
-            [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
-             InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
-            [InlineKeyboardButton("📊 Топ", callback_data="top"),
-             InlineKeyboardButton("📚 Помощь", callback_data="help")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
+    user = update.effective_user
+    platform_id = str(user.id)
+    
+    # Получаем или создаем пользователя
+    db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
+    db.update_activity('tg', platform_id)
+    db.add_command_count('tg', platform_id)
+    
+    text = (
+        f"╔══════════════════════════════╗\n"
+        f"║   ⚔️ **СПЕКТР БОТ** ⚔️       ║\n"
+        f"╚══════════════════════════════╝\n\n"
+        f"🌟 **Привет, {user.first_name}!**\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"**ОСНОВНЫЕ КОМАНДЫ**\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👤 /profile - твой профиль\n"
+        f"👾 /boss - битва с боссом\n"
+        f"💰 /shop - магазин\n"
+        f"💎 /donate - привилегии\n"
+        f"📊 /top - топ игроков\n"
+        f"👥 /players - онлайн\n"
+        f"📚 /help - все команды\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"👑 Владелец: {OWNER_USERNAME_TG}\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━"
+    )
+    
+    keyboard = [
+        [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
+         InlineKeyboardButton("👾 Босс", callback_data="boss")],
+        [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
+         InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
+        [InlineKeyboardButton("📊 Топ", callback_data="top"),
+         InlineKeyboardButton("👥 Онлайн", callback_data="players")],
+        [InlineKeyboardButton("📚 Команды", callback_data="help"),
+         InlineKeyboardButton("📖 Правила", callback_data="rules")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        keyboard = [
-            [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
-             InlineKeyboardButton("👾 Босс", callback_data="boss")],
-            [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
-             InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
-            [InlineKeyboardButton("📊 Топ", callback_data="top"),
-             InlineKeyboardButton("👥 Онлайн", callback_data="players")],
-            [InlineKeyboardButton("📚 Команды", callback_data="commands"),
-             InlineKeyboardButton("📖 Правила", callback_data="rules")]
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+    user = update.effective_user
+    platform_id = str(user.id)
+    db.update_activity('tg', platform_id)
+    db.add_command_count('tg', platform_id)
+    
+    keyboard = [
+        [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
+         InlineKeyboardButton("👾 Босс", callback_data="boss")],
+        [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
+         InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
+        [InlineKeyboardButton("📊 Топ", callback_data="top"),
+         InlineKeyboardButton("👥 Онлайн", callback_data="players")],
+        [InlineKeyboardButton("📚 Команды", callback_data="help"),
+         InlineKeyboardButton("📖 Правила", callback_data="rules")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
     
     async def tg_cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2018,50 +2025,95 @@ class GameBot:
             await update.message.reply_text(welcome_text, parse_mode='Markdown')
     
     async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        data = query.data
-        
-        if data == "profile":
-            await self.tg_cmd_profile(update, context)
-        elif data == "boss":
-            await self.tg_cmd_boss(update, context)
-        elif data == "shop":
-            await self.tg_cmd_shop(update, context)
-        elif data == "donate":
-            await self.tg_cmd_donate(update, context)
-        elif data == "top":
-            await self.tg_cmd_top(update, context)
-        elif data == "help":
-            await self.tg_cmd_help(update, context)
-        elif data == "players":
-            await self.tg_cmd_players(update, context)
-        elif data == "rules":
-            await self.tg_cmd_rules(update, context)
-        elif data == "boss_fight":
-            await self.tg_cmd_boss_fight(update, context)
-        elif data == "regen":
-            await self.tg_cmd_regen(update, context)
-        elif data == "boss_shop":
-            context.args = ["3"]
-            await self.tg_cmd_shop(update, context)
-        elif data == "menu_back":
-            keyboard = [
-                [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
-                 InlineKeyboardButton("👾 Босс", callback_data="boss")],
-                [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
-                 InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
-                [InlineKeyboardButton("📊 Топ", callback_data="top"),
-                 InlineKeyboardButton("👥 Онлайн", callback_data="players")],
-                [InlineKeyboardButton("📚 Команды", callback_data="help"),
-                 InlineKeyboardButton("📖 Правила", callback_data="rules")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await query.edit_message_text(
-                "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
-                reply_markup=reply_markup,
-                parse_mode='Markdown'
-            )
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    
+    # Обработка основных кнопок меню
+    if data == "profile":
+        await self.tg_cmd_profile(update, context)
+    elif data == "boss":
+        await self.tg_cmd_boss(update, context)
+    elif data == "shop":
+        await self.tg_cmd_shop(update, context)
+    elif data == "donate":
+        await self.tg_cmd_donate(update, context)
+    elif data == "top":
+        await self.tg_cmd_top(update, context)
+    elif data == "players" or data == "online":
+        await self.tg_cmd_players(update, context)
+    elif data == "help" or data == "commands":
+        await self.tg_cmd_help(update, context)
+    elif data == "rules":
+        await self.tg_cmd_rules(update, context)
+    elif data == "boss_fight":
+        await self.tg_cmd_boss_fight(update, context)
+    elif data == "regen":
+        await self.tg_cmd_regen(update, context)
+    elif data == "boss_shop":
+        context.args = ["3"]
+        await self.tg_cmd_shop(update, context)
+    elif data == "menu_back":
+        # Главное меню
+        keyboard = [
+            [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
+             InlineKeyboardButton("👾 Босс", callback_data="boss")],
+            [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
+             InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
+            [InlineKeyboardButton("📊 Топ", callback_data="top"),
+             InlineKeyboardButton("👥 Онлайн", callback_data="players")],
+            [InlineKeyboardButton("📚 Команды", callback_data="help"),
+             InlineKeyboardButton("📖 Правила", callback_data="rules")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
+    elif data.startswith("banlist_"):
+        page = int(data.split("_")[1])
+        context.args = [str(page)]
+        await self.tg_cmd_banlist(update, context)
+    elif data.startswith("mutelist_"):
+        page = int(data.split("_")[1])
+        context.args = [str(page)]
+        await self.tg_cmd_mutelist(update, context)
+    elif data.startswith("warnlist_"):
+        page = int(data.split("_")[1])
+        context.args = [str(page)]
+        await self.tg_cmd_warnlist(update, context)
+    elif data.startswith("buy_potions"):
+        await query.edit_message_text("💊 Выберите зелье:\n/use зелье_здоровья - 50 🪙\n/use большое_зелье - 100 🪙")
+    elif data.startswith("buy_weapons"):
+        await query.edit_message_text("⚔️ Выберите оружие:\n/use меч - 200 🪙\n/use легендарный_меч - 500 🪙")
+    elif data.startswith("buy_armor"):
+        await query.edit_message_text("🛡 Выберите броню:\n/use щит - 150 🪙\n/use доспехи - 400 🪙")
+    elif data.startswith("buy_energy"):
+        await query.edit_message_text("⚡ Выберите энергию:\n/use энергетик - 30 🪙\n/use батарейка - 80 🪙")
+    elif data.startswith("admin_menu"):
+        await query.edit_message_text("👑 **АДМИН МЕНЮ**\n\nИспользуйте команды:\n/banlist\n/mutelist\n/warnlist\n/mute\n/unmute\n/ban\n/unban\n/warn")
+    elif data == "noop":
+        # Пустая кнопка, ничего не делаем
+        pass
+    else:
+        # Если неизвестная кнопка, показываем главное меню
+        keyboard = [
+            [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
+             InlineKeyboardButton("👾 Босс", callback_data="boss")],
+            [InlineKeyboardButton("💰 Магазин", callback_data="shop"),
+             InlineKeyboardButton("💎 Привилегии", callback_data="donate")],
+            [InlineKeyboardButton("📊 Топ", callback_data="top"),
+             InlineKeyboardButton("👥 Онлайн", callback_data="players")],
+            [InlineKeyboardButton("📚 Команды", callback_data="help"),
+             InlineKeyboardButton("📖 Правила", callback_data="rules")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
         elif data.startswith("banlist_"):
             page = int(data.split("_")[1])
             context.args = [str(page)]
