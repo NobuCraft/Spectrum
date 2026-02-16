@@ -1563,19 +1563,18 @@ img_gen = ImageGenerator()
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
-    self.db = db
-    self.ai = ai
-    self.img_gen = img_gen
-    self.tg_application = None
-    # Полностью убираем VK
-    self.last_activity = defaultdict(dict)
-    self.spam_tracker = defaultdict(list)
-    self.mafia_games = {}
-    
-    if TELEGRAM_TOKEN:
-        self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
-        self.setup_tg_handlers()
-        logger.info("✅ Telegram бот инициализирован")
+        self.db = db
+        self.ai = ai
+        self.img_gen = img_gen
+        self.tg_application = None
+        self.last_activity = defaultdict(dict)
+        self.spam_tracker = defaultdict(list)
+        self.mafia_games = {}
+        
+        if TELEGRAM_TOKEN:
+            self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
+            self.setup_tg_handlers()
+            logger.info("✅ Telegram бот инициализирован")
     
     # VK полностью отключен
         
