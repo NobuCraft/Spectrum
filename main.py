@@ -16,18 +16,6 @@ import math
 import io
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
-import os
-import sys
-
-# ПРОСТАЯ ЗАЩИТА - просто проверяем, не запущен ли уже бот
-pid_file = '/tmp/bot.pid'
-
-if os.path.exists(pid_file):
-    print("❌ Бот уже запущен! Удаляю старый pid файл и продолжаю...")
-    os.remove(pid_file)
-
-with open(pid_file, 'w') as f:
-    f.write(str(os.getpid()))
 
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -36,6 +24,15 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 from telegram.constants import ParseMode
+
+# Настройка логирования - ЭТО ДОЛЖНО БЫТЬ ЗДЕСЬ!
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)  # <- ЭТА СТРОКА ВАЖНА!
+
+print("✅ Логгер инициализирован")  # Для проверки
 
 # Для VK - ВРЕМЕННО ОТКЛЮЧАЕМ
 # try:
