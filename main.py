@@ -16,69 +16,41 @@ import math
 import os
 import sys
 import time
-import socket
+import signal
 
-def prevent_multiple_instances():
-    """Предотвращает запуск нескольких экземпляров бота"""
+# ===================== АВАРИЙНАЯ ЗАЩИТА =====================
+def kill_all_bots():
+    """Убивает ВСЕ процессы бота"""
+    current_pid = os.getpid()
     
-    # Метод 1: Проверка через файл
-    lock_file = '/tmp/spectrum_bot.lock'
-    if os.path.exists(lock_file):
-        try:
-            with open(lock_file, 'r') as f:
-                old_pid = int(f.read().strip())
-            # Проверяем, жив ли процесс
-            os.kill(old_pid, 0)
-            print(f"❌ Бот уже запущен (PID: {old_pid})")
-            print("💡 Подождите 10 секунд или перезапустите контейнер")
-            time.sleep(10)
-            sys.exit(1)
-        except (ProcessLookupError, ValueError):
-            # Процесс мертв, удаляем старый lock-файл
-            os.remove(lock_file)
-    
-    # Создаем новый lock-файл
-    with open(lock_file, 'w') as f:
-        f.write(str(os.getpid()))
-    
-    # Метод 2: Проверка через сокет (для надежности)
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    # Находим все Python процессы
     try:
-        sock.bind(('localhost', 12345))
-    except socket.error:
-        print("❌ Порт 12345 уже занят (бот уже запущен)")
-        sys.exit(1)
+        import subprocess
+        result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
+        lines = result.stdout.split('\n')
+        
+        for line in lines:
+            if 'python' in line and 'main.py' in line:
+                parts = line.split()
+                if len(parts) > 1:
+                    pid = int(parts[1])
+                    if pid != current_pid:
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                            print(f"💀 Убит процесс {pid}")
+                            time.sleep(0.5)
+                        except:
+                            pass
+    except:
+        pass
     
-    print("✅ Бот запущен в единственном экземпляре")
+    print(f"✅ Текущий процесс {current_pid} продолжает работу")
 
-# Вызываем защиту
-prevent_multiple_instances()
+# ЗАПУСКАЕМ НЕМЕДЛЕННО!
+kill_all_bots()
 
-# Для Telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, filters, ContextTypes
-)
-from telegram.constants import ParseMode
-
-# Для VK
-try:
-    from vkbottle import API, Bot
-    from vkbottle.bot import Message
-    from vkbottle_types.events import GroupEventType
-    VKBOTTLE_AVAILABLE = True
-except ImportError:
-    VKBOTTLE_AVAILABLE = False
-    print("⚠️ vkbottle не установлен. VK бот будет отключен.")
-
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
+# ===================== ОСТАЛЬНОЙ КОД =====================
+# Весь твой остальной код идет сюда...
 # ===================== КОНФИГУРАЦИЯ =====================
 # Telegram
 TELEGRAM_TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ"
