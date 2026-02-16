@@ -2600,42 +2600,42 @@ class GameBot:
     
     # ===================== БАН =====================
     async def tg_cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not await self._check_moder_rank(update, 2):
-            return
-        
-        if len(context.args) < 3:
-            await update.message.reply_text("❌ Использование: /ban [ссылка] [время] [причина]")
-            return
-        
-        target_link = context.args[0]
-        duration = context.args[1]
-        reason = " ".join(context.args[2:])
-        
-        target_id = await self._resolve_mention(update, context, target_link)
-        
-        if not target_id:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_user = db.get_user('tg', target_id)
-        target_name = target_user.get('first_name', f"ID {target_id}")
-        
-        db.ban_user('tg', target_id, target_name, reason, duration, update.effective_user.id, update.effective_user.first_name)
-        
-        await update.message.reply_text(
-            f"🚫 **Пользователь забанен**\n\n"
-            f"👤 {target_name}\n"
-⏱ Срок: {duration}\n"
-            f"💬 Причина: {reason}"
+    if not await self._check_moder_rank(update, 2):
+        return
+    
+    if len(context.args) < 3:
+        await update.message.reply_text("❌ Использование: /ban [ссылка] [время] [причина]")
+        return
+    
+    target_link = context.args[0]
+    duration = context.args[1]
+    reason = " ".join(context.args[2:])
+    
+    target_id = await self._resolve_mention(update, context, target_link)
+    
+    if not target_id:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_user = db.get_user('tg', target_id)
+    target_name = target_user.get('first_name', f"ID {target_id}")
+    
+    db.ban_user('tg', target_id, target_name, reason, duration, update.effective_user.id, update.effective_user.first_name)
+    
+    await update.message.reply_text(
+        f"🚫 **Пользователь забанен**\n\n"
+        f"👤 {target_name}\n"
+        f"Время: {duration}\n"
+        f"Причина: {reason}"
+    )
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text=f"🚫 Вы забанены.\nВремя: {duration}\nПричина: {reason}"
         )
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text=f"🚫 Вы забанены.\nСрок: {duration}\nПричина: {reason}"
-            )
-        except:
-            pass
+    except:
+        pass
     
     async def tg_cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 2):
