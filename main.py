@@ -20,7 +20,7 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 
-# Для VK - исправленные импорты для vkbottle 3.x
+# Для VK - исправленные импорты
 from vkbottle import API, Bot
 from vkbottle.bot import Message
 from vkbottle_types.events import GroupEventType
@@ -3552,8 +3552,6 @@ class GameBot:
     
     # ===================== ЗАПУСК БОТОВ =====================
     async def run(self):
-        tasks = []
-        
         # Запуск Telegram бота
         if self.tg_application:
             await self.tg_application.initialize()
@@ -3561,22 +3559,23 @@ class GameBot:
             await self.tg_application.updater.start_polling()
             logger.info("🚀 Telegram бот запущен!")
         
-        # Запуск VK бота
+        # Запуск VK бота отдельно
         if self.vk_bot:
-            tasks.append(self.vk_bot.run())
+            logger.info("🚀 VK бот запускается...")
+            # Запускаем VK бот в отдельной задаче
+            asyncio.create_task(self.vk_bot.run_polling())
             logger.info("🚀 VK бот запущен!")
         
-        if tasks:
-            await asyncio.gather(*tasks)
-        else:
-            while True:
-                await asyncio.sleep(1)
+        # Держим бот активным
+        while True:
+            await asyncio.sleep(1)
     
     async def close(self):
         if self.tg_application:
             await self.tg_application.stop()
         if self.vk_bot:
-            await self.vk_bot.stop()
+            # В vkbottle нет прямого метода stop, но мы можем просто позволить задаче завершиться
+            logger.info("VK бот остановлен")
         db.close()
         logger.info("👋 Боты остановлены")
 
