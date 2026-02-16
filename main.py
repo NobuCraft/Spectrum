@@ -1753,7 +1753,7 @@ class GameBot:
         
         await update.message.reply_text(
             f"🚫 **Пользователь забанен**\n\n"
-            f"👤 {target_username}\n
+            f"👤 {target_username}\n"
 ⏱ Срок: {duration}\n"
             f"💬 Причина: {reason}"
         )
