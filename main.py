@@ -9,8 +9,8 @@ GEMINI_KEY = "AIzaSyBPT4JUIevH0UiwXVY9eQjrY_pTPLeLbNE"
 
 class Gemini:
     def __init__(self, key):
-        # ПРАВИЛЬНЫЙ URL для Gemini API
-        self.url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={key}"
+        # Пробуем gemini-pro
+        self.url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={key}"
 
     async def ask(self, text):
         async with aiohttp.ClientSession() as session:
@@ -25,7 +25,7 @@ class Gemini:
                     return result["candidates"][0]["content"]["parts"][0]["text"]
                 else:
                     error = await resp.text()
-                    return f"❌ Ошибка {resp.status}: {error[:100]}"
+                    return f"❌ Ошибка {resp.status}"
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await context.bot_data['ai'].ask(update.message.text)
