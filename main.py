@@ -16,6 +16,18 @@ import math
 import io
 import requests
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
+import os
+import sys
+
+# ПРОСТАЯ ЗАЩИТА - просто проверяем, не запущен ли уже бот
+pid_file = '/tmp/bot.pid'
+
+if os.path.exists(pid_file):
+    print("❌ Бот уже запущен! Удаляю старый pid файл и продолжаю...")
+    os.remove(pid_file)
+
+with open(pid_file, 'w') as f:
+    f.write(str(os.getpid()))
 
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
@@ -1560,8 +1572,8 @@ class GameBot:
         self.ai = ai
         self.img_gen = img_gen
         self.tg_application = None
-        self.vk_bot = None
-        self.vk_api = None
+    # self.vk_bot = None  # Временно отключаем VK
+    # self.vk_api = None  # Временно отключаем VK
         self.last_activity = defaultdict(dict)
         self.spam_tracker = defaultdict(list)
         self.mafia_games = {}
@@ -1571,11 +1583,12 @@ class GameBot:
             self.setup_tg_handlers()
             logger.info("✅ Telegram бот инициализирован")
         
-        if VK_TOKEN and VKBOTTLE_AVAILABLE:
-            self.vk_bot = Bot(VK_TOKEN)
-            self.vk_api = API(VK_TOKEN)
-            self.setup_vk_handlers()
-            logger.info("✅ VK бот инициализирован")
+         # Временно отключаем VK для устранения конфликтов
+    # if VK_TOKEN and VKBOTTLE_AVAILABLE:
+    #     self.vk_bot = Bot(VK_TOKEN)
+    #     self.vk_api = API(VK_TOKEN)
+    #     self.setup_vk_handlers()
+    #     logger.info("✅ VK бот инициализирован")
     
     # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
     def setup_tg_handlers(self):
