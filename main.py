@@ -12,8 +12,6 @@ from collections import defaultdict
 import time
 import hashlib
 import base64
-import requests
-from bs4 import BeautifulSoup
 
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -898,16 +896,12 @@ class GameBot:
         self.tg_application.add_handler(CommandHandler("mafia_join", self.tg_cmd_mafia_join))
         self.tg_application.add_handler(CommandHandler("mafia_start", self.tg_cmd_mafia_start))
         
-        # Полезные команды
+        # Полезные команды (без внешних API)
         self.tg_application.add_handler(CommandHandler("info", self.tg_cmd_info))
         self.tg_application.add_handler(CommandHandler("holidays", self.tg_cmd_holidays))
-        self.tg_application.add_handler(CommandHandler("weather", self.tg_cmd_weather))
-        self.tg_application.add_handler(CommandHandler("wiki", self.tg_cmd_wiki))
         self.tg_application.add_handler(CommandHandler("fact", self.tg_cmd_fact))
         self.tg_application.add_handler(CommandHandler("wisdom", self.tg_cmd_wisdom))
         self.tg_application.add_handler(CommandHandler("population", self.tg_cmd_population))
-        self.tg_application.add_handler(CommandHandler("convert", self.tg_cmd_convert))
-        self.tg_application.add_handler(CommandHandler("distance", self.tg_cmd_distance))
         self.tg_application.add_handler(CommandHandler("bitcoin", self.tg_cmd_bitcoin))
         
         # Закладки и награды
@@ -961,7 +955,8 @@ class GameBot:
             [InlineKeyboardButton("📊 Топ", callback_data="top"),
              InlineKeyboardButton("👥 Онлайн", callback_data="players")],
             [InlineKeyboardButton("📚 Команды", callback_data="help"),
-             InlineKeyboardButton("📖 Правила", callback_data="rules")]
+             InlineKeyboardButton("📖 Правила", callback_data="rules")],
+            [InlineKeyboardButton("🎮 Игры", callback_data="games")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -1037,13 +1032,9 @@ class GameBot:
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
             "/info [событие] - правдивость события\n"
             "/holidays - праздники сегодня\n"
-            "/weather [город] - погода\n"
-            "/wiki [слово] - информация из википедии\n"
             "/fact - случайный факт\n"
             "/wisdom - мудрая цитата\n"
-            "/population [страна] - население\n"
-            "/convert [сумма] [из] [в] - конвертер валют\n"
-            "/distance [город1] [город2] - расстояние\n"
+            "/population - население Земли\n"
             "/bitcoin - курс биткоина\n\n"
             
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1051,7 +1042,7 @@ class GameBot:
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
             "/bookmark [описание] - создать закладку\n"
             "/bookmarks - список закладок\n"
-            "/award [ник] [название] - дать награду\n"
+            "/award [ник] [название] - дать награду (админ)\n"
             "/awards - список наград\n\n"
             
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -1164,8 +1155,7 @@ class GameBot:
             text += f"\n\n📝 **О себе:** {user_data['description']}"
         
         keyboard = [
-            [InlineKeyboardButton("📝 Описание", callback_data="edit_description"),
-             InlineKeyboardButton("🏅 Награды", callback_data="awards")],
+            [InlineKeyboardButton("🏅 Награды", callback_data="awards")],
             [InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1213,7 +1203,7 @@ class GameBot:
                 last_activity = f"{delta.seconds // 60} мин назад"
         
         text = (
-            f"Это [id{user.id}|{user.first_name}]\n"
+            f"Это [{user.id}|{user.first_name}]\n"
             f"{privilege_emoji} [{user_data['level']}] Ранг: {privilege.upper() if privilege != 'user' else 'Пользователь'}\n"
             f"Репутация: ✨ {user_data['reputation']} | ➕ {user_data['reputation_given']}\n"
             f"Первое появление: {first_seen}\n"
@@ -1223,8 +1213,7 @@ class GameBot:
         )
         
         keyboard = [
-            [InlineKeyboardButton("📝 Описание", callback_data="edit_description"),
-             InlineKeyboardButton("🏅 Награды", callback_data="awards")],
+            [InlineKeyboardButton("🏅 Награды", callback_data="awards")],
             [InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -1764,8 +1753,8 @@ class GameBot:
         
         await update.message.reply_text(
             f"🚫 **Пользователь забанен**\n\n"
-            f"👤 {target_username}\n"
-            f"⏱ Срок: {duration}\n"
+            f"👤 {target_username}\n
+⏱ Срок: {duration}\n"
             f"💬 Причина: {reason}"
         )
         
@@ -1951,14 +1940,11 @@ class GameBot:
             "/rr_start [игроки] [ставка] - создать лобби\n"
             "/rr_join [ID] - присоединиться\n"
             "/rr_shot - сделать выстрел\n"
-            "/rr_items - мои предметы\n"
-            "/rr_bonus - получить ваучер\n"
-            "/rr_spin - колесо фортуны"
+            "/rr_items - мои предметы"
         )
         
         keyboard = [
-            [InlineKeyboardButton("🎲 Создать игру", callback_data="rr_create"),
-             InlineKeyboardButton("🎡 Колесо фортуны", callback_data="rr_spin")],
+            [InlineKeyboardButton("🎲 Создать игру", callback_data="rr_create")],
             [InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2201,8 +2187,7 @@ class GameBot:
             "━━━━━━━━━━━━━━━━━━━━━━━\n"
             "/mafia_create - создать игру\n"
             "/mafia_join [ID] - присоединиться\n"
-            "/mafia_start - начать игру\n"
-            "/mafia_vote [ник] - проголосовать"
+            "/mafia_start - начать игру"
         )
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
@@ -2318,40 +2303,6 @@ class GameBot:
         else:
             await update.message.reply_text("📅 Сегодня нет праздников", parse_mode='Markdown')
     
-    async def tg_cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /weather [город]")
-            return
-        
-        city = " ".join(context.args)
-        
-        # Симуляция погоды (в реальном проекте нужно использовать API)
-        conditions = ["☀️ Солнечно", "☁️ Облачно", "🌧️ Дождливо", "🌨️ Снежно", "🌩️ Гроза"]
-        temp = random.randint(-20, 35)
-        condition = random.choice(conditions)
-        
-        await update.message.reply_text(
-            f"🌤️ **ПОГОДА В ГОРОДЕ {city.upper()}**\n\n"
-            f"Температура: {temp}°C\n"
-            f"Состояние: {condition}",
-            parse_mode='Markdown'
-        )
-    
-    async def tg_cmd_wiki(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /wiki [слово]")
-            return
-        
-        query = " ".join(context.args)
-        
-        # Симуляция Wikipedia
-        await update.message.reply_text(
-            f"📚 **ВИКИПЕДИЯ: {query.upper()}**\n\n"
-            f"{query} — это термин, который может означать различные вещи в зависимости от контекста. "
-            f"В данном случае это просто демонстрация работы команды.",
-            parse_mode='Markdown'
-        )
-    
     async def tg_cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         facts = [
             "🐝 Пчелы могут узнавать человеческие лица.",
@@ -2386,65 +2337,9 @@ class GameBot:
     async def tg_cmd_population(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         world_pop = 7_900_000_000
         
-        if context.args:
-            country = " ".join(context.args)
-            pop = random.randint(1_000_000, 1_500_000_000)
-            await update.message.reply_text(
-                f"👥 **НАСЕЛЕНИЕ {country.upper()}**\n\n"
-                f"Примерно: {pop:,} человек",
-                parse_mode='Markdown'
-            )
-        else:
-            await update.message.reply_text(
-                f"🌍 **НАСЕЛЕНИЕ ЗЕМЛИ**\n\n"
-                f"Примерно: {world_pop:,} человек",
-                parse_mode='Markdown'
-            )
-    
-    async def tg_cmd_convert(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if len(context.args) < 3:
-            await update.message.reply_text("❌ Использование: /convert [сумма] [из] [в]")
-            return
-        
-        try:
-            amount = float(context.args[0])
-            from_currency = context.args[1].upper()
-            to_currency = context.args[2].upper()
-        except:
-            await update.message.reply_text("❌ Неправильный формат")
-            return
-        
-        rates = {
-            "USD": 1.0, "EUR": 0.92, "RUB": 91.5, "GBP": 0.79, "CNY": 7.24,
-            "JPY": 151.5, "CHF": 0.91, "CAD": 1.37, "AUD": 1.53
-        }
-        
-        if from_currency not in rates or to_currency not in rates:
-            await update.message.reply_text("❌ Неподдерживаемая валюта")
-            return
-        
-        result = amount * rates[to_currency] / rates[from_currency]
-        
         await update.message.reply_text(
-            f"💱 **КОНВЕРТАЦИЯ ВАЛЮТ**\n\n"
-            f"{amount} {from_currency} = {result:.2f} {to_currency}",
-            parse_mode='Markdown'
-        )
-    
-    async def tg_cmd_distance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ Использование: /distance [город1] [город2]")
-            return
-        
-        city1 = context.args[0]
-        city2 = context.args[1]
-        
-        distance = random.randint(100, 15000)
-        
-        await update.message.reply_text(
-            f"📏 **РАССТОЯНИЕ**\n\n"
-            f"От {city1} до {city2}\n"
-            f"≈ {distance} км",
+            f"🌍 **НАСЕЛЕНИЕ ЗЕМЛИ**\n\n"
+            f"Примерно: {world_pop:,} человек",
             parse_mode='Markdown'
         )
     
@@ -2617,8 +2512,7 @@ class GameBot:
             keyboard = [
                 [InlineKeyboardButton("💣 Русская рулетка", callback_data="rr"),
                  InlineKeyboardButton("⭕ Крестики-нолики 3D", callback_data="ttt")],
-                [InlineKeyboardButton("🔪 Мафия", callback_data="mafia"),
-                 InlineKeyboardButton("🎮 Другие игры", callback_data="more_games")],
+                [InlineKeyboardButton("🔪 Мафия", callback_data="mafia")],
                 [InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -2689,28 +2583,14 @@ class GameBot:
                 "/rr_start [игроки] [ставка]\n\n"
                 "Пример: /rr_start 4 100"
             )
-        elif data == "rr_spin":
-            await query.edit_message_text(
-                "🎡 **КОЛЕСО ФОРТУНЫ**\n\n"
-                "Крути колесо командой:\n"
-                "/rr_spin\n\n"
-                "Можно получить предметы и черепки!"
-            )
         
         # Крестики-нолики
         elif data.startswith("ttt_accept_"):
-            game_id = int(data.split("_")[2])
             await query.edit_message_text("✅ Ты принял вызов! Игра начинается...")
         elif data.startswith("ttt_decline_"):
             await query.edit_message_text("❌ Ты отклонил вызов")
         
         # Профиль
-        elif data == "edit_description":
-            await query.edit_message_text(
-                "📝 **РЕДАКТИРОВАНИЕ ПРОФИЛЯ**\n\n"
-                "Чтобы установить описание, напиши:\n"
-                "/setdesc [текст]"
-            )
         elif data == "awards":
             await self.tg_cmd_awards(update, context)
         
