@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 # ========== КОНФИГУРАЦИЯ ==========
 # --- Telegram ---
-TELEGRAM_TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ
+TELEGRAM_TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ"
 OWNER_ID = 1732658530
 OWNER_USERNAME = "@NobuCraft"
 
