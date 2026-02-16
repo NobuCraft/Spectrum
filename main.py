@@ -13,26 +13,30 @@ class Gemini:
 
     async def ask(self, text):
         async with aiohttp.ClientSession() as session:
-            data = {"contents": [{"parts": [{"text": f"Ответь кратко: {text}"}]}]}
+            data = {"contents": [{"parts": [{"text": text}]}]}
             async with session.post(self.url, json=data) as resp:
                 if resp.status == 200:
                     result = await resp.json()
                     return result["candidates"][0]["content"]["parts"][0]["text"]
-                return f"❌ Ошибка {resp.status}"
+                return f"Ошибка {resp.status}"
 
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text
-    await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    reply = await context.bot_data['ai'].ask(msg)
+    reply = await context.bot_data['ai'].ask(update.message.text)
     await update.message.reply_text(f"🤖 {reply}")
 
-def main():
-    print("🚀 Запускаем бота...")
+async def main():
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.bot_data['ai'] = Gemini(GEMINI_KEY)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-    print("✅ Бот запущен! Иди в Telegram и пиши ему!")
-    app.run_polling()
+    
+    print("✅ Бот запущен на Railway!")
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling()
+    
+    # Держим бота запущенным
+    while True:
+        await asyncio.sleep(3600)
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
