@@ -37,22 +37,17 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 
-# Для VK
-try:
-    from vkbottle import API, Bot
-    from vkbottle.bot import Message
-    from vkbottle_types.events import GroupEventType
-    VKBOTTLE_AVAILABLE = True
-except ImportError:
-    VKBOTTLE_AVAILABLE = False
-    print("⚠️ vkbottle не установлен. VK бот будет отключен.")
+# Для VK - ВРЕМЕННО ОТКЛЮЧАЕМ
+# try:
+#     from vkbottle import API, Bot
+#     from vkbottle.bot import Message
+#     from vkbottle_types.events import GroupEventType
+#     VKBOTTLE_AVAILABLE = True
+# except ImportError:
+#     VKBOTTLE_AVAILABLE = False
+#     print("⚠️ vkbottle не установлен. VK бот будет отключен.")
 
-# Настройка логирования
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
+VKBOTTLE_AVAILABLE = False  # Добавь эту строку
 
 # ===================== МОЩНЫЙ AI КЛАСС =====================
 class PowerfulAI:
@@ -1568,20 +1563,21 @@ img_gen = ImageGenerator()
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
-        self.db = db
-        self.ai = ai
-        self.img_gen = img_gen
-        self.tg_application = None
-    # self.vk_bot = None  # Временно отключаем VK
-    # self.vk_api = None  # Временно отключаем VK
-        self.last_activity = defaultdict(dict)
-        self.spam_tracker = defaultdict(list)
-        self.mafia_games = {}
-        
-        if TELEGRAM_TOKEN:
-            self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
-            self.setup_tg_handlers()
-            logger.info("✅ Telegram бот инициализирован")
+    self.db = db
+    self.ai = ai
+    self.img_gen = img_gen
+    self.tg_application = None
+    # Полностью убираем VK
+    self.last_activity = defaultdict(dict)
+    self.spam_tracker = defaultdict(list)
+    self.mafia_games = {}
+    
+    if TELEGRAM_TOKEN:
+        self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
+        self.setup_tg_handlers()
+        logger.info("✅ Telegram бот инициализирован")
+    
+    # VK полностью отключен
         
          # Временно отключаем VK для устранения конфликтов
     # if VK_TOKEN and VKBOTTLE_AVAILABLE:
@@ -4315,21 +4311,22 @@ class GameBot:
             )
     
     # ===================== VK ОБРАБОТЧИКИ =====================
-    def setup_vk_handlers(self):
-        if not VKBOTTLE_AVAILABLE or not self.vk_bot:
-            return
-        
-        @self.vk_bot.on.message()
-        async def vk_message_handler(message: Message):
-            await self.vk_handle_message(message)
-        
-        logger.info("✅ VK обработчики зарегистрированы")
-    
-    async def vk_handle_message(self, message: Message):
-        if message.text and message.text.startswith('/start'):
-            await message.reply(
-                "👋 Привет! Я бот Спектр. Полная поддержка VK будет добавлена позже."
-            )
+    # ===================== VK ОБРАБОТЧИКИ =====================
+# def setup_vk_handlers(self):
+#     if not VKBOTTLE_AVAILABLE or not self.vk_bot:
+#         return
+#     
+#     @self.vk_bot.on.message()
+#     async def vk_message_handler(message: Message):
+#         await self.vk_handle_message(message)
+#     
+#     logger.info("✅ VK обработчики зарегистрированы")
+# 
+# async def vk_handle_message(self, message: Message):
+#     if message.text and message.text.startswith('/start'):
+#         await message.reply(
+#             "👋 Привет! Я бот Спектр. Полная поддержка VK будет добавлена позже."
+#         )
     
     # ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
     async def _resolve_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mention: str) -> Optional[str]:
