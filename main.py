@@ -6,6 +6,7 @@ import datetime
 from typing import Optional, Dict, Any, List, Tuple
 import aiohttp
 import json
+import os
 import re
 from collections import defaultdict
 import time
@@ -13,14 +14,9 @@ import hashlib
 import base64
 import math
 import io
-import requests
-import os
-import sys
-import time
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 # Для Telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes
@@ -33,41 +29,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-# ===================== ЖЕСТКАЯ ЗАЩИТА =====================
-print("🛡️ Активация защиты от множественного запуска...")
-
-# Убиваем все другие процессы бота
-try:
-    import subprocess
-    result = subprocess.run(['ps', 'aux'], capture_output=True, text=True)
-    lines = result.stdout.split('\n')
-    current_pid = os.getpid()
-    
-    killed = 0
-    for line in lines:
-        if 'python' in line and 'main.py' in line:
-            parts = line.split()
-            if len(parts) > 1:
-                pid = int(parts[1])
-                if pid != current_pid:
-                    try:
-                        os.kill(pid, 9)
-                        print(f"💀 Убит процесс {pid}")
-                        killed += 1
-                        time.sleep(0.5)
-                    except:
-                        pass
-    
-    if killed > 0:
-        print(f"✅ Убито {killed} процессов")
-    else:
-        print("✅ Конфликтов не найдено")
-        
-except Exception as e:
-    print(f"⚠️ Ошибка при очистке: {e}")
-
-print("🚀 Продолжаем запуск...\n")
 
 # ===================== КОНФИГУРАЦИЯ =====================
 TELEGRAM_TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ"
@@ -109,6 +70,7 @@ class SpectrumAI:
         
         self.knowledge_base = {
             "привет": ["Привет! Как сам?", "Здравствуй! Чего нового?", "Хей-хей!"],
+            "здравствуй": ["Привет! Как сам?", "Здравствуй! Чего нового?", "Хей-хей!"],
             "как дела": ["У меня всё супер! А у тебя?", "Отлично! Ты как?", "Нормально, работаю!"],
             "что делаешь": ["Думаю над смыслом жизни... А ты?", "Отвечаю на вопросы!", "Жду новых команд!"],
             "кто ты": ["Я Спектр - твой виртуальный друг и помощник!", "Искусственный интеллект с характером!", "Твой AI-компаньон!"],
@@ -144,6 +106,9 @@ class SpectrumAI:
     
     async def get_response(self, user_id: int, message: str) -> str:
         """Получить умный ответ от AI"""
+        if not message:
+            return "Слушаю тебя внимательно!"
+            
         message_lower = message.lower().strip()
         
         # Пробуем API
@@ -193,7 +158,7 @@ class SpectrumAI:
                         "temperature": 0.8,
                         "top_p": 0.95,
                     }
-                }, timeout=10) as resp:
+                }, timeout=5) as resp:
                     
                     if resp.status == 200:
                         result = await resp.json()
@@ -217,8 +182,11 @@ class SpectrumAI:
     async def mood(self) -> str:
         """Случайное настроение"""
         moods = list(self.personality.keys())
-        mood_key = random.choice([m for m in moods if m.startswith("mood_")])
-        return random.choice(self.personality[mood_key])
+        mood_keys = [m for m in moods if m.startswith("mood_")]
+        if mood_keys:
+            mood_key = random.choice(mood_keys)
+            return random.choice(self.personality[mood_key])
+        return "😊 Нормально!"
 
 # ===================== БАЗА ДАННЫХ =====================
 class Database:
@@ -357,28 +325,6 @@ class Database:
                 wins INTEGER DEFAULT 0,
                 losses INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Турниры
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tournaments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                start_date TIMESTAMP,
-                end_date TIMESTAMP,
-                status TEXT DEFAULT 'pending',
-                prize_pool INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # Участники турниров
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tournament_participants (
-                tournament_id INTEGER,
-                user_id TEXT,
-                points INTEGER DEFAULT 0,
-                FOREIGN KEY (tournament_id) REFERENCES tournaments (id)
             )
         ''')
         
@@ -1127,8 +1073,8 @@ class Database:
     def add_clan_exp(self, clan_id, exp):
         self.cursor.execute("UPDATE clans SET exp = exp + ? WHERE id = ?", (exp, clan_id))
         self.cursor.execute("SELECT exp, level FROM clans WHERE id = ?", (clan_id,))
-        exp, level = self.cursor.fetchone()
-        if exp >= level * 500:
+        exp_val, level = self.cursor.fetchone()
+        if exp_val >= level * 500:
             self.cursor.execute("UPDATE clans SET level = level + 1, exp = exp - ? WHERE id = ?", (level * 500, clan_id))
         self.conn.commit()
     
@@ -1178,44 +1124,12 @@ class Database:
         # Проверка уровня
         for pet in [winner, loser]:
             self.cursor.execute("SELECT exp FROM pets WHERE id = ?", (pet['id'],))
-            exp = self.cursor.fetchone()[0]
-            if exp >= pet['level'] * 100:
+            exp_val = self.cursor.fetchone()[0]
+            if exp_val >= pet['level'] * 100:
                 self.cursor.execute("UPDATE pets SET level = level + 1, exp = exp - ? WHERE id = ?", (pet['level'] * 100, pet['id']))
         
         self.conn.commit()
         return winner
-    
-    # Турниры
-    def create_tournament(self, name, days=7):
-        start = datetime.datetime.now()
-        end = start + datetime.timedelta(days=days)
-        self.cursor.execute('''
-            INSERT INTO tournaments (name, start_date, end_date, status)
-            VALUES (?, ?, ?, ?)
-        ''', (name, start, end, 'active'))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def join_tournament(self, tournament_id, user_id):
-        self.cursor.execute('''
-            INSERT OR IGNORE INTO tournament_participants (tournament_id, user_id)
-            VALUES (?, ?)
-        ''', (tournament_id, user_id))
-        self.conn.commit()
-    
-    def add_tournament_points(self, tournament_id, user_id, points):
-        self.cursor.execute('''
-            UPDATE tournament_participants SET points = points + ?
-            WHERE tournament_id = ? AND user_id = ?
-        ''', (points, tournament_id, user_id))
-        self.conn.commit()
-    
-    def get_tournament_ranking(self, tournament_id):
-        self.cursor.execute('''
-            SELECT user_id, points FROM tournament_participants
-            WHERE tournament_id = ? ORDER BY points DESC LIMIT 10
-        ''', (tournament_id,))
-        return self.cursor.fetchall()
     
     def close(self):
         self.conn.close()
@@ -1281,25 +1195,13 @@ class GameBot:
         self.tg_application.add_handler(CommandHandler("pet_feed", self.cmd_pet_feed))
         self.tg_application.add_handler(CommandHandler("pet_fight", self.cmd_pet_fight))
         
-        # Турниры
-        self.tg_application.add_handler(CommandHandler("tournament", self.cmd_tournament))
-        self.tg_application.add_handler(CommandHandler("tournament_join", self.cmd_tournament_join))
-        self.tg_application.add_handler(CommandHandler("rating", self.cmd_rating))
-        
         # Полезные команды
         self.tg_application.add_handler(CommandHandler("joke", self.cmd_joke))
         self.tg_application.add_handler(CommandHandler("wisdom", self.cmd_wisdom))
         self.tg_application.add_handler(CommandHandler("mood", self.cmd_mood))
         self.tg_application.add_handler(CommandHandler("weather", self.cmd_weather))
-        self.tg_application.add_handler(CommandHandler("news", self.cmd_news))
-        self.tg_application.add_handler(CommandHandler("quote", self.cmd_quote))
         self.tg_application.add_handler(CommandHandler("fact", self.cmd_fact))
         self.tg_application.add_handler(CommandHandler("bitcoin", self.cmd_bitcoin))
-        
-        # Голосования
-        self.tg_application.add_handler(CommandHandler("poll", self.cmd_poll))
-        self.tg_application.add_handler(CommandHandler("vote", self.cmd_vote))
-        self.tg_application.add_handler(CommandHandler("results", self.cmd_results))
         
         # Закладки и награды
         self.tg_application.add_handler(CommandHandler("bookmark", self.cmd_add_bookmark))
@@ -1452,30 +1354,14 @@ class GameBot:
             "/rps — камень-ножницы-бумага\n\n"
             
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🏆 **ТУРНИРЫ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/tournament — информация о турнире\n"
-            "/tournament_join — участвовать\n"
-            "/rating — рейтинг игроков\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "🤖 **AI ФУНКЦИИ**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "/joke — шутка от Спектра\n"
             "/wisdom — мудрая мысль\n"
             "/mood — настроение Спектра\n"
             "/weather [город] — погода\n"
-            "/news — последние новости\n"
-            "/quote — цитата дня\n"
             "/fact — случайный факт\n"
             "/bitcoin — курс биткоина\n\n"
-            
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 **ГОЛОСОВАНИЯ**\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "/poll [вопрос] — создать опрос\n"
-            "/vote [номер] [вариант] — проголосовать\n"
-            "/results [ID] — результаты\n\n"
             
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             "📌 **ЗАКЛАДКИ И НАГРАДЫ**\n"
@@ -1764,8 +1650,8 @@ class GameBot:
         
         for member in members[:10]:
             user_id, role, joined = member
-            user_data = db.get_user('tg', user_id)
-            name = user_data.get('first_name', f"ID {user_id}")
+            user_data_member = db.get_user('tg', user_id)
+            name = user_data_member.get('first_name', f"ID {user_id}")
             role_emoji = "👑" if role == 'owner' else "🛡️" if role == 'admin' else "👤"
             text += f"{role_emoji} {name}\n"
         
@@ -1832,7 +1718,6 @@ class GameBot:
             await update.message.reply_text(f"❌ {message}")
     
     async def cmd_clan_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # Здесь нужна функция для топа кланов
         await update.message.reply_text("🏆 Топ кланов будет доступен в следующем обновлении")
     
     # ===================== ПИТОМЦЫ =====================
@@ -1941,16 +1826,6 @@ class GameBot:
         else:
             await update.message.reply_text(f"😢 Твой питомец проиграл...")
     
-    # ===================== ТУРНИРЫ =====================
-    async def cmd_tournament(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("🏆 Турниры будут доступны в следующем обновлении")
-    
-    async def cmd_tournament_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("🏆 Участие в турнирах будет доступно в следующем обновлении")
-    
-    async def cmd_rating(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("📊 Рейтинг будет доступен в следующем обновлении")
-    
     # ===================== AI ФУНКЦИИ =====================
     async def cmd_joke(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         joke = await self.ai.tell_joke()
@@ -1971,9 +1846,6 @@ class GameBot:
         
         city = " ".join(context.args)
         
-        # AI генерирует погоду (симуляция)
-        response = await self.ai.get_response(user.id, f"какая погода в {city}")
-        
         temp = random.randint(-20, 35)
         conditions = ["☀️ Солнечно", "☁️ Облачно", "🌧️ Дождливо", "🌨️ Снежно", "🌩️ Гроза"]
         condition = random.choice(conditions)
@@ -1981,44 +1853,34 @@ class GameBot:
         text = f"🌤️ **ПОГОДА В {city.upper()}**\n\n"
         text += f"Температура: {temp}°C\n"
         text += f"Состояние: {condition}\n\n"
-        text += f"💬 **Спектр:** {response}"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
-    async def cmd_news(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        response = await self.ai.get_response(user.id, "расскажи последние новости")
-        await update.message.reply_text(f"📰 **НОВОСТИ**\n\n{response}", parse_mode='Markdown')
-    
-    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        response = await self.ai.get_response(user.id, "скажи мудрую цитату")
-        await update.message.reply_text(f"💬 **ЦИТАТА ДНЯ**\n\n{response}", parse_mode='Markdown')
-    
     async def cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        response = await self.ai.get_response(user.id, "расскажи интересный факт")
-        await update.message.reply_text(f"📌 **ИНТЕРЕСНЫЙ ФАКТ**\n\n{response}", parse_mode='Markdown')
+        facts = [
+            "🐝 Пчелы могут узнавать человеческие лица.",
+            "🌍 В Антарктиде есть только один постоянный вид насекомых.",
+            "🦑 Кальмары имеют три сердца.",
+            "🐘 Слоны — единственные млекопитающие, которые не могут прыгать.",
+            "🍌 Бананы технически являются ягодами.",
+            "🌊 Океаны покрывают 71% поверхности Земли.",
+            "🚀 Следы на Луне останутся на миллионы лет.",
+            "💧 Человек может прожить без еды около месяца, но без воды только неделю.",
+            "🧠 Мозг человека генерирует достаточно электричества, чтобы зажечь лампочку.",
+            "👁️ Человеческий глаз может различать около 10 миллионов цветов."
+        ]
+        fact = random.choice(facts)
+        await update.message.reply_text(f"📌 **ИНТЕРЕСНЫЙ ФАКТ**\n\n{fact}", parse_mode='Markdown')
     
     async def cmd_bitcoin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_usd = random.randint(40000, 70000)
         price_rub = price_usd * 91.5
         
-        response = await self.ai.get_response(user.id, f"курс биткоина {price_usd}$")
-        
         text = f"₿ **КУРС БИТКОИНА**\n\n"
         text += f"USD: ${price_usd:,}\n"
-        text += f"RUB: ₽{int(price_rub):,}\n\n"
-        text += f"💬 **Спектр:** {response}"
+        text += f"RUB: ₽{int(price_rub):,}"
         
         await update.message.reply_text(text, parse_mode='Markdown')
-    
-    # ===================== ГОЛОСОВАНИЯ =====================
-    async def cmd_poll(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("📊 Голосования будут доступны в следующем обновлении")
-    
-    async def cmd_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("🗳️ Голосование будет доступно в следующем обновлении")
-    
-    async def cmd_results(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text("📊 Результаты будут доступны в следующем обновлении")
     
     # ===================== БОССЫ =====================
     async def cmd_boss(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2123,12 +1985,6 @@ class GameBot:
         killed, health_left = db.damage_boss(boss_id, player_damage)
         db.damage_user('tg', platform_id, boss['boss_damage'])
         
-        # AI комментирует
-        if killed:
-            comment = await self.ai.get_response(user.id, f"игрок победил босса {boss['boss_name']}")
-        else:
-            comment = await self.ai.get_response(user.id, f"игрок нанес {player_damage} урона боссу")
-        
         text = f"⚔️ **БИТВА С БОССОМ** ⚔️\n\n"
         text += f"**{boss['boss_name']}**\n\n"
         text += f"▫️ Твой урон: {player_damage} HP\n"
@@ -2154,8 +2010,6 @@ class GameBot:
         else:
             text += f"👾 Босс еще жив!\n"
             text += f"💀 Осталось: {health_left} HP\n\n"
-        
-        text += f"💬 **Спектр:** {comment}"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2193,14 +2047,11 @@ class GameBot:
             
             db.use_regen('tg', platform_id, cooldown)
             
-            comment = await self.ai.get_response(user.id, "игрок восстановил здоровье")
-            
             await update.message.reply_text(
                 f"➕ **РЕГЕНЕРАЦИЯ**\n\n"
                 f"❤️ Здоровье восстановлено!\n"
                 f"Текущее здоровье: {user_data['max_health']}/{user_data['max_health']}\n"
-                f"⏱ Следующая регенерация через {cooldown} мин\n\n"
-                f"💬 **Спектр:** {comment}",
+                f"⏱ Следующая регенерация через {cooldown} мин",
                 parse_mode='Markdown'
             )
         else:
@@ -2325,9 +2176,7 @@ class GameBot:
         success, message = db.transfer_money('tg', platform_id, 'tg', target_id, amount, "coins")
         
         if success:
-            comment = await self.ai.get_response(user.id, f"игрок перевел {amount} монет")
-            
-            await update.message.reply_text(f"✅ {message}\nПолучатель: {target_user[4]}\n\n💬 **Спектр:** {comment}")
+            await update.message.reply_text(f"✅ {message}\nПолучатель: {target_user[4]}")
             
             try:
                 await context.bot.send_message(
@@ -3075,11 +2924,8 @@ class GameBot:
             if member.is_bot:
                 continue
             
-            # AI генерирует приветствие
-            greeting = await self.ai.get_response(member.id, f"поприветствуй нового участника {member.first_name}")
-            
             welcome_text = welcome.replace('{user}', f"[{member.first_name}](tg://user?id={member.id})")
-            await update.message.reply_text(f"{welcome_text}\n\n💬 **Спектр:** {greeting}", parse_mode='Markdown')
+            await update.message.reply_text(welcome_text, parse_mode='Markdown')
     
     async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = str(update.effective_chat.id)
