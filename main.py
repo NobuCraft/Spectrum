@@ -20,11 +20,10 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 
-# Для VK - исправленные импорты
+# Для VK - исправленные импорты для vkbottle 3.x
 from vkbottle import API, Bot
 from vkbottle.bot import Message
 from vkbottle_types.events import GroupEventType
-from vkbottle.framework.labeler import BotLabeler
 
 # Настройка логирования
 logging.basicConfig(
@@ -1795,7 +1794,6 @@ class GameBot:
         text = f"🚫 **СПИСОК ЗАБАНЕННЫХ** (стр. {page})\n\n"
         
         for i, ban in enumerate(bans, 1):
-            # Индексы: 0-id, 1-platform, 2-platform_id, 3-username, 4-reason, 5-banned_by, 6-banned_by_name, 7-ban_date, 8-ban_duration, 9-ban_until, 10-is_permanent, 11-is_active
             username = ban[3] or f"ID {ban[2]}"
             reason = ban[4] or "Не указана"
             banned_by = ban[6] or "Неизвестно"
@@ -1844,7 +1842,6 @@ class GameBot:
         text = f"🔇 **СПИСОК ЗАМУЧЕННЫХ** (стр. {page})\n\n"
         
         for i, mute in enumerate(mutes, 1):
-            # Индексы: 0-id, 1-platform, 2-platform_id, 3-username, 4-reason, 5-muted_by, 6-muted_by_name, 7-mute_date, 8-mute_duration, 9-mute_until, 10-is_active
             username = mute[3] or f"ID {mute[2]}"
             reason = mute[4] or "Не указана"
             muted_by = mute[6] or "Неизвестно"
@@ -1893,7 +1890,6 @@ class GameBot:
         text = f"⚠️ **СПИСОК ПРЕДУПРЕЖДЕНИЙ** (стр. {page})\n\n"
         
         for i, warn in enumerate(warns, 1):
-            # Индексы: 0-id, 1-platform, 2-platform_id, 3-username, 4-reason, 5-warned_by, 6-warned_by_name, 7-warn_date, 8-warn_count
             username = warn[3] or f"ID {warn[2]}"
             reason = warn[4] or "Не указана"
             warned_by = warn[6] or "Неизвестно"
