@@ -1603,50 +1603,50 @@ class GameBot:
     
     # ===================== АДМИН КОМАНДЫ =====================
     async def tg_cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ Использование: /mute [ник] [время] [причина]")
-            return
-        
-        target_name = context.args[0]
-        try:
-            minutes = int(context.args[1])
-        except:
-            await update.message.reply_text("❌ Время должно быть числом (минуты)")
-            return
-        
-        reason = " ".join(context.args[2:]) if len(context.args) > 2 else "Нарушение"
-        
-        target_user = db.get_user_by_username('tg', target_name)
-        
-        if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_id = target_user[2]
-        target_username = target_user[3] or target_user[4]
-        
-        db.mute_user('tg', target_id, target_username, minutes, reason, update.effective_user.id, update.effective_user.first_name)
-        
-        await update.message.reply_text(
-            f"🔇 **Пользователь замучен**\n\n"
-            f"👤 {target_username}\n"
-            f"⏱ Время: {minutes} мин\n"
-            f"💬 Причина: {reason}"
+    user_id = str(update.effective_user.id)
+    
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Использование: /mute [ник] [время] [причина]")
+        return
+    
+    target_name = context.args[0]
+    try:
+        minutes = int(context.args[1])
+    except:
+        await update.message.reply_text("❌ Время должно быть числом (минуты)")
+        return
+    
+    reason = " ".join(context.args[2:]) if len(context.args) > 2 else "Нарушение"
+    
+    target_user = db.get_user_by_username('tg', target_name)
+    
+    if not target_user:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_id = target_user[2]
+    target_username = target_user[3] or target_user[4]
+    
+    db.mute_user('tg', target_id, target_username, minutes, reason, update.effective_user.id, update.effective_user.first_name)
+    
+    await update.message.reply_text(
+        f"🔇 **Пользователь замучен**\n\n"
+        f"👤 {target_username}\n"
+        f"Время: {minutes} мин\n"
+        f"Причина: {reason}"
+    )
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text=f"🔇 Вы замучены на {minutes} минут.\nПричина: {reason}"
         )
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text=f"🔇 Вы замучены на {minutes} минут.\nПричина: {reason}"
-            )
-        except:
-            pass
+    except:
+        pass
     
     async def tg_cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.effective_user.id)
@@ -1726,45 +1726,45 @@ class GameBot:
             pass
     
     async def tg_cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'оператор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        if len(context.args) < 3:
-            await update.message.reply_text("❌ Использование: /ban [ник] [время] [причина]")
-            return
-        
-        target_name = context.args[0]
-        duration = context.args[1]
-        reason = " ".join(context.args[2:])
-        
-        target_user = db.get_user_by_username('tg', target_name)
-        
-        if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_id = target_user[2]
-        target_username = target_user[3] or target_user[4]
-        
-        db.ban_user('tg', target_id, target_username, reason, duration, update.effective_user.id, update.effective_user.first_name)
-        
-        await update.message.reply_text(
-            f"🚫 **Пользователь забанен**\n\n"
-            f"👤 {target_username}\n"
-⏱ Срок: {duration}\n"
-            f"💬 Причина: {reason}"
+    user_id = str(update.effective_user.id)
+    
+    if not db.has_privilege('tg', user_id, 'оператор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    if len(context.args) < 3:
+        await update.message.reply_text("❌ Использование: /ban [ник] [время] [причина]")
+        return
+    
+    target_name = context.args[0]
+    duration = context.args[1]
+    reason = " ".join(context.args[2:])
+    
+    target_user = db.get_user_by_username('tg', target_name)
+    
+    if not target_user:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_id = target_user[2]
+    target_username = target_user[3] or target_user[4]
+    
+    db.ban_user('tg', target_id, target_username, reason, duration, update.effective_user.id, update.effective_user.first_name)
+    
+    await update.message.reply_text(
+        f"🚫 **Пользователь забанен**\n\n"
+        f"👤 {target_username}\n"
+        f"Время: {duration}\n"
+        f"Причина: {reason}"
+    )
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text=f"🚫 Вы забанены.\nВремя: {duration}\nПричина: {reason}"
         )
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text=f"🚫 Вы забанены.\nСрок: {duration}\nПричина: {reason}"
-            )
-        except:
-            pass
+    except:
+        pass
     
     async def tg_cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = str(update.effective_user.id)
@@ -1800,55 +1800,41 @@ class GameBot:
             pass
     
     async def tg_cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        page = 1
-        if context.args:
-            try:
-                page = int(context.args[0])
-            except:
-                pass
-        
-        bans = db.get_banned_users(page, 10)
-        
-        if not bans:
-            await update.message.reply_text("📭 Список банов пуст")
-            return
-        
-        text = f"🚫 **СПИСОК ЗАБАНЕННЫХ** (стр. {page})\n\n"
-        
-        for i, ban in enumerate(bans, 1):
-            username = ban[3] or f"ID {ban[2]}"
-            reason = ban[4] or "Не указана"
-            banned_by = ban[6] or "Неизвестно"
-            ban_date = ban[7][:10] if ban[7] else "Неизвестно"
-            duration = "Навсегда" if ban[10] else ban[8]
-            
-            text += f"{i}. {username}\n"
-            text += f"   ⏱ {duration}\n"
-            text += f"   💬 {reason}\n"
-            text += f"   👮 {banned_by}\n"
-            text += f"   📅 {ban_date}\n\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
+    user_id = str(update.effective_user.id)
     
-    async def tg_cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    page = 1
+    if context.args:
+        try:
+            page = int(context.args[0])
+        except:
+            pass
+    
+    bans = db.get_banned_users(page, 10)
+    
+    if not bans:
+        await update.message.reply_text("📭 Список банов пуст")
+        return
+    
+    text = f"🚫 **СПИСОК ЗАБАНЕННЫХ** (стр. {page})\n\n"
+    
+    for i, ban in enumerate(bans, 1):
+        username = ban[3] or f"ID {ban[2]}"
+        reason = ban[4] or "Не указана"
+        banned_by = ban[6] or "Неизвестно"
+        ban_date = ban[7][:10] if ban[7] else "Неизвестно"
+        duration = "Навсегда" if ban[10] else ban[8]
         
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        page = 1
-        if context.args:
-            try:
-                page = int(context.args[0])
-            except:
-                pass
+        text += f"{i}. {username}\n"
+        text += f"   Время: {duration}\n"
+        text += f"   Причина: {reason}\n"
+        text += f"   Кто: {banned_by}\n"
+        text += f"   Дата: {ban_date}\n\n"
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
         
         mutes = db.get_muted_users(page, 10)
         
@@ -1874,39 +1860,39 @@ class GameBot:
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_warnlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
+    user_id = str(update.effective_user.id)
+    
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    page = 1
+    if context.args:
+        try:
+            page = int(context.args[0])
+        except:
+            pass
+    
+    warns = db.get_warned_users(page, 10)
+    
+    if not warns:
+        await update.message.reply_text("📭 Список предупреждений пуст")
+        return
+    
+    text = f"⚠️ **СПИСОК ПРЕДУПРЕЖДЕНИЙ** (стр. {page})\n\n"
+    
+    for i, warn in enumerate(warns, 1):
+        username = warn[3] or f"ID {warn[2]}"
+        reason = warn[4] or "Не указана"
+        warned_by = warn[6] or "Неизвестно"
+        warn_date = warn[7][:10] if warn[7] else "Неизвестно"
         
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        page = 1
-        if context.args:
-            try:
-                page = int(context.args[0])
-            except:
-                pass
-        
-        warns = db.get_warned_users(page, 10)
-        
-        if not warns:
-            await update.message.reply_text("📭 Список предупреждений пуст")
-            return
-        
-        text = f"⚠️ **СПИСОК ПРЕДУПРЕЖДЕНИЙ** (стр. {page})\n\n"
-        
-        for i, warn in enumerate(warns, 1):
-            username = warn[3] or f"ID {warn[2]}"
-            reason = warn[4] or "Не указана"
-            warned_by = warn[6] or "Неизвестно"
-            warn_date = warn[7][:10] if warn[7] else "Неизвестно"
-            
-            text += f"{i}. {username}\n"
-            text += f"   💬 {reason}\n"
-            text += f"   👮 {warned_by}\n"
-            text += f"   📅 {warn_date}\n\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
+        text += f"{i}. {username}\n"
+        text += f"   Причина: {reason}\n"
+        text += f"   Кто: {warned_by}\n"
+        text += f"   Дата: {warn_date}\n\n"
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
     
     # ===================== РУССКАЯ РУЛЕТКА =====================
     async def tg_cmd_rr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
