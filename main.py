@@ -13,19 +13,46 @@ import time
 import hashlib
 import base64
 import math
-import sys
-import fcntl
 import os
+import sys
+import time
+import socket
 
-# Защита от множественного запуска
-lock_file = '/tmp/spectrum_bot.lock'
-try:
-    lock_fd = open(lock_file, 'w')
-    fcntl.lockf(lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    print("✅ Бот запущен (только один экземпляр)")
-except IOError:
-    print("❌ Бот уже запущен! Завершите предыдущий экземпляр.")
-    sys.exit(1)
+def prevent_multiple_instances():
+    """Предотвращает запуск нескольких экземпляров бота"""
+    
+    # Метод 1: Проверка через файл
+    lock_file = '/tmp/spectrum_bot.lock'
+    if os.path.exists(lock_file):
+        try:
+            with open(lock_file, 'r') as f:
+                old_pid = int(f.read().strip())
+            # Проверяем, жив ли процесс
+            os.kill(old_pid, 0)
+            print(f"❌ Бот уже запущен (PID: {old_pid})")
+            print("💡 Подождите 10 секунд или перезапустите контейнер")
+            time.sleep(10)
+            sys.exit(1)
+        except (ProcessLookupError, ValueError):
+            # Процесс мертв, удаляем старый lock-файл
+            os.remove(lock_file)
+    
+    # Создаем новый lock-файл
+    with open(lock_file, 'w') as f:
+        f.write(str(os.getpid()))
+    
+    # Метод 2: Проверка через сокет (для надежности)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        sock.bind(('localhost', 12345))
+    except socket.error:
+        print("❌ Порт 12345 уже занят (бот уже запущен)")
+        sys.exit(1)
+    
+    print("✅ Бот запущен в единственном экземпляре")
+
+# Вызываем защиту
+prevent_multiple_instances()
 
 # Для Telegram
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
