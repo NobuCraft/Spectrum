@@ -26,13 +26,13 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply = await context.bot_data['ai'].ask(msg)
     await update.message.reply_text(f"🤖 {reply}")
 
-async def main():
+def main():
+    print("🚀 Запускаем бота...")
     app = Application.builder().token(TELEGRAM_TOKEN).build()
     app.bot_data['ai'] = Gemini(GEMINI_KEY)
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-    print("✅ Бот запущен!")
-    await app.run_polling()
+    print("✅ Бот запущен! Иди в Telegram и пиши ему!")
+    app.run_polling()
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    
+    main()
