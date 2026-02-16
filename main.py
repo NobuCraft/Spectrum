@@ -13,12 +13,9 @@ import time
 import hashlib
 import base64
 import math
-from io import BytesIO
-from PIL import Image, ImageDraw, ImageFont
-import textwrap
 
 # Для Telegram
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes
@@ -100,15 +97,81 @@ BOSSES = [
     {"id": 6, "name": "Бог разрушения", "level": 30, "health": 30000, "max_health": 30000, "damage": 150, "reward": 5000, "emoji": "💀"}
 ]
 
-# Цвета для оформления
-COLORS = {
-    "primary": "#9b59b6",    # Фиолетовый
-    "success": "#2ecc71",    # Зеленый
-    "error": "#e74c3c",      # Красный
-    "info": "#3498db",       # Синий
-    "warning": "#f39c12",    # Оранжевый
-    "dark": "#2c3e50"        # Темно-синий
-}
+# ===================== AI КЛАСС =====================
+class SimpleAI:
+    """Простой AI для общения с запасными вариантами"""
+    
+    def __init__(self):
+        self.api_token = "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"
+        self.contexts = {}
+        self.use_api = True
+        self.fallback_responses = {
+            "привет": ["Привет!", "Здравствуй!", "Хай!"],
+            "как дела": ["Хорошо! А у тебя?", "Отлично!", "Нормально"],
+            "что делаешь": ["Общаюсь с тобой", "Отвечаю на вопросы", "Думаю о жизни"],
+            "пока": ["До встречи!", "Пока!", "Удачи!"],
+            "спасибо": ["Пожалуйста!", "Не за что!", "Рад помочь!"],
+            "кто ты": ["Я бот Спектр", "Твой помощник", "Искусственный интеллект"],
+            "default": ["Интересно...", "Понятно", "Расскажи подробнее", "Давай поговорим", "Хорошо"]
+        }
+        print("🤖 AI инициализирован")
+    
+    async def get_response(self, user_id: int, message: str) -> str:
+        """Получить ответ от AI с запасными вариантами"""
+        message_lower = message.lower().strip()
+        
+        # Пробуем получить ответ через API
+        if self.use_api:
+            api_response = await self._try_api_response(message)
+            if api_response:
+                return api_response
+        
+        # Если API не работает, используем локальные ответы
+        return self._get_local_response(message_lower)
+    
+    async def _try_api_response(self, message: str) -> Optional[str]:
+        """Попытка получить ответ через Hugging Face API"""
+        try:
+            API_URL = "https://api-inference.huggingface.co/models/mistralai/Mistral-7B-Instruct-v0.1"
+            headers = {"Authorization": f"Bearer {self.api_token}"}
+            
+            prompt = f"<s>[INST] {message} [/INST]"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(API_URL, headers=headers, json={
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": 100,
+                        "temperature": 0.7,
+                        "top_p": 0.95,
+                        "do_sample": True
+                    }
+                }, timeout=10) as resp:
+                    
+                    if resp.status == 200:
+                        result = await resp.json()
+                        if isinstance(result, list) and len(result) > 0:
+                            text = result[0].get("generated_text", "")
+                            response = text.split("[/INST]")[-1] if "[/INST]" in text else text
+                            if response and len(response) > 5:
+                                return response.strip()
+                    return None
+        except:
+            return None
+    
+    def _get_local_response(self, message: str) -> str:
+        """Локальные ответы когда API не работает"""
+        # Проверяем ключевые слова
+        for key, responses in self.fallback_responses.items():
+            if key in message:
+                return random.choice(responses)
+        
+        # Случайный ответ по умолчанию
+        return random.choice(self.fallback_responses["default"])
+    
+    def get_help_response(self) -> str:
+        """Ответ на /help от AI"""
+        return "Я могу ответить на любой вопрос! Просто напиши мне сообщение."
 
 # ===================== БАЗА ДАННЫХ =====================
 class Database:
@@ -877,76 +940,6 @@ class Database:
         self.conn.commit()
         
         return result
-
-    # ===================== HUGGING FACE AI =====================
-class HuggingChat:
-    def __init__(self):
-        self.api_token = "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"
-        self.contexts = {}
-        self.models = {
-            "mistral": "mistralai/Mistral-7B-Instruct-v0.1",
-            "zephyr": "HuggingFaceH4/zephyr-7b-beta",
-            "phi3": "microsoft/Phi-3-mini-4k-instruct",
-            "gemma": "google/gemma-2b-it",
-        }
-        self.current_model = "mistral"
-        print("🤗 Hugging Face AI инициализирован")
-    
-    async def get_response(self, user_id: int, message: str) -> str:
-        try:
-            API_URL = f"https://api-inference.huggingface.co/models/{self.models[self.current_model]}"
-            headers = {"Authorization": f"Bearer {self.api_token}"}
-            
-            if self.current_model == "mistral":
-                prompt = f"<s>[INST] {message} [/INST]"
-            elif self.current_model == "zephyr":
-                prompt = f"<|user|>\n{message}\n<|assistant|>\n"
-            else:
-                prompt = message
-            
-            async with aiohttp.ClientSession() as session:
-                async with session.post(API_URL, headers=headers, json={
-                    "inputs": prompt,
-                    "parameters": {
-                        "max_new_tokens": 200,
-                        "temperature": 0.7,
-                        "top_p": 0.95,
-                        "do_sample": True
-                    }
-                }, timeout=30) as resp:
-                    
-                    if resp.status == 200:
-                        result = await resp.json()
-                        if isinstance(result, list) and len(result) > 0:
-                            text = result[0].get("generated_text", "")
-                            if self.current_model == "mistral":
-                                text = text.split("[/INST]")[-1] if "[/INST]" in text else text
-                            elif self.current_model == "zephyr":
-                                text = text.split("<|assistant|>")[-1] if "<|assistant|>" in text else text
-                            return text.strip() or "😊 Понятно!"
-                    elif resp.status == 503:
-                        await asyncio.sleep(2)
-                        return await self.get_response(user_id, message)
-                    
-                    return self._get_fallback(message)
-        except:
-            return self._get_fallback(message)
-    
-    def _get_fallback(self, message: str) -> str:
-        responses = [
-            "🤖 Я тебя слушаю!",
-            "😊 Интересно...",
-            "✨ Понятно!",
-            "🎯 Хорошо!",
-            "💭 Расскажи подробнее"
-        ]
-        return random.choice(responses)
-    
-    async def change_model(self, model_name: str) -> bool:
-        if model_name in self.models:
-            self.current_model = model_name
-            return True
-        return False
     
     # ===================== КРЕСТИКИ-НОЛИКИ 3D =====================
     def ttt_create_game(self, player_x, player_o):
@@ -1125,7 +1118,6 @@ class HuggingChat:
             self.cursor.execute("UPDATE mafia_games SET players = ? WHERE id = ?", (json.dumps(players), game_id))
             self.conn.commit()
             
-            # Проверяем условия победы
             roles = json.loads(game['roles'])
             alive_mafia = sum(1 for p in players if roles.get(p) == 'mafia')
             alive_civilians = sum(1 for p in players if roles.get(p) != 'mafia')
@@ -1262,7 +1254,6 @@ class HuggingChat:
 db = Database()
 
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
-# ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
         self.db = db
@@ -1272,7 +1263,7 @@ class GameBot:
         self.last_activity = defaultdict(dict)
         self.spam_tracker = defaultdict(list)
         self.mafia_games = {}
-        self.hf_ai = HuggingChat()  # 👈 Добавьте эту строку
+        self.ai = SimpleAI()  # Инициализация AI
         
         if TELEGRAM_TOKEN:
             self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -1284,96 +1275,6 @@ class GameBot:
             self.vk_api = API(VK_TOKEN)
             self.setup_vk_handlers()
             logger.info("✅ VK бот инициализирован")
-    
-    # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
-    def setup_tg_handlers(self):
-        # ... весь ваш код setup_tg_handlers ...
-        pass
-    
-    # ===================== TELEGRAM КОМАНДЫ =====================
-    async def tg_cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # ... ваш код ...
-        pass
-    
-    # ... все остальные методы вашего бота ...
-    
-    # ===================== ОБРАБОТКА СООБЩЕНИЙ =====================
-    async def tg_handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        platform_id = str(user.id)
-        message_text = update.message.text
-        
-        user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
-        db.update_activity('tg', platform_id)
-        db.add_message_count('tg', platform_id)
-        db.update_activity_data('tg', platform_id)
-        
-        # Проверка на бан
-        if db.is_banned('tg', platform_id):
-            return
-        
-        # Проверка на мут
-        if db.is_muted('tg', platform_id):
-            mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
-            remaining = mute_until - datetime.datetime.now()
-            minutes = remaining.seconds // 60
-            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
-            return
-        
-        # 🤖 AI ОТВЕТЫ НА ОБЫЧНЫЕ СООБЩЕНИЯ
-        if not message_text.startswith('/'):
-            await update.message.chat.send_action(action="typing")
-            response = await self.hf_ai.get_response(user.id, message_text)
-            await update.message.reply_text(f"🤗 **Hugging Face:** {response}", parse_mode='Markdown')
-            return
-        
-        # Проверка на длительное молчание
-        last_msg_time = self.last_activity['tg'].get(platform_id, 0)
-        current_time = time.time()
-        
-        if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
-            await update.message.reply_text(
-                f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
-                f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
-                f"Поприветствуйте молчуна! 👏"
-            )
-        
-        self.last_activity['tg'][platform_id] = current_time
-        
-        # Приветствие для новых
-        if user_data['messages_count'] == 1:
-            await update.message.reply_text(f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.")
-    
-    async def tg_handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # ... ваш код ...
-        pass
-    
-    async def tg_handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # ... ваш код ...
-        pass
-    
-    # ===================== ОБРАБОТКА КНОПОК =====================
-    async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        # ... ваш код ...
-        pass
-    
-    # ===================== VK ОБРАБОТЧИКИ =====================
-    def setup_vk_handlers(self):
-        # ... ваш код ...
-        pass
-    
-    async def vk_handle_message(self, message: Message):
-        # ... ваш код ...
-        pass
-    
-    # ===================== ЗАПУСК =====================
-    async def run(self):
-        # ... ваш код ...
-        pass
-    
-    async def close(self):
-        # ... ваш код ...
-        pass
     
     # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
     def setup_tg_handlers(self):
@@ -1496,24 +1397,25 @@ class GameBot:
         db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
         db.update_activity('tg', platform_id)
         
-        content = (
-            f"👋 <b>Привет, {user.first_name}!</b>\n\n"
-            f"📌 <b>Твой профиль:</b>\n"
-            f"├ ID: <code>{user.id}</code>\n"
-            f"├ Монеты: {db.get_user('tg', platform_id)['coins']} 🪙\n"
-            f"└ Уровень: {db.get_user('tg', platform_id)['level']}\n\n"
-            f"<b>Основные команды:</b>\n"
-            f"├ 👤 /profile — профиль\n"
-            f"├ 👾 /boss — битва с боссом\n"
-            f"├ 💰 /shop — магазин\n"
-            f"├ 💎 /donate — привилегии\n"
-            f"├ 📊 /top — топ игроков\n"
-            f"├ 🛡️ /staff — модераторы\n"
-            f"└ 📚 /help — все команды\n\n"
-            f"👑 Владелец: {OWNER_USERNAME_TG}"
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     ⚔️ **СПЕКТР БОТ** ⚔️     ║\n"
+            "╚══════════════════════════════╝\n\n"
+            f"🌟 **Привет, {user.first_name}!**\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "        **ОСНОВНЫЕ КОМАНДЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "👤 /profile — твой профиль\n"
+            "👾 /boss — битва с боссом\n"
+            "💰 /shop — магазин\n"
+            "💎 /donate — привилегии\n"
+            "📊 /top — топ игроков\n"
+            "👥 /players — онлайн\n"
+            "🛡️ /staff — модераторы\n"
+            "📚 /help — все команды\n\n"
+            f"👑 **Владелец:** {OWNER_USERNAME_TG}\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         )
-        
-        text = self.format_text("⚔️ СПЕКТР БОТ", content, "primary")
         
         keyboard = [
             [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
@@ -1529,14 +1431,12 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         platform_id = str(user.id)
         db.update_activity('tg', platform_id)
-        
-        text = self.format_text("🎮 ГЛАВНОЕ МЕНЮ", "Выберите раздел:", "primary")
         
         keyboard = [
             [InlineKeyboardButton("👤 Профиль", callback_data="profile"),
@@ -1554,87 +1454,118 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
     
     async def tg_cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         platform_id = str(user.id)
         db.update_activity('tg', platform_id)
         
-        content = (
-            "<b>🔰 ОСНОВНЫЕ</b>\n"
-            "├ /start — запуск бота\n"
-            "├ /menu — главное меню\n"
-            "├ /help — эта справка\n"
-            "├ /profile — твой профиль\n"
-            "├ /whoami — информация о себе\n"
-            "├ /top — топ игроков\n"
-            "└ /players — количество игроков\n\n"
+        ai_help = self.ai.get_help_response()
+        
+        text = (
+            "📚 **СПРАВОЧНИК КОМАНД**\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🤖 **ОБЩЕНИЕ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• {ai_help}\n"
+            "• Просто напиши любое сообщение — я отвечу!\n\n"
             
-            "<b>⚔️ БИТВА С БОССОМ</b>\n"
-            "├ /boss — информация о боссе\n"
-            "├ /boss_fight [id] — ударить босса\n"
-            "└ /regen — восстановить здоровье\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔰 **ОСНОВНЫЕ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /start — запуск бота\n"
+            "• /menu — главное меню\n"
+            "• /help — эта справка\n"
+            "• /profile — твой профиль\n"
+            "• /whoami — информация о себе\n"
+            "• /top — топ игроков\n"
+            "• /players — количество игроков\n\n"
             
-            "<b>💰 ЭКОНОМИКА</b>\n"
-            "├ /shop — магазин\n"
-            "├ /donate — привилегии\n"
-            "├ /pay [ник] [сумма] — перевести монеты\n"
-            "└ /cmd [привилегия] — команды доната\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚔️ **БИТВА С БОССОМ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /boss — информация о боссе\n"
+            "• /boss_fight [id] — ударить босса\n"
+            "• /regen — восстановить здоровье\n\n"
             
-            "<b>🛡️ МОДЕРАЦИЯ</b>\n"
-            "├ /staff — список модераторов\n"
-            "├ /moder [ссылка] — назначить модератором\n"
-            "├ /promote [ссылка] — повысить ранг\n"
-            "├ /demote [ссылка] — понизить ранг\n"
-            "└ /remove_moder [ссылка] — снять модератора\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💰 **ЭКОНОМИКА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /shop — магазин\n"
+            "• /donate — привилегии\n"
+            "• /pay [ник] [сумма] — перевести монеты\n"
+            "• /cmd [привилегия] — команды доната\n\n"
             
-            "<b>⚠️ ПРЕДУПРЕЖДЕНИЯ</b>\n"
-            "├ /warn [ссылка] [время] [причина] — варн\n"
-            "├ /warns [ссылка] — список варнов\n"
-            "├ /my_warns — мои варны\n"
-            "├ /warnlist — список варнов\n"
-            "├ /remove_warn [ссылка] — снять варн\n"
-            "└ /clear_warns [ссылка] — снять все варны\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🛡️ **МОДЕРАЦИЯ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /staff — список модераторов\n"
+            "• /moder [ссылка] — назначить модератором\n"
+            "• /promote [ссылка] — повысить ранг\n"
+            "• /demote [ссылка] — понизить ранг\n"
+            "• /remove_moder [ссылка] — снять модератора\n\n"
             
-            "<b>🔇 МУТ И БАН</b>\n"
-            "├ /mute [ссылка] [время] [причина] — мут\n"
-            "├ /unmute [ссылка] — снять мут\n"
-            "├ /mutelist — список замученных\n"
-            "├ /check_mute [ссылка] — проверить мут\n"
-            "├ /ban [ссылка] [время] [причина] — бан\n"
-            "├ /unban [ссылка] — разбан\n"
-            "└ /banlist — список банов\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚠️ **ПРЕДУПРЕЖДЕНИЯ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /warn [ссылка] [время] [причина] — варн\n"
+            "• /warns [ссылка] — список варнов\n"
+            "• /my_warns — мои варны\n"
+            "• /warnlist — список варнов\n"
+            "• /remove_warn [ссылка] — снять варн\n"
+            "• /clear_warns [ссылка] — снять все варны\n\n"
             
-            "<b>🎮 ИГРЫ</b>\n"
-            "├ /rr — русская рулетка\n"
-            "├ /ttt — крестики-нолики 3D\n"
-            "├ /mafia — мафия\n"
-            "├ /minesweeper [сложность] — сапёр\n"
-            "└ /rps — камень-ножницы-бумага\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🔇 **МУТ И БАН**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /mute [ссылка] [время] [причина] — мут\n"
+            "• /unmute [ссылка] — снять мут\n"
+            "• /mutelist — список замученных\n"
+            "• /check_mute [ссылка] — проверить мут\n"
+            "• /ban [ссылка] [время] [причина] — бан\n"
+            "• /unban [ссылка] — разбан\n"
+            "• /banlist — список банов\n\n"
             
-            "<b>📌 ЗАКЛАДКИ И НАГРАДЫ</b>\n"
-            "├ /bookmark [описание] — создать закладку\n"
-            "├ /bookmarks — список закладок\n"
-            "├ /award [ник] [название] — дать награду\n"
-            "└ /awards — список наград\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎮 **ИГРЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /rr — русская рулетка\n"
+            "• /ttt — крестики-нолики 3D\n"
+            "• /mafia — мафия\n"
+            "• /minesweeper [сложность] — сапёр\n"
+            "• /rps — камень-ножницы-бумага\n\n"
             
-            "<b>📖 ПРАВИЛА</b>\n"
-            "├ /rules — показать правила\n"
-            "└ /set_rules [текст] — установить правила\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📌 **ЗАКЛАДКИ И НАГРАДЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /bookmark [описание] — создать закладку\n"
+            "• /bookmarks — список закладок\n"
+            "• /award [ник] [название] — дать награду\n"
+            "• /awards — список наград\n\n"
             
-            "<b>ℹ️ ПОЛЕЗНОЕ</b>\n"
-            "├ /info [событие] — правдивость события\n"
-            "├ /holidays — праздники сегодня\n"
-            "├ /fact — случайный факт\n"
-            "├ /wisdom — мудрая цитата\n"
-            "├ /population — население Земли\n"
-            "└ /bitcoin — курс биткоина"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📖 **ПРАВИЛА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /rules — показать правила\n"
+            "• /set_rules [текст] — установить правила\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "ℹ️ **ПОЛЕЗНОЕ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• /info [событие] — правдивость события\n"
+            "• /holidays — праздники сегодня\n"
+            "• /fact — случайный факт\n"
+            "• /wisdom — мудрая цитата\n"
+            "• /population — население Земли\n"
+            "• /bitcoin — курс биткоина"
         )
         
-        text = self.format_text("📚 СПРАВОЧНИК КОМАНД", content, "info")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1645,20 +1576,14 @@ class GameBot:
         db.update_activity_data('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 **Вы забанены в боте**")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"🔇 Вы замучены. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 **Вы замучены**\nОсталось: {minutes} мин")
             return
         
         mod_rank = user_data.get('mod_rank', 0)
@@ -1687,43 +1612,53 @@ class GameBot:
             days = delta.days % 30
             first_seen = f"{first.strftime('%d.%m.%Y')} ({years} г {months} мес {days} дн)"
         
-        content = (
-            f"<b>{user_data.get('nickname') or user.first_name}</b> {privilege_text}\n"
-            f"{rank_name}\n"
-            f"ID: <code>{user.id}</code>\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            f"║      👤 **ПРОФИЛЬ** 👤      ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            f"<b>РЕСУРСЫ</b>\n"
-            f"├ 🪙 Монеты: {user_data['coins']:,}\n"
-            f"├ 💎 Алмазы: {user_data['diamonds']:,}\n"
-            f"└ 💀 Черепки: {user_data['rr_money']}\n\n"
+            f"**{user_data.get('nickname') or user.first_name}**\n"
+            f"{rank_name}{privilege_text}\n"
+            f"ID: {user.id}\n\n"
             
-            f"<b>ХАРАКТЕРИСТИКИ</b>\n"
-            f"├ ❤️ Здоровье: {user_data['health']}/{user_data['max_health']}\n"
-            f"├ ⚔️ Урон: {user_data['damage']}\n"
-            f"├ ⚡ Энергия: {user_data['energy']}\n"
-            f"├ 📊 Уровень: {user_data['level']}\n"
-            f"└ 👾 Боссов убито: {user_data['boss_kills']}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "        **РЕСУРСЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• 🪙 Монеты: {user_data['coins']:,}\n"
+            f"• 💎 Алмазы: {user_data['diamonds']:,}\n"
+            f"• 💀 Черепки: {user_data['rr_money']}\n\n"
             
-            f"<b>СТАТИСТИКА ИГР</b>\n"
-            f"├ 🔪 Мафия: {user_data['mafia_wins']}/{user_data['mafia_games']}\n"
-            f"├ ✊ КНБ: {user_data['rps_wins']}-{user_data['rps_losses']}-{user_data['rps_draws']}\n"
-            f"├ ⭕ TTT: {user_data['ttt_wins']}-{user_data['ttt_losses']}-{user_data['ttt_draws']}\n"
-            f"├ 💣 Рулетка: {user_data['rr_wins']}-{user_data['rr_losses']}\n"
-            f"└ 💥 Сапёр: {user_data['minesweeper_wins']}/{user_data['minesweeper_games']}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "     **ХАРАКТЕРИСТИКИ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• ❤️ Здоровье: {user_data['health']}/{user_data['max_health']}\n"
+            f"• ⚔️ Урон: {user_data['damage']}\n"
+            f"• ⚡ Энергия: {user_data['energy']}\n"
+            f"• 📊 Уровень: {user_data['level']}\n"
+            f"• 👾 Боссов убито: {user_data['boss_kills']}\n\n"
             
-            f"<b>АКТИВНОСТЬ</b>\n"
-            f"├ 📝 Сообщений: {user_data['messages_count']}\n"
-            f"├ ⌨️ Команд: {user_data['commands_used']}\n"
-            f"├ ⭐ Репутация: {user_data['reputation']}\n"
-            f"├ ⚠️ Варнов: {user_data['warns']}\n"
-            f"├ ⏱ Последний визит: {last_activity}\n"
-            f"└ 📅 Первое появление: {first_seen}"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "     **СТАТИСТИКА ИГР**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• 🔪 Мафия: {user_data['mafia_wins']}/{user_data['mafia_games']}\n"
+            f"• ✊ КНБ: {user_data['rps_wins']}-{user_data['rps_losses']}-{user_data['rps_draws']}\n"
+            f"• ⭕ TTT: {user_data['ttt_wins']}-{user_data['ttt_losses']}-{user_data['ttt_draws']}\n"
+            f"• 💣 Рулетка: {user_data['rr_wins']}-{user_data['rr_losses']}\n"
+            f"• 💥 Сапёр: {user_data['minesweeper_wins']}/{user_data['minesweeper_games']}\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "      **АКТИВНОСТЬ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"• 📝 Сообщений: {user_data['messages_count']}\n"
+            f"• ⌨️ Команд: {user_data['commands_used']}\n"
+            f"• ⭐ Репутация: {user_data['reputation']}\n"
+            f"• ⚠️ Варнов: {user_data['warns']}\n"
+            f"• ⏱ Последний визит: {last_activity}\n"
+            f"• 📅 Первое появление: {first_seen}"
         )
         
         if user_data.get('description'):
-            content += f"\n\n📝 <b>О себе:</b> {user_data['description']}"
-        
-        text = self.format_text("👤 ПРОФИЛЬ ИГРОКА", content, "primary")
+            text += f"\n\n📝 **О себе:** {user_data['description']}"
         
         keyboard = [
             [InlineKeyboardButton("🏅 Награды", callback_data="awards"),
@@ -1732,7 +1667,7 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_whoami(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1750,9 +1685,9 @@ class GameBot:
         awards = db.get_awards('tg', platform_id)
         awards_text = ""
         if awards:
-            awards_text = "\n<b>🏅 Награды:</b>\n"
+            awards_text = "\n🏅 **Награды:**\n"
             for award in awards[:3]:
-                awards_text += f"├ {award[3]}\n"
+                awards_text += f"   • {award[3]}\n"
         
         first_seen = "Неизвестно"
         if user_data.get('first_seen'):
@@ -1774,85 +1709,66 @@ class GameBot:
             else:
                 last_activity = f"{delta.seconds // 60} мин назад"
         
-        # Данные для диаграммы активности
-        activity_data = json.loads(user_data.get('activity_data', '{}'))
-        if activity_data:
-            today = datetime.datetime.now().strftime("%Y-%m-%d")
-            week_days = []
-            for i in range(6, -1, -1):
-                day = (datetime.datetime.now() - datetime.timedelta(days=i)).strftime("%Y-%m-%d")
-                count = activity_data.get(day, 0)
-                week_days.append(count)
+        text = (
+            f"╔══════════════════════════════╗\n"
+            f"║        👤 **КТО Я** 👤       ║\n"
+            f"╚══════════════════════════════╝\n\n"
             
-            max_count = max(week_days) if week_days else 1
-            chart = "\n<b>📊 Активность за неделю:</b>\n"
-            days = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"]
-            for i, count in enumerate(week_days):
-                bar_length = int((count / max_count) * 10) if max_count > 0 else 0
-                bar = "█" * bar_length + "░" * (10 - bar_length)
-                chart += f"├ {days[i]}: {bar} {count}\n"
-        else:
-            chart = "\n📊 Нет данных об активности"
-        
-        content = (
-            f"<b>{user.first_name}</b> {privilege_text}\n"
-            f"{rank_name}\n"
-            f"ID: <code>{user.id}</code>\n\n"
-            
-            f"<b>СТАТИСТИКА</b>\n"
-            f"├ ✨ Репутация: {user_data['reputation']} | ➕ {user_data['reputation_given']}\n"
-            f"├ ⚠️ Варнов: {user_data['warns']}\n"
-            f"├ 📅 Первое появление: {first_seen}\n"
-            f"└ ⏱ Последний актив: {last_activity}\n\n"
-            
-            f"<b>АКТИВНОСТЬ</b>\n"
-            f"├ 📝 Сообщений: {user_data['messages_count']}\n"
-            f"├ ⌨️ Команд: {user_data['commands_used']}\n"
-            f"└ 🎮 Игр: {user_data['games_played']}\n"
+            f"Это {user.first_name}\n"
+            f"{rank_name}{privilege_text}\n"
+            f"Репутация: ✨ {user_data['reputation']} | ➕ {user_data['reputation_given']}\n"
+            f"⚠️ Варнов: {user_data['warns']}\n"
+            f"Первое появление: {first_seen}\n"
+            f"Последний актив: {last_activity}\n"
+            f"Активность: {user_data['messages_count']} сообщ | {user_data['commands_used']} команд | {user_data['games_played']} игр"
             f"{awards_text}"
-            f"{chart}"
         )
-        
-        text = self.format_text("👤 КТО Я", content, "info")
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         top_coins = db.get_top("coins", 10)
         top_level = db.get_top("level", 10)
         top_boss = db.get_top("boss_kills", 10)
         
-        content = ""
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║      🏆 **ТОП ИГРОКОВ**      ║\n"
+            "╚══════════════════════════════╝\n\n"
+        )
         
-        content += "<b>💰 ПО МОНЕТАМ</b>\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "💰 **ПО МОНЕТАМ**\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         for i, (username, first_name, value) in enumerate(top_coins, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            content += f"{medal} {name} — {value:,} 🪙\n"
+            text += f"{medal} {name} — {value:,} 🪙\n"
         
-        content += "\n<b>📊 ПО УРОВНЮ</b>\n"
+        text += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "📊 **ПО УРОВНЮ**\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         for i, (username, first_name, value) in enumerate(top_level, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            content += f"{medal} {name} — {value} ур.\n"
+            text += f"{medal} {name} — {value} ур.\n"
         
-        content += "\n<b>👾 ПО УБИЙСТВУ БОССОВ</b>\n"
+        text += "\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        text += "👾 **ПО УБИЙСТВУ БОССОВ**\n"
+        text += "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         for i, (username, first_name, value) in enumerate(top_boss, 1):
             name = first_name or username or f"Игрок {i}"
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
-            content += f"{medal} {name} — {value} боссов\n"
+            text += f"{medal} {name} — {value} боссов\n"
         
-        text = self.format_text("🏆 ТОП ИГРОКОВ", content, "primary")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_players(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         count = db.get_player_count()
-        text = self.format_text("👥 ОНЛАЙН", f"Активных игроков: <b>{count}</b>", "info")
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"👥 **Активных игроков:** {count}", parse_mode='Markdown')
     
     # ===================== КОМАНДЫ БОССОВ =====================
     async def tg_cmd_boss(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1863,53 +1779,51 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"🔇 Вы замучены. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
             return
         
         boss = db.get_boss()
         
         if not boss:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "👾 Все боссы повержены! Ожидайте возрождения...", "warning"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("👾 Все боссы повержены! Ожидайте возрождения...")
             db.respawn_bosses()
             boss = db.get_boss()
         
         player_damage = user_data['damage'] * (1 + user_data['level'] * 0.1)
         
-        content = (
-            f"{boss['boss_emoji']} <b>{boss['boss_name']}</b> (Ур. {boss['boss_level']})\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            f"║   👾 **БИТВА С БОССОМ** 👾   ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            f"<b>ХАРАКТЕРИСТИКИ БОССА</b>\n"
-            f"├ 💀 Здоровье: {boss['boss_health']} / {boss['boss_max_health']} HP\n"
-            f"├ ⚔️ Урон: {boss['boss_damage']} HP\n"
-            f"└ 🪙 Награда: {boss['boss_reward']}\n\n"
+            f"{boss['boss_emoji']} **{boss['boss_name']}**\n"
+            f"📊 Уровень: {boss['boss_level']}\n\n"
             
-            f"<b>ТВОИ ХАРАКТЕРИСТИКИ</b>\n"
-            f"├ ❤️ Здоровье: {user_data['health']} HP\n"
-            f"├ ⚔️ Урон: {player_damage:.1f} ({user_data['damage']} базовый)\n"
-            f"└ 📊 Сила: {((player_damage / boss['boss_damage']) * 100):.1f}%\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ХАРАКТЕРИСТИКИ БОССА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💀 Здоровье: {boss['boss_health']} / {boss['boss_max_health']} HP\n"
+            f"⚔️ Урон: {boss['boss_damage']} HP\n"
+            f"💰 Награда: {boss['boss_reward']} 🪙\n\n"
             
-            f"<b>ДЕЙСТВИЯ</b>\n"
-            f"├ /boss_fight {boss['id']} — ударить босса\n"
-            f"└ /regen — восстановить здоровье"
+            "**ТВОИ ХАРАКТЕРИСТИКИ**\n"
+            f"❤️ Здоровье: {user_data['health']} HP\n"
+            f"🗡 Урон: {player_damage:.1f} ({user_data['damage']} базовый)\n"
+            f"📊 Сила: {((player_damage / boss['boss_damage']) * 100):.1f}%\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ДЕЙСТВИЯ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👊 /boss_fight {boss['id']} - ударить босса\n"
+            f"➕ /regen - восстановить здоровье"
         )
-        
-        text = self.format_text("👾 БИТВА С БОССОМ", content, "primary")
         
         keyboard = [
             [InlineKeyboardButton("👊 Ударить", callback_data=f"boss_fight_{boss['id']}"),
@@ -1918,60 +1832,42 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_boss_fight(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         platform_id = str(user.id)
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /boss_fight [id]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /boss_fight [id]")
             return
         
         try:
             boss_id = int(context.args[0])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Неправильный ID", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Неправильный ID")
             return
         
         user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"🔇 Вы замучены. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
             return
         
         if user_data['health'] <= 0:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "💀 У вас нет здоровья! Используйте /regen", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("💀 У вас нет здоровья! Используйте /regen")
             return
         
         if user_data['energy'] < 5:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "⚡ Недостаточно энергии! Нужно 5 ⚡", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("⚡ Недостаточно энергии! Нужно 5 ⚡")
             return
         
         db.add_coins('tg', platform_id, -5, "energy")
@@ -1980,20 +1876,16 @@ class GameBot:
         
         boss = db.get_boss()
         if not boss or boss['id'] != boss_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Босс не найден или уже повержен", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Босс не найден или уже повержен")
             return
         
         killed, health_left = db.damage_boss(boss_id, player_damage)
         db.damage_user('tg', platform_id, boss['boss_damage'])
         
-        content = (
-            f"<b>{boss['boss_name']}</b>\n\n"
-            f"├ 👊 Твой урон: {player_damage} HP\n"
-            f"└ ⚔️ Урон босса: {boss['boss_damage']} HP\n\n"
-        )
+        text = f"⚔️ **БИТВА С БОССОМ** ⚔️\n\n"
+        text += f"**{boss['boss_name']}**\n\n"
+        text += f"• **Твой урон:** {player_damage} HP\n"
+        text += f"• **Урон босса:** {boss['boss_damage']} HP\n\n"
         
         if killed:
             reward = boss['boss_reward']
@@ -2003,24 +1895,27 @@ class GameBot:
             
             next_boss = db.get_next_boss()
             
-            content += f"🎉 <b>БОСС ПОВЕРЖЕН!</b>\n"
-            content += f"├ 🪙 Награда: {reward}\n"
-            content += f"└ ✨ Опыт: +{boss['boss_level'] * 10}\n\n"
+            text += f"🎉 **БОСС ПОВЕРЖЕН!**\n"
+            text += f"💰 **Награда:** {reward} 🪙\n"
+            text += f"✨ **Опыт:** +{boss['boss_level'] * 10}\n\n"
             
             if next_boss:
-                content += f"👾 Следующий босс: {next_boss['boss_name']}"
+                text += f"👾 **Следующий босс:** {next_boss['boss_name']}"
             else:
-                content += f"👾 Все боссы побеждены! Ожидайте возрождения..."
+                text += f"👾 **Все боссы побеждены!** Ожидайте возрождения..."
                 db.respawn_bosses()
         else:
-            content += f"👾 Босс еще жив! Осталось: {health_left} HP"
+            text += f"👾 **Босс еще жив!**\n"
+            text += f"💀 **Осталось:** {health_left} HP"
         
-        text = self.format_text("⚔️ РЕЗУЛЬТАТ БИТВЫ", content, "success" if killed else "warning")
+        user_data = db.get_user('tg', platform_id)
+        if user_data['health'] <= 0:
+            text += f"\n\n💀 **Ты погиб в бою!** Используй /regen для восстановления."
         
         keyboard = [[InlineKeyboardButton("🔙 К боссу", callback_data="boss")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_regen(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2030,27 +1925,18 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"🔇 Вы замучены. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
             return
         
         if not db.regen_available('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Регенерация еще не доступна! Подождите немного.", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Регенерация еще не доступна! Подождите немного.")
             return
         
         if user_data['health'] < user_data['max_health']:
@@ -2065,19 +1951,14 @@ class GameBot:
             
             db.use_regen('tg', platform_id, cooldown)
             
-            content = (
-                f"❤️ Здоровье восстановлено!\n"
-                f"├ Текущее здоровье: {user_data['max_health']}/{user_data['max_health']}\n"
-                f"└ ⏱ Следующая регенерация через {cooldown} мин."
-            )
-            
-            text = self.format_text("➕ РЕГЕНЕРАЦИЯ", content, "success")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        else:
             await update.message.reply_text(
-                self.format_text("Ошибка", "❤️ У тебя уже полное здоровье!", "warning"),
-                parse_mode=ParseMode.HTML
+                f"➕ **РЕГЕНЕРАЦИЯ**\n\n"
+                f"❤️ Здоровье восстановлено!\n"
+                f"Текущее здоровье: {user_data['max_health']}/{user_data['max_health']}\n\n"
+                f"⏱ Следующая регенерация через {cooldown} мин."
             )
+        else:
+            await update.message.reply_text("❤️ У тебя уже полное здоровье!")
     
     # ===================== ЭКОНОМИКА =====================
     async def tg_cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2086,37 +1967,46 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
-        content = (
-            "<b>💊 ЗЕЛЬЯ</b>\n"
-            "├ Зелье здоровья — 50 🪙 (❤️+30)\n"
-            "└ Большое зелье — 100 🪙 (❤️+70)\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     🏪 **МАГАЗИН** 🏪        ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "<b>⚔️ ОРУЖИЕ</b>\n"
-            "├ Меч — 200 🪙 (⚔️+10)\n"
-            "└ Легендарный меч — 500 🪙 (⚔️+30)\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💊 **ЗЕЛЬЯ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Зелье здоровья — 50 🪙 (❤️+30)\n"
+            "• Большое зелье — 100 🪙 (❤️+70)\n\n"
             
-            "<b>⚡ ЭНЕРГИЯ</b>\n"
-            "├ Энергетик — 30 🪙 (⚡+20)\n"
-            "└ Батарейка — 80 🪙 (⚡+50)\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚔️ **ОРУЖИЕ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Меч — 200 🪙 (⚔️+10)\n"
+            "• Легендарный меч — 500 🪙 (⚔️+30)\n\n"
             
-            "<b>💎 ВАЛЮТА</b>\n"
-            "└ Алмаз — 100 🪙 (💎+1)\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "⚡ **ЭНЕРГИЯ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Энергетик — 30 🪙 (⚡+20)\n"
+            "• Батарейка — 80 🪙 (⚡+50)\n\n"
             
-            "<b>🎲 ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ</b>\n"
-            "├ Монета Демона — 500 🪙\n"
-            "├ Кровавый Глаз — 300 🪙\n"
-            "└ Маска Клоуна — 1000 🪙\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "💎 **ВАЛЮТА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Алмаз — 100 🪙 (💎+1)\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🎲 **ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Монета Демона — 500 🪙\n"
+            "• Кровавый Глаз — 300 🪙\n"
+            "• Маска Клоуна — 1000 🪙\n\n"
             
             "🛒 Купить: /buy [название]"
         )
-        
-        text = self.format_text("🏪 МАГАЗИН", content, "primary")
         
         keyboard = [
             [InlineKeyboardButton("💊 Зелья", callback_data="buy_potions"),
@@ -2128,7 +2018,7 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2136,46 +2026,37 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
-        content = ""
+        text = "╔══════════════════════════════╗\n"
+        text += "║   💎 **ПРИВИЛЕГИИ** 💎     ║\n"
+        text += "╚══════════════════════════════╝\n\n"
         
         for priv_name, priv_data in PRIVILEGES.items():
-            content += f"{priv_data['emoji']} <b>{priv_name.upper()}</b>\n"
-            content += f"├ 🪙 Цена: {priv_data['price']}\n"
-            content += f"└ 📅 Длительность: {priv_data['days']} дн\n\n"
+            text += f"{priv_data['emoji']} **{priv_name.upper()}**\n"
+            text += f"└ 💰 Цена: {priv_data['price']} 🪙\n"
+            text += f"└ 📅 Длительность: {priv_data['days']} дн\n\n"
         
-        content += "👑 <b>АДМИН-ПРИВИЛЕГИИ</b>\n"
-        content += "🛡️ Младший модератор, ⚔️ Старший модератор, 👑 Администратор\n\n"
-        content += f"💳 Приобрести: {OWNER_USERNAME_TG}"
-        
-        text = self.format_text("💎 ПРИВИЛЕГИИ", content, "primary")
+        text += "👑 **АДМИН-ПРИВИЛЕГИИ**\n"
+        text += "🛡️ Младший модератор, ⚔️ Старший модератор, 👑 Администратор\n\n"
+        text += f"💳 Приобрести: напишите {OWNER_USERNAME_TG}"
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /pay [ник] [сумма]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /pay [ник] [сумма]")
             return
         
         target_name = context.args[0]
         try:
             amount = int(context.args[1])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сумма должна быть числом", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сумма должна быть числом")
             return
         
         user = update.effective_user
@@ -2185,43 +2066,28 @@ class GameBot:
         db.update_activity('tg', platform_id)
         
         if db.is_banned('tg', platform_id):
-            await update.message.reply_text(
-                self.format_text("Ошибка", "🚫 Вы забанены в боте", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🚫 Вы забанены в боте.")
             return
         
         if db.is_muted('tg', platform_id):
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"🔇 Вы замучены. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
             return
         
         if amount <= 0:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сумма должна быть положительной", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сумма должна быть положительной")
             return
         
         if user_data['coins'] < amount:
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"❌ Недостаточно монет! У вас {user_data['coins']} 🪙", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"❌ Недостаточно монет! У вас {user_data['coins']} 🪙")
             return
         
         target_user = db.get_user_by_username('tg', target_name)
         
         if not target_user:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_id = target_user[2]
@@ -2229,47 +2095,32 @@ class GameBot:
         success, message = db.transfer_money('tg', platform_id, 'tg', target_id, amount, "coins")
         
         if success:
-            content = f"✅ {message}\n👤 Получатель: {target_user[4]}"
-            text = self.format_text("💸 ПЕРЕВОД", content, "success")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(f"✅ {message}\nПолучатель: {target_user[4]}")
             
             try:
                 await context.bot.send_message(
                     chat_id=int(target_id),
-                    text=self.format_text(
-                        "💸 ПОЛУЧЕН ПЕРЕВОД",
-                        f"💰 {user.first_name} перевел вам {amount} 🪙!",
-                        "success"
-                    ),
-                    parse_mode=ParseMode.HTML
+                    text=f"💰 {user.first_name} перевел вам {amount} 🪙!"
                 )
             except:
                 pass
         else:
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"❌ {message}", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"❌ {message}")
     
     async def tg_cmd_privilege_commands(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
             await update.message.reply_text(
-                self.format_text(
-                    "Ошибка",
-                    "❌ Укажите привилегию:\n"
-                    "├ /cmd вип\n"
-                    "├ /cmd премиум\n"
-                    "├ /cmd лорд\n"
-                    "├ /cmd ультра\n"
-                    "├ /cmd легенда\n"
-                    "├ /cmd эврольд\n"
-                    "├ /cmd властелин\n"
-                    "├ /cmd титан\n"
-                    "├ /cmd терминатор\n"
-                    "└ /cmd маг",
-                    "error"
-                ),
-                parse_mode=ParseMode.HTML
+                "❌ Укажите привилегию:\n"
+                "/cmd вип\n"
+                "/cmd премиум\n"
+                "/cmd лорд\n"
+                "/cmd ультра\n"
+                "/cmd легенда\n"
+                "/cmd эврольд\n"
+                "/cmd властелин\n"
+                "/cmd титан\n"
+                "/cmd терминатор\n"
+                "/cmd маг"
             )
             return
         
@@ -2289,14 +2140,13 @@ class GameBot:
         }
         
         if privilege in privilege_commands:
-            content = ""
+            text = f"**КОМАНДЫ {privilege.upper()}**\n\n"
             for cmd in privilege_commands[privilege]:
-                content += f"├ {cmd}\n"
-            text = self.format_text(f"{PRIVILEGES.get(privilege, {}).get('emoji', '')} КОМАНДЫ {privilege.upper()}", content, "info")
+                text += f"• {cmd}\n"
         else:
-            text = self.format_text("Ошибка", "❌ Неизвестная привилегия", "error")
+            text = "❌ Неизвестная привилегия"
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     # ===================== СИСТЕМА МОДЕРАЦИИ =====================
     async def tg_cmd_moder(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2319,24 +2169,14 @@ class GameBot:
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text(
-                    "Ошибка",
-                    f"❌ Использование: /moder{'' if rank == 1 else f'{rank}'} [ссылка]",
-                    "error"
-                ),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"❌ Использование: /moder{'' if rank == 1 else f'{rank}'} [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_user = db.get_user('tg', target_id)
@@ -2344,38 +2184,26 @@ class GameBot:
         
         db.set_mod_rank('tg', target_id, rank, update.effective_user.id)
         
-        content = f"✅ {MODER_RANKS[rank]} назначен для {target_name}"
-        text = self.format_text("🛡️ НАЗНАЧЕНИЕ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ {MODER_RANKS[rank]} назначен для {target_name}")
     
     async def tg_cmd_promote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 5):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /promote [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /promote [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         current_rank = db.get_mod_rank('tg', target_id)
         if current_rank >= 5:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Нельзя повысить создателя", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Нельзя повысить создателя")
             return
         
         new_rank = min(current_rank + 1, 5)
@@ -2384,45 +2212,30 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ {target_name} повышен до {MODER_RANKS[new_rank]}"
-        text = self.format_text("🔼 ПОВЫШЕНИЕ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ {target_name} повышен до {MODER_RANKS[new_rank]}")
     
     async def tg_cmd_demote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 5):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /demote [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /demote [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         current_rank = db.get_mod_rank('tg', target_id)
         if current_rank <= 0:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не является модератором", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не является модератором")
             return
         
         if current_rank >= 5:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Нельзя понизить создателя", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Нельзя понизить создателя")
             return
         
         new_rank = max(current_rank - 1, 0)
@@ -2432,45 +2245,30 @@ class GameBot:
         target_name = target_user.get('first_name', f"ID {target_id}")
         
         rank_name = MODER_RANKS[new_rank] if new_rank > 0 else "👤 Пользователь"
-        content = f"✅ {target_name} понижен до {rank_name}"
-        text = self.format_text("🔽 ПОНИЖЕНИЕ", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ {target_name} понижен до {rank_name}")
     
     async def tg_cmd_remove_moder(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 5):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /remove_moder [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /remove_moder [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         current_rank = db.get_mod_rank('tg', target_id)
         if current_rank <= 0:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не является модератором", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не является модератором")
             return
         
         if current_rank >= 5:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Нельзя снять создателя", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Нельзя снять создателя")
             return
         
         db.set_mod_rank('tg', target_id, 0, update.effective_user.id)
@@ -2478,54 +2276,38 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ С {target_name} снят статус модератора"
-        text = self.format_text("🗑️ СНЯТИЕ", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ С {target_name} снят статус модератора")
     
     async def tg_cmd_staff(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         mods = db.get_moderators('tg')
         
         if not mods:
-            await update.message.reply_text(
-                self.format_text("🛡️ МОДЕРАТОРЫ", "📭 В этом чате нет модераторов", "info"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("📭 В этом чате нет модераторов")
             return
         
-        content = ""
+        text = "🛡️ **СПИСОК МОДЕРАТОРОВ**\n\n"
+        
         for mod in mods:
             platform_id, first_name, username, rank = mod
             status = "🟢"
             name = first_name or username or f"ID {platform_id}"
-            content += f"{status} {name} — {MODER_RANKS[rank]}\n"
+            text += f"{status} {name} — {MODER_RANKS[rank]}\n"
         
-        text = self.format_text("🛡️ СПИСОК МОДЕРАТОРОВ", content, "info")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_who_invited(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /who_invited [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /who_invited [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
-        await update.message.reply_text(
-            self.format_text("ℹ️ ИНФОРМАЦИЯ", "ℹ️ Информация о назначении будет доступна в следующем обновлении", "info"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text("ℹ️ Информация о назначении будет доступна в следующем обновлении")
     
     # ===================== ВАРНЫ =====================
     async def tg_cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2533,10 +2315,7 @@ class GameBot:
             return
         
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /warn [ссылка] [время] [причина]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /warn [ссылка] [время] [причина]")
             return
         
         target_link = context.args[0]
@@ -2546,10 +2325,7 @@ class GameBot:
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_user = db.get_user('tg', target_id)
@@ -2565,57 +2341,36 @@ class GameBot:
         
         warns = db.add_warn('tg', target_id, target_name, reason, update.effective_user.id, update.effective_user.first_name, days)
         
-        content = (
+        await update.message.reply_text(
+            f"⚠️ **Предупреждение выдано**\n\n"
             f"👤 {target_name}\n"
             f"⚠️ Варнов: {warns}/{warns_limit}\n"
             f"💬 Причина: {reason}"
         )
         
-        text = self.format_text("⚠️ ПРЕДУПРЕЖДЕНИЕ ВЫДАНО", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        
         if warns >= warns_limit:
             ban_period = settings.get('warns_ban_period', '1 день')
             db.ban_user('tg', target_id, target_name, f"Достигнут лимит предупреждений ({warns})", ban_period, update.effective_user.id, update.effective_user.first_name)
-            await update.message.reply_text(
-                self.format_text(
-                    "🚫 АВТОМАТИЧЕСКИЙ БАН",
-                    f"🚫 Пользователь {target_name} забанен на {ban_period} (достигнут лимит варнов)",
-                    "error"
-                ),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🚫 Пользователь {target_name} забанен на {ban_period} (достигнут лимит варнов)")
         
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text(
-                    "⚠️ ВАМ ВЫДАНО ПРЕДУПРЕЖДЕНИЕ",
-                    f"⚠️ Варнов: {warns}/{warns_limit}\n💬 Причина: {reason}",
-                    "warning"
-                ),
-                parse_mode=ParseMode.HTML
+                text=f"⚠️ Вам выдано предупреждение ({warns}/{warns_limit})\nПричина: {reason}"
             )
         except:
             pass
     
     async def tg_cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /warns [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /warns [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_user = db.get_user('tg', target_id)
@@ -2624,22 +2379,18 @@ class GameBot:
         warns = db.get_warns('tg', target_id)
         
         if not warns:
-            await update.message.reply_text(
-                self.format_text("✅ ПРЕДУПРЕЖДЕНИЯ", f"✅ У {target_name} нет предупреждений", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"✅ У {target_name} нет предупреждений")
             return
         
-        content = f"<b>{target_name}</b>\n\n"
+        text = f"⚠️ **ПРЕДУПРЕЖДЕНИЯ {target_name.upper()}**\n\n"
+        
         for i, warn in enumerate(warns, 1):
             reason = warn[4] or "Не указана"
             warned_by = warn[6] or "Неизвестно"
             warn_date = warn[7][:16] if warn[7] else "Неизвестно"
-            content += f"{i}. {reason}\n   👮 {warned_by} — {warn_date}\n\n"
+            text += f"{i}. {reason}\n   👮 {warned_by} — {warn_date}\n\n"
         
-        text = self.format_text("⚠️ ПРЕДУПРЕЖДЕНИЯ", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -2648,22 +2399,18 @@ class GameBot:
         warns = db.get_warns('tg', platform_id)
         
         if not warns:
-            await update.message.reply_text(
-                self.format_text("✅ ПРЕДУПРЕЖДЕНИЯ", "✅ У вас нет предупреждений", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("✅ У вас нет предупреждений")
             return
         
-        content = ""
+        text = f"⚠️ **ВАШИ ПРЕДУПРЕЖДЕНИЯ**\n\n"
+        
         for i, warn in enumerate(warns, 1):
             reason = warn[4] or "Не указана"
             warned_by = warn[6] or "Неизвестно"
             warn_date = warn[7][:16] if warn[7] else "Неизвестно"
-            content += f"{i}. {reason}\n   👮 {warned_by} — {warn_date}\n\n"
+            text += f"{i}. {reason}\n   👮 {warned_by} — {warn_date}\n\n"
         
-        text = self.format_text("⚠️ ВАШИ ПРЕДУПРЕЖДЕНИЯ", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_warnlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 1):
@@ -2679,47 +2426,37 @@ class GameBot:
         warns = db.get_warned_users(page, 10)
         
         if not warns:
-            await update.message.reply_text(
-                self.format_text("⚠️ СПИСОК ПРЕДУПРЕЖДЕНИЙ", "📭 Список предупреждений пуст", "info"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("📭 Список предупреждений пуст")
             return
         
-        content = f"<b>Страница {page}</b>\n\n"
+        text = f"⚠️ **СПИСОК ПРЕДУПРЕЖДЕНИЙ** (стр. {page})\n\n"
+        
         for i, warn in enumerate(warns, 1):
             username = warn[3] or f"ID {warn[2]}"
             reason = warn[4] or "Не указана"
             warned_by = warn[6] or "Неизвестно"
             warn_date = warn[7][:10] if warn[7] else "Неизвестно"
             
-            content += f"{i}. {username}\n"
-            content += f"   💬 {reason}\n"
-            content += f"   👮 {warned_by}\n"
-            content += f"   📅 {warn_date}\n\n"
+            text += f"{i}. {username}\n"
+            text += f"   💬 {reason}\n"
+            text += f"   👮 {warned_by}\n"
+            text += f"   📅 {warn_date}\n\n"
         
-        text = self.format_text("⚠️ СПИСОК ПРЕДУПРЕЖДЕНИЙ", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_remove_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 1):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /remove_warn [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /remove_warn [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         db.remove_warn('tg', target_id)
@@ -2727,30 +2464,21 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ Последнее предупреждение снято с {target_name}"
-        text = self.format_text("✅ СНЯТИЕ ПРЕДУПРЕЖДЕНИЯ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ Последнее предупреждение снято с {target_name}")
     
     async def tg_cmd_clear_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 1):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /clear_warns [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /clear_warns [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         warns = db.get_warns('tg', target_id)
@@ -2760,10 +2488,7 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ Все предупреждения сняты с {target_name}"
-        text = self.format_text("✅ ОЧИСТКА ПРЕДУПРЕЖДЕНИЙ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ Все предупреждения сняты с {target_name}")
     
     # ===================== МУТ =====================
     async def tg_cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2771,20 +2496,14 @@ class GameBot:
             return
         
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /mute [ссылка] [время] [причина]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /mute [ссылка] [время] [причина]")
             return
         
         target_link = context.args[0]
         try:
             minutes = int(context.args[1])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Время должно быть числом (минуты)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Время должно быть числом (минуты)")
             return
         
         reason = " ".join(context.args[2:]) if len(context.args) > 2 else "Нарушение"
@@ -2792,10 +2511,7 @@ class GameBot:
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_user = db.get_user('tg', target_id)
@@ -2803,25 +2519,17 @@ class GameBot:
         
         db.mute_user('tg', target_id, target_name, minutes, reason, update.effective_user.id, update.effective_user.first_name)
         
-        content = (
+        await update.message.reply_text(
+            f"🔇 **Пользователь замучен**\n\n"
             f"👤 {target_name}\n"
             f"⏱ Время: {minutes} мин\n"
             f"💬 Причина: {reason}"
         )
         
-        text = self.format_text("🔇 ПОЛЬЗОВАТЕЛЬ ЗАМУЧЕН", content, "error")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text(
-                    "🔇 ВЫ ЗАМУЧЕНЫ",
-                    f"⏱ Время: {minutes} мин\n💬 Причина: {reason}",
-                    "error"
-                ),
-                parse_mode=ParseMode.HTML
+                text=f"🔇 Вы замучены на {minutes} минут.\nПричина: {reason}"
             )
         except:
             pass
@@ -2831,20 +2539,14 @@ class GameBot:
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /unmute [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /unmute [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         db.unmute_user('tg', target_id)
@@ -2852,16 +2554,12 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ Мут снят с {target_name}"
-        text = self.format_text("✅ МУТ СНЯТ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ Мут снят с {target_name}")
         
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text("✅ МУТ СНЯТ", "✅ Ваш мут снят", "success"),
-                parse_mode=ParseMode.HTML
+                text="✅ Ваш мут снят"
             )
         except:
             pass
@@ -2880,13 +2578,11 @@ class GameBot:
         mutes = db.get_muted_users(page, 10)
         
         if not mutes:
-            await update.message.reply_text(
-                self.format_text("🔇 СПИСОК ЗАМУЧЕННЫХ", "📭 Список мутов пуст", "info"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("📭 Список мутов пуст")
             return
         
-        content = f"<b>Страница {page}</b>\n\n"
+        text = f"🔇 **СПИСОК ЗАМУЧЕННЫХ** (стр. {page})\n\n"
+        
         for i, mute in enumerate(mutes, 1):
             username = mute[3] or f"ID {mute[2]}"
             reason = mute[4] or "Не указана"
@@ -2894,32 +2590,24 @@ class GameBot:
             mute_date = mute[7][:10] if mute[7] else "Неизвестно"
             duration = mute[8]
             
-            content += f"{i}. {username}\n"
-            content += f"   ⏱ {duration}\n"
-            content += f"   💬 {reason}\n"
-            content += f"   👮 {muted_by}\n"
-            content += f"   📅 {mute_date}\n\n"
+            text += f"{i}. {username}\n"
+            text += f"   ⏱ {duration}\n"
+            text += f"   💬 {reason}\n"
+            text += f"   👮 {muted_by}\n"
+            text += f"   📅 {mute_date}\n\n"
         
-        text = self.format_text("🔇 СПИСОК ЗАМУЧЕННЫХ", content, "error")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_check_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /check_mute [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /check_mute [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         if db.is_muted('tg', target_id):
@@ -2927,15 +2615,9 @@ class GameBot:
             mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
             remaining = mute_until - datetime.datetime.now()
             minutes = remaining.seconds // 60
-            await update.message.reply_text(
-                self.format_text("🔇 ПРОВЕРКА МУТА", f"🔇 Пользователь замучен. Осталось: {minutes} мин", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🔇 Пользователь замучен. Осталось: {minutes} мин")
         else:
-            await update.message.reply_text(
-                self.format_text("✅ ПРОВЕРКА МУТА", "✅ Пользователь не замучен", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("✅ Пользователь не замучен")
     
     # ===================== БАН =====================
     async def tg_cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2943,10 +2625,7 @@ class GameBot:
             return
         
         if len(context.args) < 3:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ban [ссылка] [время] [причина]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ban [ссылка] [время] [причина]")
             return
         
         target_link = context.args[0]
@@ -2956,10 +2635,7 @@ class GameBot:
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_user = db.get_user('tg', target_id)
@@ -2967,25 +2643,17 @@ class GameBot:
         
         db.ban_user('tg', target_id, target_name, reason, duration, update.effective_user.id, update.effective_user.first_name)
         
-        content = (
+        await update.message.reply_text(
+            f"🚫 **Пользователь забанен**\n\n"
             f"👤 {target_name}\n"
             f"⏱ Срок: {duration}\n"
             f"💬 Причина: {reason}"
         )
         
-        text = self.format_text("🚫 ПОЛЬЗОВАТЕЛЬ ЗАБАНЕН", content, "error")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-        
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text(
-                    "🚫 ВЫ ЗАБАНЕНЫ",
-                    f"⏱ Срок: {duration}\n💬 Причина: {reason}",
-                    "error"
-                ),
-                parse_mode=ParseMode.HTML
+                text=f"🚫 Вы забанены.\nСрок: {duration}\nПричина: {reason}"
             )
         except:
             pass
@@ -2995,20 +2663,14 @@ class GameBot:
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /unban [ссылка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /unban [ссылка]")
             return
         
         target_link = context.args[0]
         target_id = await self._resolve_mention(update, context, target_link)
         
         if not target_id:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         db.unban_user('tg', target_id)
@@ -3016,16 +2678,12 @@ class GameBot:
         target_user = db.get_user('tg', target_id)
         target_name = target_user.get('first_name', f"ID {target_id}")
         
-        content = f"✅ Пользователь {target_name} разбанен"
-        text = self.format_text("✅ БАН СНЯТ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"✅ Пользователь {target_name} разбанен")
         
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text("✅ ВЫ РАЗБАНЕНЫ", "✅ Вы разбанены", "success"),
-                parse_mode=ParseMode.HTML
+                text="✅ Вы разбанены"
             )
         except:
             pass
@@ -3044,13 +2702,11 @@ class GameBot:
         bans = db.get_banned_users(page, 10)
         
         if not bans:
-            await update.message.reply_text(
-                self.format_text("🚫 СПИСОК ЗАБАНЕННЫХ", "📭 Список банов пуст", "info"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("📭 Список банов пуст")
             return
         
-        content = f"<b>Страница {page}</b>\n\n"
+        text = f"🚫 **СПИСОК ЗАБАНЕННЫХ** (стр. {page})\n\n"
+        
         for i, ban in enumerate(bans, 1):
             username = ban[3] or f"ID {ban[2]}"
             reason = ban[4] or "Не указана"
@@ -3058,15 +2714,13 @@ class GameBot:
             ban_date = ban[7][:10] if ban[7] else "Неизвестно"
             duration = "Навсегда" if ban[10] else ban[8]
             
-            content += f"{i}. {username}\n"
-            content += f"   ⏱ {duration}\n"
-            content += f"   💬 {reason}\n"
-            content += f"   👮 {banned_by}\n"
-            content += f"   📅 {ban_date}\n\n"
+            text += f"{i}. {username}\n"
+            text += f"   ⏱ {duration}\n"
+            text += f"   💬 {reason}\n"
+            text += f"   👮 {banned_by}\n"
+            text += f"   📅 {ban_date}\n\n"
         
-        text = self.format_text("🚫 СПИСОК ЗАБАНЕННЫХ", content, "error")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     # ===================== ПРАВИЛА И НАСТРОЙКИ =====================
     async def tg_cmd_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3074,19 +2728,21 @@ class GameBot:
         settings = db.get_group_settings(chat_id, 'tg')
         rules = settings.get('rules', 'Правила не установлены')
         
-        text = self.format_text("📖 ПРАВИЛА ЧАТА", rules, "info")
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     📖 **ПРАВИЛА ЧАТА** 📖   ║\n"
+            "╚══════════════════════════════╝\n\n"
+            f"{rules}"
+        )
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     async def tg_cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 3):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /set_rules [текст правил]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /set_rules [текст правил]")
             return
         
         rules = " ".join(context.args)
@@ -3094,105 +2750,89 @@ class GameBot:
         
         db.update_group_setting(chat_id, 'tg', 'rules', rules)
         
-        await update.message.reply_text(
-            self.format_text("✅ ПРАВИЛА УСТАНОВЛЕНЫ", "✅ Правила успешно установлены!", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Правила установлены!")
     
     async def tg_cmd_warns_limit(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 3):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /warns_limit [число]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /warns_limit [число]")
             return
         
         try:
             limit = int(context.args[0])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Введите число", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Введите число")
             return
         
         chat_id = str(update.effective_chat.id)
         db.update_group_setting(chat_id, 'tg', 'warns_limit', limit)
         
-        await update.message.reply_text(
-            self.format_text("✅ НАСТРОЙКИ", f"✅ Лимит предупреждений установлен: {limit}", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Лимит предупреждений установлен: {limit}")
     
     async def tg_cmd_mute_period(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 3):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /mute_period [время]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /mute_period [время]")
             return
         
         period = " ".join(context.args)
         chat_id = str(update.effective_chat.id)
         db.update_group_setting(chat_id, 'tg', 'mute_period', period)
         
-        await update.message.reply_text(
-            self.format_text("✅ НАСТРОЙКИ", f"✅ Срок мута по умолчанию установлен: {period}", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Срок мута по умолчанию установлен: {period}")
     
     async def tg_cmd_ban_period(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 3):
             return
         
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ban_period [время]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ban_period [время]")
             return
         
         period = " ".join(context.args)
         chat_id = str(update.effective_chat.id)
         db.update_group_setting(chat_id, 'tg', 'ban_period', period)
         
-        await update.message.reply_text(
-            self.format_text("✅ НАСТРОЙКИ", f"✅ Срок бана по умолчанию установлен: {period}", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Срок бана по умолчанию установлен: {period}")
     
     # ===================== РУССКАЯ РУЛЕТКА =====================
     async def tg_cmd_rr(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        content = (
-            "<b>ПРАВИЛА</b>\n"
-            "├ В барабане 1-3 патрона\n"
-            "├ Размер барабана: 6-10 позиций\n"
-            "├ Игроки по очереди стреляют\n"
-            "└ Победитель забирает все ставки\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     💣 **РУССКАЯ РУЛЕТКА** 💣 ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "<b>МАГИЧЕСКИЕ ПРЕДМЕТЫ</b>\n"
-            "├ 🪙 Монета Демона — убирает/добавляет патрон\n"
-            "├ 👁️ Кровавый Глаз — показывает патроны\n"
-            "├ 🔄 Обратный Спин — меняет направление\n"
-            "├ ⏳ Песочные часы — пропускает ход\n"
-            "├ 🎲 Кубик Судьбы — меняет количество патронов\n"
-            "├ 🤡 Маска Клоуна — перезаряжает оружие\n"
-            "├ 👁️ Глаз Провидца — показывает текущую позицию\n"
-            "└ 🧲 Магнит Пули — сдвигает патроны\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ПРАВИЛА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• В барабане 1-3 патрона\n"
+            "• Размер барабана: 6-10 позиций\n"
+            "• Игроки по очереди стреляют\n"
+            "• Победитель забирает все ставки\n\n"
             
-            "<b>КОМАНДЫ</b>\n"
-            "├ /rr_start [игроки] [ставка] — создать лобби\n"
-            "├ /rr_join [ID] — присоединиться\n"
-            "└ /rr_shot — сделать выстрел"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**МАГИЧЕСКИЕ ПРЕДМЕТЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🪙 Монета Демона — убирает/добавляет патрон\n"
+            "👁️ Кровавый Глаз — показывает патроны\n"
+            "🔄 Обратный Спин — меняет направление\n"
+            "⏳ Песочные часы — пропускает ход\n"
+            "🎲 Кубик Судьбы — меняет количество патронов\n"
+            "🤡 Маска Клоуна — перезаряжает оружие\n"
+            "👁️ Глаз Провидца — показывает текущую позицию\n"
+            "🧲 Магнит Пули — сдвигает патроны\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**КОМАНДЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "/rr_start [игроки] [ставка] — создать лобби\n"
+            "/rr_join [ID] — присоединиться\n"
+            "/rr_shot — сделать выстрел"
         )
-        
-        text = self.format_text("💣 РУССКАЯ РУЛЕТКА", content, "primary")
         
         keyboard = [
             [InlineKeyboardButton("🎲 Создать игру", callback_data="rr_create")],
@@ -3200,31 +2840,22 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_rr_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /rr_start [игроки (2-6)] [ставка]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /rr_start [игроки (2-6)] [ставка]")
             return
         
         try:
             max_players = int(context.args[0])
             bet = int(context.args[1])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Неправильный формат", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Неправильный формат")
             return
         
         if max_players < 2 or max_players > 6:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Количество игроков должно быть от 2 до 6", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Количество игроков должно быть от 2 до 6")
             return
         
         user = update.effective_user
@@ -3233,52 +2864,38 @@ class GameBot:
         user_data = db.get_user('tg', platform_id)
         
         if user_data['rr_money'] < bet:
-            await update.message.reply_text(
-                self.format_text("Ошибка", f"❌ Недостаточно черепков! У тебя {user_data['rr_money']} 💀", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"❌ Недостаточно черепков! У тебя {user_data['rr_money']} 💀")
             return
         
         db.add_coins('tg', platform_id, -bet, "rr_money")
         lobby_id = db.rr_create_lobby(platform_id, max_players, bet)
         
-        content = (
-            f"├ ID: {lobby_id}\n"
-            f"├ Создатель: {user.first_name}\n"
-            f"├ Игроков: 1/{max_players}\n"
-            f"└ Ставка: {bet} 💀\n\n"
-            f"Присоединиться: /rr_join {lobby_id}"
+        await update.message.reply_text(
+            f"💣 **ЛОББИ СОЗДАНО!**\n\n"
+            f"• **ID:** {lobby_id}\n"
+            f"• **Создатель:** {user.first_name}\n"
+            f"• **Игроков:** 1/{max_players}\n"
+            f"• **Ставка:** {bet} 💀\n\n"
+            f"Присоединиться: /rr_join {lobby_id}",
+            parse_mode='Markdown'
         )
-        
-        text = self.format_text("💣 ЛОББИ СОЗДАНО", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
     async def tg_cmd_rr_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Укажи ID лобби: /rr_join 1", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Укажи ID лобби: /rr_join 1")
             return
         
         try:
             lobby_id = int(context.args[0])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Неправильный ID", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Неправильный ID")
             return
         
         user = update.effective_user
         platform_id = str(user.id)
         
         if db.rr_join_lobby(lobby_id, platform_id):
-            await update.message.reply_text(
-                self.format_text("✅ ПРИСОЕДИНЕНИЕ", f"✅ Ты присоединился к лобби {lobby_id}!", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"✅ Ты присоединился к лобби {lobby_id}!")
             
             db.cursor.execute("SELECT players, max_players, bet FROM rr_lobbies WHERE id = ?", (lobby_id,))
             result = db.cursor.fetchone()
@@ -3293,24 +2910,17 @@ class GameBot:
                         
                         for player_id in players:
                             try:
-                                content = (
-                                    f"├ Барабан: {cylinder_size} позиций\n"
-                                    f"├ Патронов: {bullets}\n"
-                                    f"└ Первый ходит: {players[0]}"
-                                )
-                                text = self.format_text("💣 ИГРА НАЧАЛАСЬ", content, "warning")
                                 await context.bot.send_message(
                                     chat_id=int(player_id),
-                                    text=text,
-                                    parse_mode=ParseMode.HTML
+                                    text=f"💣 **ИГРА НАЧАЛАСЬ!**\n\n"
+                                         f"Барабан: {cylinder_size} позиций\n"
+                                         f"Патронов: {bullets}\n\n"
+                                         f"Первый ходит: {players[0]}"
                                 )
                             except:
                                 pass
         else:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Не удалось присоединиться", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Не удалось присоединиться")
     
     async def tg_cmd_rr_shot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3323,10 +2933,7 @@ class GameBot:
         game = db.cursor.fetchone()
         
         if not game:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Ты не участвуешь в активной игре", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Ты не участвуешь в активной игре")
             return
         
         columns = [description[0] for description in db.cursor.description]
@@ -3335,20 +2942,11 @@ class GameBot:
         result = db.rr_make_shot(game_dict['id'], platform_id)
         
         if result == "not_your_turn":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сейчас не твой ход", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сейчас не твой ход")
         elif result == "dead":
-            await update.message.reply_text(
-                self.format_text("💀 ВЫСТРЕЛ", "💀 **БАХ!** Ты погиб...", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("💀 **БАХ!** Ты погиб...")
         elif result == "alive":
-            await update.message.reply_text(
-                self.format_text("✅ ВЫСТРЕЛ", "✅ **ЩЕЛК!** Ты выжил!", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("✅ **ЩЕЛК!** Ты выжил!")
         elif isinstance(result, tuple) and result[0] == "game_over":
             winner_id = result[1]
             winner_data = await context.bot.get_chat(int(winner_id))
@@ -3358,39 +2956,43 @@ class GameBot:
             total_pot = bet * len(json.loads(game_dict['players']))
             db.add_coins('tg', winner_id, total_pot, "rr_money")
             
-            content = f"🏆 Победитель: {winner_data.first_name}\n💰 Выигрыш: {total_pot} 💀"
-            text = self.format_text("🏆 ИГРА ОКОНЧЕНА", content, "success")
-            
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"🏆 **ИГРА ОКОНЧЕНА!**\n\n"
+                f"Победитель: {winner_data.first_name}\n"
+                f"💰 Выигрыш: {total_pot} 💀",
+                parse_mode='Markdown'
+            )
     
     # ===================== КРЕСТИКИ-НОЛИКИ 3D =====================
     async def tg_cmd_ttt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        content = (
-            "<b>ПРАВИЛА</b>\n"
-            "├ В каждой клетке поля находится ещё одно поле\n"
-            "├ Нужно выиграть на 3 малых полях в ряд\n"
-            "├ Победа на малом поле делает его вашим\n"
-            "└ Игра продолжается пока кто-то не победит\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║   ⭕ **КРЕСТИКИ-НОЛИКИ 3D** ⭕ ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "<b>КОМАНДЫ</b>\n"
-            "├ /ttt_challenge [ник] — вызвать игрока\n"
-            "└ /ttt_move [клетка] — сделать ход\n"
-            "   (клетка: ряд_колонка_подряд_подколонка, например 1_1_2_2)"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ПРАВИЛА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• В каждой клетке поля находится ещё одно поле\n"
+            "• Нужно выиграть на 3 малых полях в ряд\n"
+            "• Победа на малом поле делает его вашим\n"
+            "• Игра продолжается пока кто-то не победит\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**КОМАНДЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "/ttt_challenge [ник] — вызвать игрока\n"
+            "/ttt_move [клетка] — сделать ход (клетка: ряд_колонка_подряд_подколонка, например 1_1_2_2)"
         )
-        
-        text = self.format_text("⭕ КРЕСТИКИ-НОЛИКИ 3D", content, "primary")
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_ttt_challenge(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ttt_challenge [ник]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ttt_challenge [ник]")
             return
         
         target_name = context.args[0]
@@ -3400,10 +3002,7 @@ class GameBot:
         target_user = db.get_user_by_username('tg', target_name)
         
         if not target_user:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_id = target_user[2]
@@ -3421,30 +3020,16 @@ class GameBot:
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text(
-                    "⭕ ВЫЗОВ НА ИГРУ",
-                    f"⭕ {user.first_name} вызывает тебя на игру в крестики-нолики 3D!\n\nСогласен?",
-                    "info"
-                ),
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                text=f"⭕ {user.first_name} вызывает тебя на игру в крестики-нолики 3D!\n\nСогласен?",
+                reply_markup=reply_markup
             )
-            await update.message.reply_text(
-                self.format_text("✅ ЗАПРОС ОТПРАВЛЕН", "✅ Запрос отправлен!", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("✅ Запрос отправлен!")
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Не удалось отправить запрос", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Не удалось отправить запрос")
     
     async def tg_cmd_ttt_move(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 1:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ttt_move [клетка] (например 1_1_2_2)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ttt_move [клетка] (например 1_1_2_2)")
             return
         
         try:
@@ -3453,10 +3038,7 @@ class GameBot:
                 raise ValueError
             main_row, main_col, sub_row, sub_col = map(int, parts)
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Неправильный формат. Используй: ряд_колонка_подряд_подколонка (1_1_2_2)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Неправильный формат. Используй: ряд_колонка_подряд_подколонка (1_1_2_2)")
             return
         
         user = update.effective_user
@@ -3469,10 +3051,7 @@ class GameBot:
         game = db.cursor.fetchone()
         
         if not game:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ У тебя нет активной игры", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ У тебя нет активной игры")
             return
         
         columns = [description[0] for description in db.cursor.description]
@@ -3481,103 +3060,89 @@ class GameBot:
         result = db.ttt_make_move(game_dict['id'], platform_id, main_row-1, main_col-1, sub_row-1, sub_col-1)
         
         if result == "not_your_turn":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сейчас не твой ход", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сейчас не твой ход")
         elif result == "cell_occupied":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Эта клетка уже занята", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Эта клетка уже занята")
         elif result and result['status'] == 'finished':
             winner = "Ты" if result['winner'] == platform_id else "Противник"
-            await update.message.reply_text(
-                self.format_text("🏆 ИГРА ОКОНЧЕНА", f"🏆 Победитель: {winner}", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"🏆 **Игра окончена!**\n\nПобедитель: {winner}")
         else:
-            await update.message.reply_text(
-                self.format_text("✅ ХОД СДЕЛАН", "✅ Ход сделан!", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("✅ Ход сделан!")
     
     # ===================== МАФИЯ =====================
     async def tg_cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        content = (
-            "<b>ПРАВИЛА</b>\n"
-            "├ Игроки делятся на мафию и мирных\n"
-            "├ Ночью мафия убивает, днем все обсуждают\n"
-            "├ Цель мафии — убить всех мирных\n"
-            "└ Цель мирных — найти мафию\n\n"
+        text = (
+            "╔══════════════════════════════╗\n"
+            "║     🔪 **МАФИЯ** 🔪          ║\n"
+            "╚══════════════════════════════╝\n\n"
             
-            "<b>ФАЗЫ ИГРЫ</b>\n"
-            "├ 🌙 Ночь — мафия выбирает жертву\n"
-            "├ ☀️ День — обсуждение и голосование\n"
-            "└ ⚰️ Смерть — игрок покидает игру\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ПРАВИЛА**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "• Игроки делятся на мафию и мирных\n"
+            "• Ночью мафия убивает, днем все обсуждают\n"
+            "• Цель мафии — убить всех мирных\n"
+            "• Цель мирных — найти мафию\n\n"
             
-            "<b>КОМАНДЫ</b>\n"
-            "├ /mafia_create — создать игру\n"
-            "├ /mafia_join [ID] — присоединиться\n"
-            "├ /mafia_start — начать игру\n"
-            "├ /mafia_vote [ник] — проголосовать днем\n"
-            "└ /mafia_kill [ник] — убить ночью (для мафии)"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**ФАЗЫ ИГРЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "🌙 **Ночь** — мафия выбирает жертву\n"
+            "☀️ **День** — обсуждение и голосование\n"
+            "⚰️ **Смерть** — игрок покидает игру\n\n"
+            
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "**КОМАНДЫ**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "/mafia_create — создать игру\n"
+            "/mafia_join [ID] — присоединиться\n"
+            "/mafia_start — начать игру\n"
+            "/mafia_vote [ник] — проголосовать днем\n"
+            "/mafia_kill [ник] — убить ночью (для мафии)"
         )
-        
-        text = self.format_text("🔪 МАФИЯ", content, "primary")
         
         keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games_menu")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='Markdown')
     
     async def tg_cmd_mafia_create(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         platform_id = str(user.id)
         
         game_id = db.mafia_create_game(platform_id)
+        self.mafia_games[game_id] = {
+            'votes': {},
+            'kill_votes': {}
+        }
         
-        content = (
-            f"├ ID игры: {game_id}\n"
-            f"├ Создатель: {user.first_name}\n"
-            f"└ Игроков: 1/10\n\n"
-            f"Присоединиться: /mafia_join {game_id}"
+        await update.message.reply_text(
+            f"🔪 **ИГРА МАФИЯ СОЗДАНА!**\n\n"
+            f"• **ID игры:** {game_id}\n"
+            f"• **Создатель:** {user.first_name}\n"
+            f"• **Игроков:** 1/10\n\n"
+            f"Присоединиться: /mafia_join {game_id}",
+            parse_mode='Markdown'
         )
-        
-        text = self.format_text("🔪 ИГРА МАФИЯ СОЗДАНА", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
     async def tg_cmd_mafia_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Укажи ID игры: /mafia_join 1", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Укажи ID игры: /mafia_join 1")
             return
         
         try:
             game_id = int(context.args[0])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Неправильный ID", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Неправильный ID")
             return
         
         user = update.effective_user
         platform_id = str(user.id)
         
         if db.mafia_join_game(game_id, platform_id):
-            await update.message.reply_text(
-                self.format_text("✅ ПРИСОЕДИНЕНИЕ", f"✅ Ты присоединился к игре {game_id}!", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text(f"✅ Ты присоединился к игре {game_id}!")
         else:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Не удалось присоединиться", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Не удалось присоединиться")
     
     async def tg_cmd_mafia_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -3587,10 +3152,7 @@ class GameBot:
         game = db.cursor.fetchone()
         
         if not game:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ У тебя нет созданной игры", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ У тебя нет созданной игры")
             return
         
         columns = [description[0] for description in db.cursor.description]
@@ -3599,10 +3161,7 @@ class GameBot:
         roles = db.mafia_start_game(game_dict['id'])
         
         if roles == "not_enough_players":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Недостаточно игроков (нужно минимум 4)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Недостаточно игроков (нужно минимум 4)")
             return
         
         players = json.loads(game_dict['players'])
@@ -3614,40 +3173,30 @@ class GameBot:
         for player_id in players:
             role = roles[player_id]
             if role == 'mafia':
-                role_text = "🔪 <b>Мафия</b>"
+                role_text = "🔪 **Мафия**"
                 role_desc = "Ты просыпаешься ночью и можешь убивать"
             else:
-                role_text = "👨‍🌾 <b>Мирный житель</b>"
+                role_text = "👨‍🌾 **Мирный житель**"
                 role_desc = "Ты просыпаешься днем и ищешь мафию"
-            
-            content = f"Твоя роль: {role_text}\n{role_desc}"
-            text = self.format_text("🌙 НОЧЬ НАСТУПАЕТ", content, "primary")
             
             try:
                 await context.bot.send_animation(
                     chat_id=int(player_id),
                     animation=night_gif,
-                    caption=text,
-                    parse_mode=ParseMode.HTML
+                    caption=f"🌙 **НОЧЬ НАСТУПАЕТ...**\n\nТвоя роль: {role_text}\n{role_desc}"
                 )
             except:
                 pass
         
         await update.message.reply_text(
-            self.format_text(
-                "🌙 НАСТУПИЛА НОЧЬ",
-                "Мафия просыпается и выбирает жертву.\nИспользуйте: /mafia_kill [ник]",
-                "primary"
-            ),
-            parse_mode=ParseMode.HTML
+            "🌙 **НАСТУПИЛА НОЧЬ**\n"
+            "Мафия просыпается и выбирает жертву.\n"
+            "Используйте: /mafia_kill [ник]"
         )
     
     async def tg_cmd_mafia_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 1:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /mafia_vote [ник]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /mafia_vote [ник]")
             return
         
         user = update.effective_user
@@ -3655,50 +3204,35 @@ class GameBot:
         
         game_data = db.mafia_get_active_game(platform_id)
         if not game_data:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Ты не участвуешь в активной игре", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Ты не участвуешь в активной игре")
             return
         
         columns = [description[0] for description in db.cursor.description]
         game_dict = dict(zip(columns, game_data))
         
         if game_dict['phase'] != 'day':
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сейчас нельзя голосовать (ночь)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сейчас нельзя голосовать (ночь)")
             return
         
         target_name = context.args[0]
         target_user = db.get_user_by_username('tg', target_name)
         
         if not target_user:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_id = target_user[2]
         players = json.loads(game_dict['players'])
         
         if target_id not in players:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Этот игрок не в игре", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Этот игрок не в игре")
             return
         
-        # Сохраняем голос
         db.mafia_add_action(game_dict['id'], platform_id, 'vote', target_id, game_dict['day_count'])
         
-        # Проверяем, все ли проголосовали
         votes = db.mafia_get_actions(game_dict['id'], game_dict['day_count'], 'vote')
         
         if len(votes) >= len(players):
-            # Подсчет голосов
             vote_count = {}
             for vote in votes:
                 target = vote[4]
@@ -3723,12 +3257,7 @@ class GameBot:
                                 await context.bot.send_animation(
                                     chat_id=int(player_id),
                                     animation=day_gif,
-                                    caption=self.format_text(
-                                        "🏆 ИГРА ОКОНЧЕНА",
-                                        "👨‍🌾 **Мирные жители победили!**",
-                                        "success"
-                                    ),
-                                    parse_mode=ParseMode.HTML
+                                    caption="🏆 **ИГРА ОКОНЧЕНА!**\n\n👨‍🌾 **Мирные жители победили!**"
                                 )
                             except:
                                 pass
@@ -3740,12 +3269,7 @@ class GameBot:
                                 await context.bot.send_animation(
                                     chat_id=int(player_id),
                                     animation=day_gif,
-                                    caption=self.format_text(
-                                        "🏆 ИГРА ОКОНЧЕНА",
-                                        "🔪 **Мафия победила!**",
-                                        "error"
-                                    ),
-                                    parseMode=ParseMode.HTML
+                                    caption="🏆 **ИГРА ОКОНЧЕНА!**\n\n🔪 **Мафия победила!**"
                                 )
                             except:
                                 pass
@@ -3759,42 +3283,25 @@ class GameBot:
                             await context.bot.send_animation(
                                 chat_id=int(player_id),
                                 animation=day_gif,
-                                caption=self.format_text(
-                                    "☀️ НАСТУПИЛО УТРО",
-                                    f"Ночью был убит: {killed_name}\n\nОбсудите и голосуйте!",
-                                    "info"
-                                ),
-                                parse_mode=ParseMode.HTML
+                                caption=f"☀️ **НАСТУПИЛО УТРО**\n\nНочью был убит: {killed_name}\n\nОбсудите и голосуйте!"
                             )
                         except:
                             pass
                 
                 await update.message.reply_text(
-                    self.format_text(
-                        "💀 ИТОГИ НОЧИ",
-                        f"Мафия убила: {killed_name}\n\n☀️ Наступает день",
-                        "error"
-                    ),
-                    parse_mode=ParseMode.HTML
+                    f"💀 **ИТОГИ НОЧИ**\n\n"
+                    f"Мафия убила: {killed_name}\n\n"
+                    f"☀️ **НАСТУПАЕТ ДЕНЬ**"
                 )
             else:
-                await update.message.reply_text(
-                    self.format_text("🔄 НИЧЬЯ", "🔄 Ничья в голосовании. Никто не казнен.", "warning"),
-                    parse_mode=ParseMode.HTML
-                )
+                await update.message.reply_text("🔄 Ничья в голосовании. Никто не казнен.")
                 db.mafia_next_phase(game_dict['id'])
         
-        await update.message.reply_text(
-            self.format_text("✅ ГОЛОС УЧТЕН", "✅ Голос учтен", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Голос учтен")
     
     async def tg_cmd_mafia_kill(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 1:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /mafia_kill [ник]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /mafia_kill [ник]")
             return
         
         user = update.effective_user
@@ -3802,59 +3309,41 @@ class GameBot:
         
         game_data = db.mafia_get_active_game(platform_id)
         if not game_data:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Ты не участвуешь в активной игре", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Ты не участвуешь в активной игре")
             return
         
         columns = [description[0] for description in db.cursor.description]
         game_dict = dict(zip(columns, game_data))
         
         if game_dict['phase'] != 'night':
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сейчас нельзя убивать (день)", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сейчас нельзя убивать (день)")
             return
         
         roles = json.loads(game_dict['roles'])
         if roles.get(platform_id) != 'mafia':
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Только мафия может убивать ночью", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Только мафия может убивать ночью")
             return
         
         target_name = context.args[0]
         target_user = db.get_user_by_username('tg', target_name)
         
         if not target_user:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_id = target_user[2]
         players = json.loads(game_dict['players'])
         
         if target_id not in players:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Этот игрок не в игре", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Этот игрок не в игре")
             return
         
-        # Сохраняем действие
         db.mafia_add_action(game_dict['id'], platform_id, 'kill', target_id, game_dict['day_count'])
         
-        # Проверяем, все ли мафия проголосовала
         mafia_count = sum(1 for r in roles.values() if r == 'mafia')
         kills = db.mafia_get_actions(game_dict['id'], game_dict['day_count'], 'kill')
         
         if len(kills) >= mafia_count:
-            # Подсчет голосов
             kill_count = {}
             for kill in kills:
                 target = kill[4]
@@ -3874,12 +3363,7 @@ class GameBot:
                             await context.bot.send_animation(
                                 chat_id=int(player_id),
                                 animation=day_gif,
-                                caption=self.format_text(
-                                    "🏆 ИГРА ОКОНЧЕНА",
-                                    "👨‍🌾 **Мирные жители победили!**",
-                                    "success"
-                                ),
-                                parse_mode=ParseMode.HTML
+                                caption="🏆 **ИГРА ОКОНЧЕНА!**\n\n👨‍🌾 **Мирные жители победили!**"
                             )
                         except:
                             pass
@@ -3892,12 +3376,7 @@ class GameBot:
                             await context.bot.send_animation(
                                 chat_id=int(player_id),
                                 animation=day_gif,
-                                caption=self.format_text(
-                                    "🏆 ИГРА ОКОНЧЕНА",
-                                    "🔪 **Мафия победила!**",
-                                    "error"
-                                ),
-                                parse_mode=ParseMode.HTML
+                                caption="🏆 **ИГРА ОКОНЧЕНА!**\n\n🔪 **Мафия победила!**"
                             )
                         except:
                             pass
@@ -3912,29 +3391,18 @@ class GameBot:
                             await context.bot.send_animation(
                                 chat_id=int(player_id),
                                 animation=day_gif,
-                                caption=self.format_text(
-                                    "☀️ НАСТУПИЛО УТРО",
-                                    f"Ночью был убит: {killed_name}\n\nОбсудите и голосуйте!",
-                                    "info"
-                                ),
-                                parse_mode=ParseMode.HTML
+                                caption=f"☀️ **НАСТУПИЛО УТРО**\n\nНочью был убит: {killed_name}\n\nОбсудите и голосуйте!"
                             )
                         except:
                             pass
                 
                 await update.message.reply_text(
-                    self.format_text(
-                        "💀 ИТОГИ НОЧИ",
-                        f"Мафия убила: {killed_name}\n\n☀️ Наступает день",
-                        "error"
-                    ),
-                    parse_mode=ParseMode.HTML
+                    f"💀 **ИТОГИ НОЧИ**\n\n"
+                    f"Мафия убила: {killed_name}\n\n"
+                    f"☀️ **НАСТУПАЕТ ДЕНЬ**"
                 )
         
-        await update.message.reply_text(
-            self.format_text("🔪 УБИЙСТВО", f"🔪 Ты выбрал цель: {target_name}", "error"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"🔪 Ты выбрал цель: {target_name}")
     
     # ===================== САПЁР =====================
     async def tg_cmd_minesweeper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3952,10 +3420,7 @@ class GameBot:
         }
         
         if difficulty not in sizes:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Сложность должна быть: новичок, любитель или профи", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Сложность должна быть: новичок, любитель или профи")
             return
         
         width, height, mines = sizes[difficulty]
@@ -3964,19 +3429,14 @@ class GameBot:
         
         board_display = self._format_minesweeper_board(game_id, width, height)
         
-        content = (
-            f"Сложность: {difficulty}\n"
-            f"Размер: {width}x{height}\n"
-            f"Мин: {mines}\n\n"
+        await update.message.reply_text(
+            f"💣 **САПЁР** (сложность: {difficulty})\n\n"
             f"{board_display}\n\n"
             f"Команды:\n"
-            f"├ /ms_reveal X Y — открыть клетку\n"
-            f"└ /ms_flag X Y — поставить флаг"
+            f"/ms_reveal X Y — открыть клетку\n"
+            f"/ms_flag X Y — поставить флаг",
+            parse_mode='Markdown'
         )
-        
-        text = self.format_text("💣 САПЁР", content, "primary")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
     
     def _format_minesweeper_board(self, game_id, width, height):
         game = db.minesweeper_get_game(game_id)
@@ -3990,9 +3450,8 @@ class GameBot:
         if status == 'lost':
             board = json.loads(game['board'])
         
-        board_display = "<code>"
         header = "   " + " ".join([f"{i:2}" for i in range(width)]) + "\n"
-        board_display += header
+        board_display = header
         
         for y in range(height):
             row = f"{y:2} "
@@ -4010,25 +3469,18 @@ class GameBot:
                     row += "⬛ "
             board_display += row + "\n"
         
-        board_display += "</code>"
         return board_display
     
     async def tg_cmd_ms_reveal(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ms_reveal X Y", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ms_reveal X Y")
             return
         
         try:
             x = int(context.args[0])
             y = int(context.args[1])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Координаты должны быть числами", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Координаты должны быть числами")
             return
         
         user = update.effective_user
@@ -4041,10 +3493,7 @@ class GameBot:
         game = db.cursor.fetchone()
         
         if not game:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ У тебя нет активной игры. Начни новую через /minesweeper", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ У тебя нет активной игры. Начни новую через /minesweeper")
             return
         
         columns = [description[0] for description in db.cursor.description]
@@ -4053,45 +3502,39 @@ class GameBot:
         result = db.minesweeper_reveal(game_dict['id'], x, y)
         
         if result == "already_revealed":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Эта клетка уже открыта или помечена флагом", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Эта клетка уже открыта или помечена флагом")
             return
         
         board_display = self._format_minesweeper_board(game_dict['id'], game_dict['width'], game_dict['height'])
         
         if result['status'] == 'lost':
-            content = f"{board_display}"
-            text = self.format_text("💥 ТЫ ПРОИГРАЛ", content, "error")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"💥 **Ты проиграл!**\n\n{board_display}",
+                parse_mode='Markdown'
+            )
         elif result['status'] == 'won':
             db.cursor.execute("UPDATE users SET minesweeper_wins = minesweeper_wins + 1, minesweeper_games = minesweeper_games + 1 WHERE platform = ? AND platform_id = ?", ('tg', platform_id))
             db.conn.commit()
-            content = f"{board_display}"
-            text = self.format_text("🏆 ПОБЕДА", content, "success")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"🏆 **ПОБЕДА!**\n\n{board_display}",
+                parse_mode='Markdown'
+            )
         else:
-            content = f"{board_display}"
-            text = self.format_text("✅ ХОД СДЕЛАН", content, "success")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"✅ Ход сделан\n\n{board_display}",
+                parse_mode='Markdown'
+            )
     
     async def tg_cmd_ms_flag(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /ms_flag X Y", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /ms_flag X Y")
             return
         
         try:
             x = int(context.args[0])
             y = int(context.args[1])
         except:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Координаты должны быть числами", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Координаты должны быть числами")
             return
         
         user = update.effective_user
@@ -4104,10 +3547,7 @@ class GameBot:
         game = db.cursor.fetchone()
         
         if not game:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ У тебя нет активной игры. Начни новую через /minesweeper", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ У тебя нет активной игры. Начни новую через /minesweeper")
             return
         
         columns = [description[0] for description in db.cursor.description]
@@ -4116,17 +3556,11 @@ class GameBot:
         result = db.minesweeper_toggle_flag(game_dict['id'], x, y)
         
         if result == "already_revealed":
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Нельзя поставить флаг на открытую клетку", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Нельзя поставить флаг на открытую клетку")
             return
         
         board_display = self._format_minesweeper_board(game_dict['id'], game_dict['width'], game_dict['height'])
-        content = f"{board_display}"
-        text = self.format_text("🚩 ФЛАГ ОБНОВЛЕН", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"🚩 Флаг обновлен\n\n{board_display}", parse_mode='Markdown')
     
     # ===================== КАМЕНЬ-НОЖНИЦЫ-БУМАГА =====================
     async def tg_cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4140,26 +3574,28 @@ class GameBot:
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
-        text = self.format_text("✊ КАМЕНЬ-НОЖНИЦЫ-БУМАГА", "Выбери свой ход:", "primary")
-        
-        await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            "✊ **КАМЕНЬ-НОЖНИЦЫ-БУМАГА**\n\n"
+            "Выбери свой ход:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
+        )
     
     # ===================== ПОЛЕЗНЫЕ КОМАНДЫ =====================
     async def tg_cmd_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /info [событие]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /info [событие]")
             return
         
         event = " ".join(context.args)
         probability = random.randint(0, 100)
         
-        content = f"Событие: {event}\nВероятность: {probability}%"
-        text = self.format_text("📊 ПРАВДИВОСТЬ СОБЫТИЯ", content, "info")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            f"📊 **ПРАВДИВОСТЬ СОБЫТИЯ**\n\n"
+            f"Событие: {event}\n"
+            f"Вероятность: {probability}%",
+            parse_mode='Markdown'
+        )
     
     async def tg_cmd_holidays(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         today = datetime.datetime.now()
@@ -4178,11 +3614,9 @@ class GameBot:
         date_key = today.strftime("%m-%d")
         
         if date_key in holidays:
-            text = self.format_text("📅 ПРАЗДНИКИ", f"🎉 Сегодня: {holidays[date_key]}", "success")
+            await update.message.reply_text(f"📅 **Сегодня:** {holidays[date_key]}", parse_mode='Markdown')
         else:
-            text = self.format_text("📅 ПРАЗДНИКИ", "📅 Сегодня нет праздников", "info")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+            await update.message.reply_text("📅 Сегодня нет праздников", parse_mode='Markdown')
     
     async def tg_cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         facts = [
@@ -4199,9 +3633,8 @@ class GameBot:
         ]
         
         fact = random.choice(facts)
-        text = self.format_text("📌 СЛУЧАЙНЫЙ ФАКТ", fact, "info")
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"📌 **СЛУЧАЙНЫЙ ФАКТ**\n\n{fact}", parse_mode='Markdown')
     
     async def tg_cmd_wisdom(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         quotes = [
@@ -4213,32 +3646,33 @@ class GameBot:
         ]
         
         quote = random.choice(quotes)
-        text = self.format_text("💭 МУДРАЯ МЫСЛЬ", quote, "primary")
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(f"💭 **МУДРАЯ МЫСЛЬ**\n\n{quote}", parse_mode='Markdown')
     
     async def tg_cmd_population(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         world_pop = 7_900_000_000
-        text = self.format_text("🌍 НАСЕЛЕНИЕ ЗЕМЛИ", f"👥 Примерно: {world_pop:,} человек", "info")
         
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            f"🌍 **НАСЕЛЕНИЕ ЗЕМЛИ**\n\n"
+            f"Примерно: {world_pop:,} человек",
+            parse_mode='Markdown'
+        )
     
     async def tg_cmd_bitcoin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_usd = random.randint(40000, 70000)
         price_rub = price_usd * 91.5
         
-        content = f"USD: ${price_usd:,}\nRUB: ₽{int(price_rub):,}"
-        text = self.format_text("₿ КУРС БИТКОИНА", content, "warning")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(
+            f"₿ **КУРС БИТКОИНА**\n\n"
+            f"USD: ${price_usd:,}\n"
+            f"RUB: ₽{int(price_rub):,}",
+            parse_mode='Markdown'
+        )
     
     # ===================== ЗАКЛАДКИ И НАГРАДЫ =====================
     async def tg_cmd_add_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /bookmark [описание]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /bookmark [описание]")
             return
         
         description = " ".join(context.args)
@@ -4250,10 +3684,7 @@ class GameBot:
         
         db.add_bookmark('tg', platform_id, description, message_link, message_text)
         
-        await update.message.reply_text(
-            self.format_text("✅ ЗАКЛАДКА", f"✅ Закладка создана: {description}", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Закладка создана: {description}")
     
     async def tg_cmd_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -4263,32 +3694,25 @@ class GameBot:
         
         if not bookmarks:
             await update.message.reply_text(
-                self.format_text(
-                    "📌 ЗАКЛАДКИ",
-                    "📭 У вас нет закладок.\n\n💬 Для создания закладки используйте:\n/bookmark [описание]",
-                    "info"
-                ),
-                parse_mode=ParseMode.HTML
+                "📭 У вас нет закладок.\n\n"
+                "💬 Для создания закладки используйте:\n"
+                "/bookmark [описание]"
             )
             return
         
-        content = ""
+        text = "📌 **ВАШИ ЗАКЛАДКИ**\n\n"
+        
         for i, bookmark in enumerate(bookmarks, 1):
-            content += f"{i}. {bookmark[3]} — [ссылка]({bookmark[4]})\n"
+            text += f"{i}. {bookmark[3]} — [ссылка]({bookmark[4]})\n"
         
-        text = self.format_text("📌 ВАШИ ЗАКЛАДКИ", content, "info")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        await update.message.reply_text(text, parse_mode='Markdown', disable_web_page_preview=True)
     
     async def tg_cmd_add_award(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not await self._check_moder_rank(update, 3):
             return
         
         if len(context.args) < 2:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Использование: /award [ник] [название награды]", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Использование: /award [ник] [название награды]")
             return
         
         target_name = context.args[0]
@@ -4297,26 +3721,19 @@ class GameBot:
         target_user = db.get_user_by_username('tg', target_name)
         
         if not target_user:
-            await update.message.reply_text(
-                self.format_text("Ошибка", "❌ Пользователь не найден", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         target_id = target_user[2]
         
         db.add_award('tg', target_id, award_name, award_name, update.effective_user.id, update.effective_user.first_name)
         
-        await update.message.reply_text(
-            self.format_text("🏅 НАГРАДА", f"✅ Награда '{award_name}' выдана пользователю {target_name}", "success"),
-            parse_mode=ParseMode.HTML
-        )
+        await update.message.reply_text(f"✅ Награда '{award_name}' выдана пользователю {target_name}")
         
         try:
             await context.bot.send_message(
                 chat_id=int(target_id),
-                text=self.format_text("🏅 ВАМ ВЫДАНА НАГРАДА", f"🏅 Награда: {award_name}", "success"),
-                parse_mode=ParseMode.HTML
+                text=f"🏅 Вам выдана награда: {award_name}"
             )
         except:
             pass
@@ -4328,67 +3745,95 @@ class GameBot:
         awards = db.get_awards('tg', platform_id)
         
         if not awards:
-            await update.message.reply_text(
-                self.format_text("🏅 НАГРАДЫ", "🏅 У вас пока нет наград", "info"),
-                parse_mode=ParseMode.HTML
-            )
+            await update.message.reply_text("🏅 У вас пока нет наград")
             return
         
-        content = ""
+        text = "🏅 **ВАШИ НАГРАДЫ**\n\n"
+        
         for award in awards:
             award_date = datetime.datetime.fromisoformat(award[6]).strftime("%d.%m.%Y")
-            content += f"├ {award[3]} — от {award[5]} ({award_date})\n"
+            text += f"• **{award[3]}** — от {award[5]} ({award_date})\n"
         
-        text = self.format_text("🏅 ВАШИ НАГРАДЫ", content, "success")
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        await update.message.reply_text(text, parse_mode='Markdown')
     
     # ===================== ОБРАБОТКА СООБЩЕНИЙ =====================
     async def tg_handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    platform_id = str(user.id)
-    message_text = update.message.text
+        user = update.effective_user
+        platform_id = str(user.id)
+        message_text = update.message.text
+        
+        user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
+        db.update_activity('tg', platform_id)
+        db.add_message_count('tg', platform_id)
+        db.update_activity_data('tg', platform_id)
+        
+        # Проверка на бан
+        if db.is_banned('tg', platform_id):
+            return
+        
+        # Проверка на мут
+        if db.is_muted('tg', platform_id):
+            mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
+            remaining = mute_until - datetime.datetime.now()
+            minutes = remaining.seconds // 60
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
+            return
+        
+        # 🤖 AI ОТВЕТЫ НА ЛЮБЫЕ СООБЩЕНИЯ (кроме команд)
+        if not message_text.startswith('/'):
+            await update.message.chat.send_action(action="typing")
+            response = await self.ai.get_response(user.id, message_text)
+            await update.message.reply_text(f"🤖 **AI:** {response}", parse_mode='Markdown')
+            return
+        
+        # Проверка на длительное молчание
+        last_msg_time = self.last_activity['tg'].get(platform_id, 0)
+        current_time = time.time()
+        
+        if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
+            await update.message.reply_text(
+                f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
+                f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
+                f"Поприветствуйте молчуна! 👏"
+            )
+        
+        self.last_activity['tg'][platform_id] = current_time
+        
+        # Приветствие для новых
+        if user_data['messages_count'] == 1:
+            await update.message.reply_text(f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.")
     
-    user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
-    db.update_activity('tg', platform_id)
-    db.add_message_count('tg', platform_id)
-    db.update_activity_data('tg', platform_id)
+    async def tg_handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = str(update.effective_chat.id)
+        settings = db.get_group_settings(chat_id, 'tg')
+        
+        if not settings.get('welcome_enabled', 1):
+            return
+        
+        welcome = settings.get('welcome_message', '🌟 Добро пожаловать, {user}!')
+        
+        for member in update.message.new_chat_members:
+            if member.is_bot:
+                continue
+            
+            welcome_text = welcome.replace('{user}', f"[{member.first_name}](tg://user?id={member.id})")
+            await update.message.reply_text(welcome_text, parse_mode='Markdown')
     
-    # Проверка на бан
-    if db.is_banned('tg', platform_id):
-        return
-    
-    # Проверка на мут
-    if db.is_muted('tg', platform_id):
-        mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
-        remaining = mute_until - datetime.datetime.now()
-        minutes = remaining.seconds // 60
-        await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
-        return
-    
-    # 🤖 AI ОТВЕТЫ НА ОБЫЧНЫЕ СООБЩЕНИЯ
-    if not message_text.startswith('/'):
-        await update.message.chat.send_action(action="typing")
-        response = await self.hf_ai.get_response(user.id, message_text)
-        await update.message.reply_text(f"🤗 **Hugging Face:** {response}", parse_mode='Markdown')
-        return
-    
-    # Проверка на длительное молчание
-    last_msg_time = self.last_activity['tg'].get(platform_id, 0)
-    current_time = time.time()
-    
-    if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
-        await update.message.reply_text(
-            f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
-            f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
-            f"Поприветствуйте молчуна! 👏"
-        )
-    
-    self.last_activity['tg'][platform_id] = current_time
-    
-    # Приветствие для новых
-    if user_data['messages_count'] == 1:
-        await update.message.reply_text(f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.")
+    async def tg_handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = str(update.effective_chat.id)
+        settings = db.get_group_settings(chat_id, 'tg')
+        
+        if not settings.get('goodbye_enabled', 1):
+            return
+        
+        goodbye = settings.get('goodbye_message', '👋 Пока, {user}!')
+        member = update.message.left_chat_member
+        
+        if member.is_bot:
+            return
+        
+        goodbye_text = goodbye.replace('{user}', f"[{member.first_name}](tg://user?id={member.id})")
+        await update.message.reply_text(goodbye_text, parse_mode='Markdown')
     
     # ===================== ОБРАБОТКА КНОПОК =====================
     async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4424,9 +3869,9 @@ class GameBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                self.format_text("🛡️ МОДЕРАЦИЯ", "Выберите раздел:", "primary"),
+                "🛡️ **МОДЕРАЦИЯ**\n\nВыберите раздел:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                parse_mode='Markdown'
             )
         elif data == "games":
             keyboard = [
@@ -4439,9 +3884,9 @@ class GameBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                self.format_text("🎮 ИГРЫ", "Выберите игру:", "primary"),
+                "🎮 **ИГРЫ**\n\nВыберите игру:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                parse_mode='Markdown'
             )
         elif data == "bookmarks_menu":
             await self.tg_cmd_bookmarks(update, context)
@@ -4457,9 +3902,9 @@ class GameBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                self.format_text("⚠️ ПРЕДУПРЕЖДЕНИЯ", "Выберите действие:", "warning"),
+                "⚠️ **ПРЕДУПРЕЖДЕНИЯ**\n\nВыберите действие:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                parse_mode='Markdown'
             )
         elif data == "warnlist":
             context.args = []
@@ -4483,59 +3928,39 @@ class GameBot:
         
         # Магазин
         elif data == "buy_potions":
-            content = (
-                "<b>💊 ЗЕЛЬЯ</b>\n"
-                "├ Зелье здоровья — 50 🪙 (❤️+30)\n"
-                "└ Большое зелье — 100 🪙 (❤️+70)\n\n"
-                "Купить: /buy [название]"
-            )
             await query.edit_message_text(
-                self.format_text("💊 ЗЕЛЬЯ", content, "info"),
-                parse_mode=ParseMode.HTML
+                "💊 **ЗЕЛЬЯ**\n\n"
+                "• Зелье здоровья — 50 🪙 (❤️+30)\n"
+                "• Большое зелье — 100 🪙 (❤️+70)\n\n"
+                "Купить: /buy [название]"
             )
         elif data == "buy_weapons":
-            content = (
-                "<b>⚔️ ОРУЖИЕ</b>\n"
-                "├ Меч — 200 🪙 (⚔️+10)\n"
-                "└ Легендарный меч — 500 🪙 (⚔️+30)\n\n"
-                "Купить: /buy [название]"
-            )
             await query.edit_message_text(
-                self.format_text("⚔️ ОРУЖИЕ", content, "info"),
-                parse_mode=ParseMode.HTML
+                "⚔️ **ОРУЖИЕ**\n\n"
+                "• Меч — 200 🪙 (⚔️+10)\n"
+                "• Легендарный меч — 500 🪙 (⚔️+30)\n\n"
+                "Купить: /buy [название]"
             )
         elif data == "buy_energy":
-            content = (
-                "<b>⚡ ЭНЕРГИЯ</b>\n"
-                "├ Энергетик — 30 🪙 (⚡+20)\n"
-                "└ Батарейка — 80 🪙 (⚡+50)\n\n"
-                "Купить: /buy [название]"
-            )
             await query.edit_message_text(
-                self.format_text("⚡ ЭНЕРГИЯ", content, "info"),
-                parse_mode=ParseMode.HTML
+                "⚡ **ЭНЕРГИЯ**\n\n"
+                "• Энергетик — 30 🪙 (⚡+20)\n"
+                "• Батарейка — 80 🪙 (⚡+50)\n\n"
+                "Купить: /buy [название]"
             )
         elif data == "buy_diamonds":
-            content = (
-                "<b>💎 АЛМАЗЫ</b>\n"
-                "└ Алмаз — 100 🪙 (💎+1)\n\n"
+            await query.edit_message_text(
+                "💎 **АЛМАЗЫ**\n\n"
+                "• Алмаз — 100 🪙 (💎+1)\n\n"
                 "Купить: /buy алмаз"
             )
-            await query.edit_message_text(
-                self.format_text("💎 АЛМАЗЫ", content, "info"),
-                parse_mode=ParseMode.HTML
-            )
         elif data == "buy_rr_items":
-            content = (
-                "<b>🎲 ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ</b>\n"
-                "├ Монета Демона — 500 🪙\n"
-                "├ Кровавый Глаз — 300 🪙\n"
-                "└ Маска Клоуна — 1000 🪙\n\n"
-                "Купить: /buy [название]"
-            )
             await query.edit_message_text(
-                self.format_text("🎲 ПРЕДМЕТЫ РУЛЕТКИ", content, "info"),
-                parse_mode=ParseMode.HTML
+                "🎲 **ПРЕДМЕТЫ ДЛЯ РУЛЕТКИ**\n\n"
+                "• Монета Демона — 500 🪙\n"
+                "• Кровавый Глаз — 300 🪙\n"
+                "• Маска Клоуна — 1000 🪙\n\n"
+                "Купить: /buy [название]"
             )
         
         # Игры
@@ -4551,29 +3976,19 @@ class GameBot:
         elif data == "rps":
             await self.tg_cmd_rps(update, context)
         elif data == "rr_create":
-            content = (
+            await query.edit_message_text(
                 "💣 **СОЗДАНИЕ ИГРЫ**\n\n"
                 "Используй команду:\n"
                 "/rr_start [игроки] [ставка]\n\n"
                 "Пример: /rr_start 4 100"
             )
-            await query.edit_message_text(
-                self.format_text("💣 СОЗДАНИЕ ИГРЫ", content, "info"),
-                parse_mode=ParseMode.HTML
-            )
         
         # Крестики-нолики
         elif data.startswith("ttt_accept_"):
             game_id = int(data.split("_")[2])
-            await query.edit_message_text(
-                self.format_text("✅ ВЫЗОВ ПРИНЯТ", "✅ Ты принял вызов! Игра начинается...", "success"),
-                parse_mode=ParseMode.HTML
-            )
+            await query.edit_message_text("✅ Ты принял вызов! Игра начинается...")
         elif data.startswith("ttt_decline_"):
-            await query.edit_message_text(
-                self.format_text("❌ ВЫЗОВ ОТКЛОНЕН", "❌ Ты отклонил вызов", "error"),
-                parse_mode=ParseMode.HTML
-            )
+            await query.edit_message_text("❌ Ты отклонил вызов")
         
         # КНБ
         elif data.startswith("rps_"):
@@ -4590,29 +4005,22 @@ class GameBot:
             
             if user_choice == bot_choice:
                 db.cursor.execute("UPDATE users SET rps_draws = rps_draws + 1 WHERE platform = ? AND platform_id = ?", ('tg', str(update.effective_user.id)))
-                content = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n🤝 **Ничья!**"
-                text = self.format_text("✊ КНБ", content, "warning")
+                text = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n🤝 **Ничья!**"
             else:
                 result = result_map.get((user_choice, bot_choice), "lose")
                 if result == "win":
                     db.cursor.execute("UPDATE users SET rps_wins = rps_wins + 1 WHERE platform = ? AND platform_id = ?", ('tg', str(update.effective_user.id)))
-                    content = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n🎉 **Ты выиграл!**"
-                    text = self.format_text("✊ КНБ", content, "success")
+                    text = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n🎉 **Ты выиграл!**"
                 else:
                     db.cursor.execute("UPDATE users SET rps_losses = rps_losses + 1 WHERE platform = ? AND platform_id = ?", ('tg', str(update.effective_user.id)))
-                    content = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n😢 **Ты проиграл!**"
-                    text = self.format_text("✊ КНБ", content, "error")
+                    text = f"{choices[user_choice]} vs {choices[bot_choice]}\n\n😢 **Ты проиграл!**"
             
             db.conn.commit()
             
             keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="games")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
-            await query.edit_message_text(
-                text,
-                reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
-            )
+            await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='Markdown')
         
         # Навигация
         elif data == "menu_back":
@@ -4632,9 +4040,9 @@ class GameBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                self.format_text("🎮 ГЛАВНОЕ МЕНЮ", "Выберите раздел:", "primary"),
+                "🎮 **ГЛАВНОЕ МЕНЮ**\n\nВыберите раздел:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                parse_mode='Markdown'
             )
         elif data == "games_menu":
             keyboard = [
@@ -4647,17 +4055,16 @@ class GameBot:
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             await query.edit_message_text(
-                self.format_text("🎮 ИГРЫ", "Выберите игру:", "primary"),
+                "🎮 **ИГРЫ**\n\nВыберите игру:",
                 reply_markup=reply_markup,
-                parse_mode=ParseMode.HTML
+                parse_mode='Markdown'
             )
         elif data == "noop":
             pass
         else:
             await query.edit_message_text(
-                self.format_text("Ошибка", "❌ Неизвестная команда", "error"),
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]]),
-                parse_mode=ParseMode.HTML
+                "❌ Неизвестная команда",
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="menu_back")]])
             )
     
     # ===================== VK ОБРАБОТЧИКИ =====================
