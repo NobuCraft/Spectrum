@@ -877,6 +877,76 @@ class Database:
         self.conn.commit()
         
         return result
+
+    # ===================== HUGGING FACE AI =====================
+class HuggingChat:
+    def __init__(self):
+        self.api_token = "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"
+        self.contexts = {}
+        self.models = {
+            "mistral": "mistralai/Mistral-7B-Instruct-v0.1",
+            "zephyr": "HuggingFaceH4/zephyr-7b-beta",
+            "phi3": "microsoft/Phi-3-mini-4k-instruct",
+            "gemma": "google/gemma-2b-it",
+        }
+        self.current_model = "mistral"
+        print("🤗 Hugging Face AI инициализирован")
+    
+    async def get_response(self, user_id: int, message: str) -> str:
+        try:
+            API_URL = f"https://api-inference.huggingface.co/models/{self.models[self.current_model]}"
+            headers = {"Authorization": f"Bearer {self.api_token}"}
+            
+            if self.current_model == "mistral":
+                prompt = f"<s>[INST] {message} [/INST]"
+            elif self.current_model == "zephyr":
+                prompt = f"<|user|>\n{message}\n<|assistant|>\n"
+            else:
+                prompt = message
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(API_URL, headers=headers, json={
+                    "inputs": prompt,
+                    "parameters": {
+                        "max_new_tokens": 200,
+                        "temperature": 0.7,
+                        "top_p": 0.95,
+                        "do_sample": True
+                    }
+                }, timeout=30) as resp:
+                    
+                    if resp.status == 200:
+                        result = await resp.json()
+                        if isinstance(result, list) and len(result) > 0:
+                            text = result[0].get("generated_text", "")
+                            if self.current_model == "mistral":
+                                text = text.split("[/INST]")[-1] if "[/INST]" in text else text
+                            elif self.current_model == "zephyr":
+                                text = text.split("<|assistant|>")[-1] if "<|assistant|>" in text else text
+                            return text.strip() or "😊 Понятно!"
+                    elif resp.status == 503:
+                        await asyncio.sleep(2)
+                        return await self.get_response(user_id, message)
+                    
+                    return self._get_fallback(message)
+        except:
+            return self._get_fallback(message)
+    
+    def _get_fallback(self, message: str) -> str:
+        responses = [
+            "🤖 Я тебя слушаю!",
+            "😊 Интересно...",
+            "✨ Понятно!",
+            "🎯 Хорошо!",
+            "💭 Расскажи подробнее"
+        ]
+        return random.choice(responses)
+    
+    async def change_model(self, model_name: str) -> bool:
+        if model_name in self.models:
+            self.current_model = model_name
+            return True
+        return False
     
     # ===================== КРЕСТИКИ-НОЛИКИ 3D =====================
     def ttt_create_game(self, player_x, player_o):
@@ -1198,6 +1268,7 @@ class GameBot:
         self.tg_application = None
         self.vk_bot = None
         self.vk_api = None
+        self.hf_ai = HuggingChat()
         self.last_activity = defaultdict(dict)
         self.spam_tracker = defaultdict(list)
         
@@ -4254,76 +4325,50 @@ class GameBot:
     
     # ===================== ОБРАБОТКА СООБЩЕНИЙ =====================
     async def tg_handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        platform_id = str(user.id)
-        message_text = update.message.text
-        
-        user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
-        db.update_activity('tg', platform_id)
-        db.add_message_count('tg', platform_id)
-        db.update_activity_data('tg', platform_id)
-        
-        if db.is_banned('tg', platform_id) or db.is_muted('tg', platform_id):
-            return
-        
-        last_msg_time = self.last_activity['tg'].get(platform_id, 0)
-        current_time = time.time()
-        
-        if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
-            await update.message.reply_text(
-                self.format_text(
-                    "⚡️ СВЯТЫЕ УГОДНИКИ",
-                    f"⚡️⚡️⚡️ {user.first_name} заговорил после более, чем месячного молчания!!!\nПоприветствуйте молчуна! 👏",
-                    "warning"
-                ),
-                parse_mode=ParseMode.HTML
-            )
-        
-        self.last_activity['tg'][platform_id] = current_time
-        
-        if user_data['messages_count'] == 1:
-            await update.message.reply_text(
-                self.format_text(
-                    "🌟 ДОБРО ПОЖАЛОВАТЬ",
-                    f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.",
-                    "success"
-                ),
-                parse_mode=ParseMode.HTML
-            )
+    user = update.effective_user
+    platform_id = str(user.id)
+    message_text = update.message.text
     
-    async def tg_handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = str(update.effective_chat.id)
-        settings = db.get_group_settings(chat_id, 'tg')
-        
-        if not settings.get('welcome_enabled', 1):
-            return
-        
-        welcome = settings.get('welcome_message', '🌟 Добро пожаловать, {user}!')
-        
-        for member in update.message.new_chat_members:
-            if member.is_bot:
-                continue
-            
-            welcome_text = welcome.replace('{user}', f"[{member.first_name}](tg://user?id={member.id})")
-            text = self.format_text("🌟 НОВЫЙ УЧАСТНИК", welcome_text, "success")
-            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
+    db.update_activity('tg', platform_id)
+    db.add_message_count('tg', platform_id)
+    db.update_activity_data('tg', platform_id)
     
-    async def tg_handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = str(update.effective_chat.id)
-        settings = db.get_group_settings(chat_id, 'tg')
-        
-        if not settings.get('goodbye_enabled', 1):
-            return
-        
-        goodbye = settings.get('goodbye_message', '👋 Пока, {user}!')
-        member = update.message.left_chat_member
-        
-        if member.is_bot:
-            return
-        
-        goodbye_text = goodbye.replace('{user}', f"[{member.first_name}](tg://user?id={member.id})")
-        text = self.format_text("👋 УЧАСТНИК ПОКИНУЛ ЧАТ", goodbye_text, "warning")
-        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    # Проверка на бан
+    if db.is_banned('tg', platform_id):
+        return
+    
+    # Проверка на мут
+    if db.is_muted('tg', platform_id):
+        mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
+        remaining = mute_until - datetime.datetime.now()
+        minutes = remaining.seconds // 60
+        await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
+        return
+    
+    # 🤖 AI ОТВЕТЫ НА ОБЫЧНЫЕ СООБЩЕНИЯ
+    if not message_text.startswith('/'):
+        await update.message.chat.send_action(action="typing")
+        response = await self.hf_ai.get_response(user.id, message_text)
+        await update.message.reply_text(f"🤗 **Hugging Face:** {response}", parse_mode='Markdown')
+        return
+    
+    # Проверка на длительное молчание
+    last_msg_time = self.last_activity['tg'].get(platform_id, 0)
+    current_time = time.time()
+    
+    if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
+        await update.message.reply_text(
+            f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
+            f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
+            f"Поприветствуйте молчуна! 👏"
+        )
+    
+    self.last_activity['tg'][platform_id] = current_time
+    
+    # Приветствие для новых
+    if user_data['messages_count'] == 1:
+        await update.message.reply_text(f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.")
     
     # ===================== ОБРАБОТКА КНОПОК =====================
     async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
