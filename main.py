@@ -1262,15 +1262,17 @@ class HuggingChat:
 db = Database()
 
 # ===================== ОСНОВНОЙ КЛАСС БОТА =====================
+# ===================== ОСНОВНОЙ КЛАСС БОТА =====================
 class GameBot:
     def __init__(self):
         self.db = db
         self.tg_application = None
         self.vk_bot = None
         self.vk_api = None
-        self.hf_ai = HuggingChat()
         self.last_activity = defaultdict(dict)
         self.spam_tracker = defaultdict(list)
+        self.mafia_games = {}
+        self.hf_ai = HuggingChat()  # 👈 Добавьте эту строку
         
         if TELEGRAM_TOKEN:
             self.tg_application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -1283,77 +1285,95 @@ class GameBot:
             self.setup_vk_handlers()
             logger.info("✅ VK бот инициализирован")
     
-    # ===================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ =====================
-    def format_text(self, title, content, color="primary"):
-        """Форматирует текст в красивом стиле"""
-        colors = {
-            "primary": "🎮",
-            "success": "✅",
-            "error": "❌",
-            "info": "ℹ️",
-            "warning": "⚠️"
-        }
-        emoji = colors.get(color, "🎮")
+    # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
+    def setup_tg_handlers(self):
+        # ... весь ваш код setup_tg_handlers ...
+        pass
+    
+    # ===================== TELEGRAM КОМАНДЫ =====================
+    async def tg_cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # ... ваш код ...
+        pass
+    
+    # ... все остальные методы вашего бота ...
+    
+    # ===================== ОБРАБОТКА СООБЩЕНИЙ =====================
+    async def tg_handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        platform_id = str(user.id)
+        message_text = update.message.text
         
-        text = f"<b>{emoji} {title}</b>\n"
-        text += "━" * 25 + "\n"
-        text += content
-        text += "\n" + "━" * 25
-        return text
-    
-    def format_code(self, text):
-        """Форматирует текст как код"""
-        return f"<code>{text}</code>"
-    
-    def format_spoiler(self, text):
-        """Форматирует текст как спойлер"""
-        return f"<span class='tg-spoiler'>{text}</span>"
-    
-    def format_quote(self, text):
-        """Форматирует текст как цитату"""
-        return f"<blockquote>{text}</blockquote>"
-    
-    async def send_with_typing(self, update: Update, text: str, reply_markup=None):
-        """Отправляет сообщение с имитацией печатания"""
-        await update.message.chat.send_action(action="typing")
-        await asyncio.sleep(0.5)
-        await update.message.reply_text(
-            text,
-            parse_mode=ParseMode.HTML,
-            reply_markup=reply_markup
-        )
-    
-    async def _resolve_mention(self, update: Update, context: ContextTypes.DEFAULT_TYPE, mention: str) -> Optional[str]:
-        """Преобразует упоминание в ID пользователя"""
-        if mention.isdigit():
-            return mention
+        user_data = db.get_user('tg', platform_id, user.username or "", user.first_name, user.last_name or "")
+        db.update_activity('tg', platform_id)
+        db.add_message_count('tg', platform_id)
+        db.update_activity_data('tg', platform_id)
         
-        if mention.startswith('@'):
-            username = mention[1:]
-            user = db.get_user_by_username('tg', username)
-            if user:
-                return user[2]
+        # Проверка на бан
+        if db.is_banned('tg', platform_id):
+            return
         
-        if update.message and update.message.reply_to_message:
-            return str(update.message.reply_to_message.from_user.id)
+        # Проверка на мут
+        if db.is_muted('tg', platform_id):
+            mute_until = datetime.datetime.fromisoformat(user_data['mute_until'])
+            remaining = mute_until - datetime.datetime.now()
+            minutes = remaining.seconds // 60
+            await update.message.reply_text(f"🔇 Вы замучены. Осталось: {minutes} мин")
+            return
         
-        return None
+        # 🤖 AI ОТВЕТЫ НА ОБЫЧНЫЕ СООБЩЕНИЯ
+        if not message_text.startswith('/'):
+            await update.message.chat.send_action(action="typing")
+            response = await self.hf_ai.get_response(user.id, message_text)
+            await update.message.reply_text(f"🤗 **Hugging Face:** {response}", parse_mode='Markdown')
+            return
+        
+        # Проверка на длительное молчание
+        last_msg_time = self.last_activity['tg'].get(platform_id, 0)
+        current_time = time.time()
+        
+        if last_msg_time > 0 and current_time - last_msg_time > 30 * 24 * 3600:
+            await update.message.reply_text(
+                f"⚡️⚡️⚡️ **Святые угодники!**\n\n"
+                f"{user.first_name} заговорил после более, чем месячного молчания!!!\n"
+                f"Поприветствуйте молчуна! 👏"
+            )
+        
+        self.last_activity['tg'][platform_id] = current_time
+        
+        # Приветствие для новых
+        if user_data['messages_count'] == 1:
+            await update.message.reply_text(f"🌟 Добро пожаловать, {user.first_name}! Используй /help для списка команд.")
     
-    async def _check_moder_rank(self, update: Update, required_rank: int) -> bool:
-        """Проверяет, имеет ли пользователь достаточный ранг"""
-        user_id = str(update.effective_user.id)
-        rank = db.get_mod_rank('tg', user_id)
-        if rank >= required_rank:
-            return True
-        await update.message.reply_text(
-            self.format_text(
-                "Ошибка доступа",
-                "❌ Недостаточно прав для выполнения команды",
-                "error"
-            ),
-            parse_mode=ParseMode.HTML
-        )
-        return False
+    async def tg_handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # ... ваш код ...
+        pass
+    
+    async def tg_handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # ... ваш код ...
+        pass
+    
+    # ===================== ОБРАБОТКА КНОПОК =====================
+    async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # ... ваш код ...
+        pass
+    
+    # ===================== VK ОБРАБОТЧИКИ =====================
+    def setup_vk_handlers(self):
+        # ... ваш код ...
+        pass
+    
+    async def vk_handle_message(self, message: Message):
+        # ... ваш код ...
+        pass
+    
+    # ===================== ЗАПУСК =====================
+    async def run(self):
+        # ... ваш код ...
+        pass
+    
+    async def close(self):
+        # ... ваш код ...
+        pass
     
     # ===================== TELEGRAM ОБРАБОТЧИКИ =====================
     def setup_tg_handlers(self):
