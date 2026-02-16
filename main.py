@@ -1602,7 +1602,9 @@ class GameBot:
         await update.message.reply_text(f"✅ Правила установлены!")
     
     # ===================== АДМИН КОМАНДЫ =====================
-    async def tg_cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ===================== АДМИН КОМАНДЫ =====================
+
+async def tg_cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
     if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
@@ -1647,85 +1649,88 @@ class GameBot:
         )
     except:
         pass
+
+
+async def tg_cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     
-    async def tg_cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /unmute [ник]")
-            return
-        
-        target_name = context.args[0]
-        
-        target_user = db.get_user_by_username('tg', target_name)
-        
-        if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_id = target_user[2]
-        
-        db.unmute_user('tg', target_id)
-        
-        await update.message.reply_text(f"✅ Мут снят с {target_name}")
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text="✅ Ваш мут снят"
-            )
-        except:
-            pass
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
     
-    async def tg_cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        if len(context.args) < 2:
-            await update.message.reply_text("❌ Использование: /warn [ник] [причина]")
-            return
-        
-        target_name = context.args[0]
-        reason = " ".join(context.args[1:])
-        
-        target_user = db.get_user_by_username('tg', target_name)
-        
-        if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_id = target_user[2]
-        target_username = target_user[3] or target_user[4]
-        
-        warns = db.add_warn('tg', target_id, target_username, reason, update.effective_user.id, update.effective_user.first_name)
-        
-        await update.message.reply_text(
-            f"⚠️ **Предупреждение выдано**\n\n"
-            f"👤 {target_username}\n"
-            f"⚠️ Варнов: {warns}/3\n"
-            f"💬 Причина: {reason}"
+    if not context.args:
+        await update.message.reply_text("❌ Использование: /unmute [ник]")
+        return
+    
+    target_name = context.args[0]
+    
+    target_user = db.get_user_by_username('tg', target_name)
+    
+    if not target_user:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_id = target_user[2]
+    
+    db.unmute_user('tg', target_id)
+    
+    await update.message.reply_text(f"✅ Мут снят с {target_name}")
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text="✅ Ваш мут снят"
         )
-        
-        if warns >= 3:
-            db.mute_user('tg', target_id, target_username, 1440, "3 предупреждения", update.effective_user.id, update.effective_user.first_name)
-            await update.message.reply_text(f"⚠️ Пользователь получил 3 варна и замучен на 24 часа!")
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text=f"⚠️ Вам выдано предупреждение ({warns}/3)\nПричина: {reason}"
-            )
-        except:
-            pass
+    except:
+        pass
+
+
+async def tg_cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     
-    async def tg_cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    if len(context.args) < 2:
+        await update.message.reply_text("❌ Использование: /warn [ник] [причина]")
+        return
+    
+    target_name = context.args[0]
+    reason = " ".join(context.args[1:])
+    
+    target_user = db.get_user_by_username('tg', target_name)
+    
+    if not target_user:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_id = target_user[2]
+    target_username = target_user[3] or target_user[4]
+    
+    warns = db.add_warn('tg', target_id, target_username, reason, update.effective_user.id, update.effective_user.first_name)
+    
+    await update.message.reply_text(
+        f"⚠️ **Предупреждение выдано**\n\n"
+        f"👤 {target_username}\n"
+        f"⚠️ Варнов: {warns}/3\n"
+        f"💬 Причина: {reason}"
+    )
+    
+    if warns >= 3:
+        db.mute_user('tg', target_id, target_username, 1440, "3 предупреждения", update.effective_user.id, update.effective_user.first_name)
+        await update.message.reply_text(f"⚠️ Пользователь получил 3 варна и замучен на 24 часа!")
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text=f"⚠️ Вам выдано предупреждение ({warns}/3)\nПричина: {reason}"
+        )
+    except:
+        pass
+
+
+async def tg_cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
     if not db.has_privilege('tg', user_id, 'оператор') and not db.has_privilege('tg', user_id, 'создатель'):
@@ -1765,41 +1770,43 @@ class GameBot:
         )
     except:
         pass
+
+
+async def tg_cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     
-    async def tg_cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_id = str(update.effective_user.id)
-        
-        if not db.has_privilege('tg', user_id, 'оператор') and not db.has_privilege('tg', user_id, 'создатель'):
-            await update.message.reply_text("❌ Недостаточно прав")
-            return
-        
-        if not context.args:
-            await update.message.reply_text("❌ Использование: /unban [ник]")
-            return
-        
-        target_name = context.args[0]
-        
-        target_user = db.get_user_by_username('tg', target_name)
-        
-        if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
-            return
-        
-        target_id = target_user[2]
-        
-        db.unban_user('tg', target_id)
-        
-        await update.message.reply_text(f"✅ Пользователь {target_name} разбанен")
-        
-        try:
-            await context.bot.send_message(
-                chat_id=int(target_id),
-                text="✅ Вы разбанены"
-            )
-        except:
-            pass
+    if not db.has_privilege('tg', user_id, 'оператор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
     
-    async def tg_cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not context.args:
+        await update.message.reply_text("❌ Использование: /unban [ник]")
+        return
+    
+    target_name = context.args[0]
+    
+    target_user = db.get_user_by_username('tg', target_name)
+    
+    if not target_user:
+        await update.message.reply_text("❌ Пользователь не найден")
+        return
+    
+    target_id = target_user[2]
+    
+    db.unban_user('tg', target_id)
+    
+    await update.message.reply_text(f"✅ Пользователь {target_name} разбанен")
+    
+    try:
+        await context.bot.send_message(
+            chat_id=int(target_id),
+            text="✅ Вы разбанены"
+        )
+    except:
+        pass
+
+
+async def tg_cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
     if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
@@ -1835,31 +1842,47 @@ class GameBot:
         text += f"   Дата: {ban_date}\n\n"
     
     await update.message.reply_text(text, parse_mode='Markdown')
-        
-        mutes = db.get_muted_users(page, 10)
-        
-        if not mutes:
-            await update.message.reply_text("📭 Список мутов пуст")
-            return
-        
-        text = f"🔇 **СПИСОК ЗАМУЧЕННЫХ** (стр. {page})\n\n"
-        
-        for i, mute in enumerate(mutes, 1):
-            username = mute[3] or f"ID {mute[2]}"
-            reason = mute[4] or "Не указана"
-            muted_by = mute[6] or "Неизвестно"
-            mute_date = mute[7][:10] if mute[7] else "Неизвестно"
-            duration = mute[8]
-            
-            text += f"{i}. {username}\n"
-            text += f"   ⏱ {duration}\n"
-            text += f"   💬 {reason}\n"
-            text += f"   👮 {muted_by}\n"
-            text += f"   📅 {mute_date}\n\n"
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
+
+
+async def tg_cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = str(update.effective_user.id)
     
-    async def tg_cmd_warnlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
+        await update.message.reply_text("❌ Недостаточно прав")
+        return
+    
+    page = 1
+    if context.args:
+        try:
+            page = int(context.args[0])
+        except:
+            pass
+    
+    mutes = db.get_muted_users(page, 10)
+    
+    if not mutes:
+        await update.message.reply_text("📭 Список мутов пуст")
+        return
+    
+    text = f"🔇 **СПИСОК ЗАМУЧЕННЫХ** (стр. {page})\n\n"
+    
+    for i, mute in enumerate(mutes, 1):
+        username = mute[3] or f"ID {mute[2]}"
+        reason = mute[4] or "Не указана"
+        muted_by = mute[6] or "Неизвестно"
+        mute_date = mute[7][:10] if mute[7] else "Неизвестно"
+        duration = mute[8]
+        
+        text += f"{i}. {username}\n"
+        text += f"   Время: {duration}\n"
+        text += f"   Причина: {reason}\n"
+        text += f"   Кто: {muted_by}\n"
+        text += f"   Дата: {mute_date}\n\n"
+    
+    await update.message.reply_text(text, parse_mode='Markdown')
+
+
+async def tg_cmd_warnlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = str(update.effective_user.id)
     
     if not db.has_privilege('tg', user_id, 'модератор') and not db.has_privilege('tg', user_id, 'создатель'):
