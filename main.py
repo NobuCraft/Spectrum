@@ -3455,7 +3455,7 @@ class GameBot:
         await update.message.reply_text(goodbye_text, parse_mode='Markdown')
     
     # ===================== ОБРАБОТКА КНОПОК =====================
-    async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def tg_button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий на инлайн-кнопки"""
         query = update.callback_query
         await query.answer()
