@@ -20,12 +20,11 @@ from telegram.ext import (
     MessageHandler, filters, ContextTypes
 )
 
-# Для VK
-from vkbottle import API, Bot, Message
-from vkbottle.bot import Message as VKMessage
+# Для VK - исправленные импорты
+from vkbottle import API, Bot
+from vkbottle.bot import Message
 from vkbottle_types.events import GroupEventType
 from vkbottle.framework.labeler import BotLabeler
-from vkbottle.bot import run_multibot
 
 # Настройка логирования
 logging.basicConfig(
@@ -2128,7 +2127,6 @@ class GameBot:
         
         @self.vk_bot.on.message(text=["/payd", "!payd"])
         async def vk_cmd_payd(message: Message):
-            # Парсим аргументы
             args = message.text.split()[1:] if len(message.text.split()) > 1 else []
             await self.vk_cmd_payd(message, args)
         
