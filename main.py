@@ -25,13 +25,27 @@ from enum import Enum
 import sys
 import fcntl
 import signal
+import traceback
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, filters, ContextTypes
+# ========== РАСШИРЕННОЕ ЛОГИРОВАНИЕ ==========
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.DEBUG,
+    force=True
 )
-from telegram.error import TelegramError, InvalidToken
+logger = logging.getLogger(__name__)
+
+# Перехват всех исключений
+def global_exception_handler(exc_type, exc_value, exc_traceback):
+    logger.error("Необработанное исключение", exc_info=(exc_type, exc_value, exc_traceback))
+    print("\n" + "="*60)
+    print("❌ КРИТИЧЕСКАЯ ОШИБКА:")
+    print("="*60)
+    traceback.print_exception(exc_type, exc_value, exc_traceback)
+    print("="*60)
+    sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
+sys.excepthook = global_exception_handler
 
 # ========== ПРОВЕРКА НА УНИКАЛЬНОСТЬ ИНСТАНСА ==========
 def check_single_instance():
@@ -43,9 +57,8 @@ def check_single_instance():
         lock_file.flush()
         print(f"✅ Блокировка получена (PID: {os.getpid()})")
         return lock_file
-    except (IOError, OSError):
-        print("❌ Бот уже запущен в другом процессе!")
-        print("Завершаем работу, чтобы избежать конфликта 409.")
+    except (IOError, OSError) as e:
+        print(f"❌ Бот уже запущен в другом процессе! {e}")
         sys.exit(1)
 
 # Запускаем проверку
@@ -53,24 +66,28 @@ instance_lock = check_single_instance()
 
 # ========== ОБРАБОТЧИК СИГНАЛОВ ==========
 def signal_handler(sig, frame):
-    print("🛑 Получен сигнал остановки, завершаем работу...")
+    print("\n🛑 Получен сигнал остановки, завершаем работу...")
     sys.exit(0)
 
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+# ========== ИМПОРТЫ TELEGRAM ==========
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes
 )
-logger = logging.getLogger(__name__)
+from telegram.error import TelegramError, InvalidToken
 
 # ========== КОНФИГУРАЦИЯ ==========
 TELEGRAM_TOKEN = "8326390250:AAG1nTYdy07AuKsYXS3yvDehfU2JuR0RqGo"
 DEEPSEEK_API_KEY = "sk-4c18a0f28fce421482cbcedcc33cb18d"
 OWNER_ID = 1732658530
 OWNER_USERNAME = "@NobuCraft"
+
+print(f"🔑 Токен Telegram: {TELEGRAM_TOKEN[:15]}...")
+print(f"🔑 DeepSeek API ключ: {DEEPSEEK_API_KEY[:15]}...")
 
 # Настройки антиспама
 SPAM_LIMIT = 5
@@ -274,6 +291,8 @@ class IrisKeyboard:
         
         buttons.append(row)
         return InlineKeyboardMarkup(buttons)
+
+print("✅ Часть 1/7 загружена (импорты, конфиг, клавиатуры)")
 
 # ========== БАЗА ДАННЫХ (ПОЛНАЯ, ИСПРАВЛЕННАЯ) ==========
 class Database:
@@ -3645,6 +3664,984 @@ class SpectrumBot:
             parse_mode='Markdown'
         )
 
+    # ========== МОДУЛЬ КАЗИНО ==========
+    
+    async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Главное меню казино"""
+        text = (f.header("КАЗИНО", "🎰") + "\n"
+                f"{f.section('ИГРЫ', '🎲')}\n"
+                f"{f.command('roulette [ставка] [цвет]', 'рулетка')}\n"
+                f"{f.command('dice [ставка]', 'кости')}\n"
+                f"{f.command('blackjack [ставка]', 'блэкджек')}\n"
+                f"{f.command('slots [ставка]', 'слоты')}\n\n"
+                f"{f.section('ПРИМЕРЫ', '📝')}\n"
+                f"{f.example('roulette 10 red')}\n"
+                f"{f.example('dice 50')}\n"
+                f"{f.example('blackjack 100')}\n"
+                f"{f.example('slots 20')}")
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=IrisKeyboard.back_button(),
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Рулетка"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        bet = 10
+        choice = "red"
+        
+        if context.args:
+            try:
+                bet = int(context.args[0])
+                if len(context.args) > 1:
+                    choice = context.args[1].lower()
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        numbers = list(range(0, 37))
+        colors = {i: "red" if i in [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36] else "black" for i in range(1, 37)}
+        colors[0] = "green"
+        
+        result_num = random.choice(numbers)
+        result_color = colors[result_num]
+        
+        win = False
+        multiplier = 0
+        
+        if choice.isdigit():
+            num = int(choice)
+            if 0 <= num <= 36:
+                if result_num == num:
+                    win = True
+                    multiplier = 36
+        elif choice in ["red", "black", "green"]:
+            if result_color == choice:
+                win = True
+                multiplier = 2 if choice in ["red", "black"] else 36
+        
+        if win:
+            winnings = bet * multiplier
+            self.db.add_coins(user_id, winnings)
+            self.db.add_stat(user_id, "casino_wins", 1)
+            result_text = f.success(f"Вы выиграли {winnings} 💰!")
+        else:
+            self.db.add_coins(user_id, -bet)
+            self.db.add_stat(user_id, "casino_losses", 1)
+            result_text = f.error(f"Вы проиграли {bet} 💰")
+        
+        text = (f.header("РУЛЕТКА", "🎰") + "\n"
+                f"{f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
+                f"{f.list_item('Выбрано: ' + choice)}\n"
+                f"{f.list_item('Выпало: ' + str(result_num) + ' ' + result_color)}\n\n"
+                f"{result_text}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Кости"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        dice1 = random.randint(1, 6)
+        dice2 = random.randint(1, 6)
+        total = dice1 + dice2
+        
+        if total in [7, 11]:
+            win = bet * 2
+            result_text = f.success(f"Вы выиграли {win} 💰!")
+        elif total in [2, 3, 12]:
+            win = 0
+            result_text = f.error(f"Вы проиграли {bet} 💰")
+        else:
+            win = bet
+            result_text = f.info(f"Ничья, ставка возвращена: {bet} 💰")
+        
+        if win > 0:
+            self.db.add_coins(user_id, win)
+            self.db.add_stat(user_id, "casino_wins", 1)
+        else:
+            self.db.add_coins(user_id, -bet)
+            self.db.add_stat(user_id, "casino_losses", 1)
+        
+        text = (f.header("КОСТИ", "🎲") + "\n"
+                f"{f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
+                f"{f.list_item('Кубики: ' + str(dice1) + ' + ' + str(dice2))}\n"
+                f"{f.list_item('Сумма: ' + str(total))}\n\n"
+                f"{result_text}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_blackjack(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Блэкджек"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        player_cards = [random.randint(1, 11), random.randint(1, 11)]
+        player_total = sum(player_cards)
+        
+        dealer_cards = [random.randint(1, 11), random.randint(1, 11)]
+        dealer_total = sum(dealer_cards)
+        
+        if player_total == 21:
+            result = "win"
+            win = int(bet * 2.5)
+            result_text = f.success(f"БЛЭКДЖЕК! Вы выиграли {win} 💰!")
+        elif player_total > 21:
+            result = "lose"
+            result_text = f.error(f"Перебор! Вы проиграли {bet} 💰")
+        elif dealer_total > 21:
+            result = "win"
+            win = bet * 2
+            result_text = f.success(f"Дилер перебрал! Вы выиграли {win} 💰!")
+        elif player_total > dealer_total:
+            result = "win"
+            win = bet * 2
+            result_text = f.success(f"Вы выиграли {win} 💰!")
+        elif player_total < dealer_total:
+            result = "lose"
+            result_text = f.error(f"Вы проиграли {bet} 💰")
+        else:
+            result = "draw"
+            result_text = f.info(f"Ничья, ставка возвращена: {bet} 💰")
+        
+        if result == "win":
+            self.db.add_coins(user_id, win)
+            self.db.add_stat(user_id, "casino_wins", 1)
+        elif result == "lose":
+            self.db.add_coins(user_id, -bet)
+            self.db.add_stat(user_id, "casino_losses", 1)
+        
+        text = (f.header("БЛЭКДЖЕК", "🃏") + "\n"
+                f"{f.list_item('Ваши карты: ' + ' + '.join(str(c) for c in player_cards) + ' = ' + str(player_total))}\n"
+                f"{f.list_item('Карты дилера: ' + ' + '.join(str(c) for c in dealer_cards) + ' = ' + str(dealer_total))}\n\n"
+                f"{result_text}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Слоты"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "🎰", "⭐", "👑"]
+        spin = [random.choice(symbols) for _ in range(3)]
+        
+        if len(set(spin)) == 1:
+            if spin[0] == "👑":
+                win = bet * 100
+            elif spin[0] == "7️⃣":
+                win = bet * 50
+            elif spin[0] == "💎":
+                win = bet * 30
+            else:
+                win = bet * 10
+            result_text = f.success("ДЖЕКПОТ!")
+        elif len(set(spin)) == 2:
+            win = bet * 2
+            result_text = f.success("Маленький выигрыш!")
+        else:
+            win = 0
+            result_text = f.error("Не повезло...")
+        
+        if win > 0:
+            self.db.add_coins(user_id, win)
+            self.db.add_stat(user_id, "casino_wins", 1)
+        else:
+            self.db.add_coins(user_id, -bet)
+            self.db.add_stat(user_id, "casino_losses", 1)
+        
+        text = (f.header("СЛОТЫ", "🎰") + "\n"
+                f"{' '.join(spin)}\n\n"
+                f"{result_text}\n"
+                f"{'💰 +' + str(win) + ' 💰' if win > 0 else '💸 -' + str(bet) + ' 💰'}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Камень-ножницы-бумага"""
+        await update.message.reply_text(
+            f.header("КАМЕНЬ-НОЖНИЦЫ-БУМАГА", "✊") + "\nВыберите свой ход:",
+            reply_markup=IrisKeyboard.rps_game(),
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_ttt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Крестики-нолики"""
+        user_id = update.effective_user.id
+        
+        game_id = f"ttt_{user_id}_{int(time.time())}"
+        self.active_games[game_id] = {
+            'type': 'ttt',
+            'player_x': user_id,
+            'player_o': None,
+            'board': [' '] * 9,
+            'turn': user_id,
+            'moves': 0
+        }
+        
+        text = (f.header("КРЕСТИКИ-НОЛИКИ", "⭕") + "\n"
+                f"{f.info('Ожидание соперника...')}\n"
+                f"{f.list_item('ID игры: ' + game_id)}\n\n"
+                f"Соперник должен написать: /tttmove {game_id} [1-9]")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_ttt_move(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сделать ход в крестики-нолики"""
+        if len(context.args) < 2:
+            await update.message.reply_text(f.error("Использование: /tttmove [ID игры] [клетка 1-9]"))
+            return
+        
+        game_id = context.args[0]
+        try:
+            cell = int(context.args[1]) - 1
+            if cell < 0 or cell > 8:
+                await update.message.reply_text(f.error("Клетка должна быть от 1 до 9"))
+                return
+        except:
+            await update.message.reply_text(f.error("Неверный номер клетки"))
+            return
+        
+        user_id = update.effective_user.id
+        
+        if game_id not in self.active_games:
+            await update.message.reply_text(f.error("Игра не найдена"))
+            return
+        
+        game = self.active_games[game_id]
+        
+        if game['type'] != 'ttt':
+            await update.message.reply_text(f.error("Неверный тип игры"))
+            return
+        
+        if game['player_o'] is None:
+            if user_id == game['player_x']:
+                await update.message.reply_text(f.error("Ожидание соперника"))
+                return
+            else:
+                game['player_o'] = user_id
+                game['turn'] = game['player_x']
+        
+        if game['turn'] != user_id:
+            await update.message.reply_text(f.error("Сейчас не ваш ход"))
+            return
+        
+        if game['board'][cell] != ' ':
+            await update.message.reply_text(f.error("Эта клетка уже занята"))
+            return
+        
+        symbol = '❌' if game['turn'] == game['player_x'] else '⭕'
+        game['board'][cell] = symbol
+        game['moves'] += 1
+        
+        win_combinations = [
+            [0,1,2], [3,4,5], [6,7,8],
+            [0,3,6], [1,4,7], [2,5,8],
+            [0,4,8], [2,4,6]
+        ]
+        
+        winner = None
+        for combo in win_combinations:
+            if game['board'][combo[0]] == game['board'][combo[1]] == game['board'][combo[2]] != ' ':
+                winner = user_id
+                break
+        
+        board_display = ""
+        for i in range(0, 9, 3):
+            board_display += f"{game['board'][i]} | {game['board'][i+1]} | {game['board'][i+2]}\n"
+            if i < 6:
+                board_display += "---------\n"
+        
+        if winner:
+            if winner == game['player_x']:
+                self.db.add_stat(game['player_x'], "ttt_wins", 1)
+                self.db.add_stat(game['player_o'], "ttt_losses", 1)
+            else:
+                self.db.add_stat(game['player_o'], "ttt_wins", 1)
+                self.db.add_stat(game['player_x'], "ttt_losses", 1)
+            
+            del self.active_games[game_id]
+            
+            text = (f.header("ИГРА ОКОНЧЕНА", "🏆") + "\n"
+                    f"{board_display}\n\n"
+                    f"{f.success('Победил ' + ('❌' if winner == game['player_x'] else '⭕'))}")
+            
+            await update.message.reply_text(text, parse_mode='Markdown')
+        
+        elif game['moves'] == 9:
+            self.db.add_stat(game['player_x'], "ttt_draws", 1)
+            self.db.add_stat(game['player_o'], "ttt_draws", 1)
+            del self.active_games[game_id]
+            
+            text = (f.header("ИГРА ОКОНЧЕНА", "🤝") + "\n"
+                    f"{board_display}\n\n"
+                    f"{f.info('Ничья!')}")
+            
+            await update.message.reply_text(text, parse_mode='Markdown')
+        
+        else:
+            game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
+            
+            text = (f.header("ХОД СДЕЛАН", "✅") + "\n"
+                    f"{board_display}\n\n"
+                    f"{f.info('Ход ' + ('❌' if game['turn'] == game['player_x'] else '⭕'))}")
+            
+            await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_memory(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Игра Мемори (найди пары)"""
+        user_id = update.effective_user.id
+        
+        cards = ['🐶', '🐱', '🐭', '🐹', '🐰', '🦊', '🐻', '🐼'] * 2
+        random.shuffle(cards)
+        
+        game_id = f"memory_{user_id}_{int(time.time())}"
+        self.active_games[game_id] = {
+            'type': 'memory',
+            'cards': cards,
+            'revealed': [False] * 16,
+            'first_pick': None,
+            'pairs': 0,
+            'moves': 0
+        }
+        
+        text = (f.header("МЕМОРИ", "🧠") + "\n"
+                f"Найдите все пары!\n\n"
+                f"1  2  3  4\n"
+                f"5  6  7  8\n"
+                f"9 10 11 12\n"
+                f"13 14 15 16\n\n"
+                f"{f.command('memoryplay [номер]', 'открыть карту')}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_memory_play(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Открыть карту в Мемори"""
+        if not context.args or not context.args[0].isdigit():
+            await update.message.reply_text(f.error("Укажите номер карты: /memoryplay 1"))
+            return
+        
+        card = int(context.args[0]) - 1
+        if card < 0 or card > 15:
+            await update.message.reply_text(f.error("Карта должна быть от 1 до 16"))
+            return
+        
+        user_id = update.effective_user.id
+        
+        for game_id, game in list(self.active_games.items()):
+            if game['type'] == 'memory' and game_id.startswith(f"memory_{user_id}"):
+                if game['revealed'][card]:
+                    await update.message.reply_text(f.error("Эта карта уже открыта"))
+                    return
+                
+                game['revealed'][card] = True
+                game['moves'] += 1
+                
+                if game['first_pick'] is None:
+                    game['first_pick'] = card
+                    await update.message.reply_text(
+                        f.info('Выбрана карта ' + context.args[0] + ': ' + game['cards'][card]) + "\n"
+                        f"Выберите вторую карту: /memoryplay [номер]",
+                        parse_mode='Markdown'
+                    )
+                else:
+                    first = game['first_pick']
+                    if game['cards'][first] == game['cards'][card]:
+                        game['pairs'] += 1
+                        game['first_pick'] = None
+                        
+                        if game['pairs'] == 8:
+                            self.db.add_stat(user_id, "memory_wins", 1)
+                            self.db.add_stat(user_id, "memory_games", 1)
+                            
+                            reward = random.randint(50, 200)
+                            self.db.add_coins(user_id, reward)
+                            
+                            del self.active_games[game_id]
+                            
+                            await update.message.reply_text(
+                                f.header("ПОБЕДА!", "🎉") + "\n"
+                                f"{f.list_item('Пар найдено: 8/8')}\n"
+                                f"{f.list_item('Ходов: ' + str(game['moves']))}\n"
+                                f"{f.list_item('Награда: +' + str(reward) + ' 💰')}",
+                                parse_mode='Markdown'
+                            )
+                        else:
+                            await update.message.reply_text(
+                                f.success('Пара найдена! (' + game['cards'][first] + ')') + "\n"
+                                + f.info('Осталось пар: ' + str(8 - game['pairs'])),
+                                parse_mode='Markdown'
+                            )
+                    else:
+                        game['revealed'][first] = False
+                        game['revealed'][card] = False
+                        game['first_pick'] = None
+                        
+                        await update.message.reply_text(
+                            f.error('Не пара: ' + game['cards'][first] + ' и ' + game['cards'][card]),
+                            parse_mode='Markdown'
+                        )
+                return
+        
+        await update.message.reply_text(f.error("У вас нет активной игры"), parse_mode='Markdown')
+    
+    async def cmd_minesweeper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сапёр"""
+        user_id = update.effective_user.id
+        
+        size = 5
+        mines = 5
+        
+        field = [[0] * size for _ in range(size)]
+        mine_positions = random.sample(range(size * size), mines)
+        
+        for pos in mine_positions:
+            x, y = pos // size, pos % size
+            field[x][y] = '💣'
+            
+            for dx in [-1, 0, 1]:
+                for dy in [-1, 0, 1]:
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < size and 0 <= ny < size and field[nx][ny] != '💣':
+                        if field[nx][ny] == 0:
+                            field[nx][ny] = 1
+                        else:
+                            field[nx][ny] += 1
+        
+        game_id = f"mine_{user_id}_{int(time.time())}"
+        self.active_games[game_id] = {
+            'type': 'minesweeper',
+            'field': field,
+            'revealed': [[False] * size for _ in range(size)],
+            'mines': mine_positions,
+            'size': size
+        }
+        
+        text = (f.header("САПЁР", "💣") + "\n"
+                f"Найдите все мины!\n\n"
+                f"  1 2 3 4 5\n")
+        
+        for i in range(size):
+            text += f"{i+1} "
+            for j in range(size):
+                text += "⬜ "
+            text += "\n"
+        
+        text += f"\n{f.command('mineopen [ряд] [колонка]', 'открыть клетку')}\n"
+        text += f"{f.example('mineopen 3 3')}"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_mine_open(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Открыть клетку в сапёре"""
+        if len(context.args) < 2 or not context.args[0].isdigit() or not context.args[1].isdigit():
+            await update.message.reply_text(f.error("Укажите ряд и колонку: /mineopen 3 3"))
+            return
+        
+        x = int(context.args[0]) - 1
+        y = int(context.args[1]) - 1
+        
+        user_id = update.effective_user.id
+        
+        for game_id, game in list(self.active_games.items()):
+            if game['type'] == 'minesweeper' and game_id.startswith(f"mine_{user_id}"):
+                if x < 0 or x >= game['size'] or y < 0 or y >= game['size']:
+                    await update.message.reply_text(f.error(f"Координаты должны быть от 1 до {game['size']}"))
+                    return
+                
+                if game['revealed'][x][y]:
+                    await update.message.reply_text(f.error("Эта клетка уже открыта"))
+                    return
+                
+                if game['field'][x][y] == '💣':
+                    self.db.add_stat(user_id, "mine_games", 1)
+                    
+                    display = f.header("БАБАХ!", "💥") + "\n\n"
+                    for i in range(game['size']):
+                        for j in range(game['size']):
+                            if game['field'][i][j] == '💣':
+                                display += "💣 "
+                            elif game['revealed'][i][j]:
+                                display += f"{game['field'][i][j]} "
+                            else:
+                                display += "⬜ "
+                        display += "\n"
+                    
+                    del self.active_games[game_id]
+                    await update.message.reply_text(display + "\n😢 Вы подорвались!", parse_mode='Markdown')
+                    return
+                
+                game['revealed'][x][y] = True
+                
+                revealed_count = sum(sum(row) for row in game['revealed'])
+                if revealed_count == game['size'] * game['size'] - len(game['mines']):
+                    self.db.add_stat(user_id, "mine_wins", 1)
+                    self.db.add_stat(user_id, "mine_games", 1)
+                    
+                    reward = random.randint(100, 300)
+                    self.db.add_coins(user_id, reward)
+                    
+                    del self.active_games[game_id]
+                    
+                    await update.message.reply_text(
+                        f.header("ПОБЕДА!", "🎉") + "\n\n"
+                        f"Вы нашли все мины!\n"
+                        f"+{reward} 💰",
+                        parse_mode='Markdown'
+                    )
+                    return
+                
+                display = f.header("САПЁР", "💣") + "\n\n"
+                display += "  1 2 3 4 5\n"
+                for i in range(game['size']):
+                    display += f"{i+1} "
+                    for j in range(game['size']):
+                        if game['revealed'][i][j]:
+                            display += f"{game['field'][i][j]} "
+                        else:
+                            display += "⬜ "
+                    display += "\n"
+                
+                display += f"\nОткрыто клеток: {revealed_count}"
+                
+                await update.message.reply_text(display, parse_mode='Markdown')
+                return
+        
+        await update.message.reply_text(f.error("У вас нет активной игры"), parse_mode='Markdown')
+    
+    # ========== МОДУЛЬ ДОЛГОВ ==========
+    
+    async def cmd_debt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Дать в долг"""
+        if len(context.args) < 3:
+            await update.message.reply_text(f.error("Использование: /debt @user сумма причина"))
+            return
+        
+        query = context.args[0]
+        try:
+            amount = int(context.args[1])
+            reason = " ".join(context.args[2:])
+        except:
+            await update.message.reply_text(f.error("Неверный формат"))
+            return
+        
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        target_user = self.db.get_user_by_username(query)
+        if not target_user:
+            await update.message.reply_text(f.error("Пользователь не найден"))
+            return
+        
+        if target_user['user_id'] == user_id:
+            await update.message.reply_text(f.error("Нельзя дать в долг самому себе"))
+            return
+        
+        if user_data['coins'] < amount:
+            await update.message.reply_text(f.error(f"Недостаточно монет. У вас {user_data['coins']} 💰"))
+            return
+        
+        self.db.add_coins(user_id, -amount)
+        debt_id = self.db.create_debt(target_user['user_id'], user_id, amount, reason)
+        
+        text = (f.header("ДОЛГ ОФОРМЛЕН", "💰") + "\n"
+                f"{f.list_item('Должник: ' + target_user.get('first_name', 'Пользователь'))}\n"
+                f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
+                f"{f.list_item('Причина: ' + reason)}\n"
+                f"{f.list_item('ID долга: ' + str(debt_id))}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+        
+        try:
+            await context.bot.send_message(
+                chat_id=target_user['user_id'],
+                text=(f.header("ВЫ ДОЛЖНЫ", "💰") + "\n"
+                      f"{f.list_item('Кредитор: ' + update.effective_user.first_name)}\n"
+                      f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
+                      f"{f.list_item('Причина: ' + reason)}\n"
+                      f"{f.list_item('ID долга: ' + str(debt_id))}")
+            )
+        except:
+            pass
+    
+    async def cmd_debts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список долгов"""
+        user_id = update.effective_user.id
+        debts = self.db.get_debts(user_id)
+        
+        if not debts:
+            await update.message.reply_text(f.info("У вас нет активных долгов"))
+            return
+        
+        text = f.header("ВАШИ ДОЛГИ", "💰") + "\n"
+        
+        for debt in debts:
+            debt_id, debtor_id, creditor_id, amount, reason, created, deadline, is_paid = debt
+            
+            if debtor_id == user_id:
+                role = "Вы должны"
+                other_id = creditor_id
+            else:
+                role = "Должны вам"
+                other_id = debtor_id
+            
+            other = self.db.get_user_by_id(other_id)
+            other_name = other.get('first_name', 'Пользователь') if other else 'Пользователь'
+            
+            created_str = datetime.datetime.fromisoformat(created).strftime("%d.%m.%Y")
+            deadline_str = datetime.datetime.fromisoformat(deadline).strftime("%d.%m.%Y")
+            
+            text += (f"**ID: {debt_id}**\n"
+                     f"{f.param('Статус', role + ': ' + other_name)}\n"
+                     f"{f.param('Сумма', str(amount) + ' 💰')}\n"
+                     f"{f.param('Причина', reason)}\n"
+                     f"{f.param('Создан', created_str)}\n"
+                     f"{f.param('Срок', deadline_str)}\n\n")
+        
+        text += f"{f.command('paydebt [ID]', 'оплатить долг')}"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_pay_debt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Оплатить долг"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите ID долга: /paydebt 1"))
+            return
+        
+        try:
+            debt_id = int(context.args[0])
+        except:
+            await update.message.reply_text(f.error("Неверный ID"))
+            return
+        
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        self.db.cursor.execute("SELECT * FROM debts WHERE id = ?", (debt_id,))
+        debt = self.db.cursor.fetchone()
+        
+        if not debt:
+            await update.message.reply_text(f.error("Долг не найден"))
+            return
+        
+        debtor_id, creditor_id, amount, reason, created, deadline, is_paid = debt[1:8]
+        
+        if is_paid:
+            await update.message.reply_text(f.error("Долг уже оплачен"))
+            return
+        
+        if debtor_id != user_id:
+            await update.message.reply_text(f.error("Это не ваш долг"))
+            return
+        
+        if user_data['coins'] < amount:
+            await update.message.reply_text(f.error(f"Недостаточно монет. Нужно {amount} 💰"))
+            return
+        
+        self.db.add_coins(user_id, -amount)
+        self.db.add_coins(creditor_id, amount)
+        self.db.pay_debt(debt_id)
+        
+        creditor = self.db.get_user_by_id(creditor_id)
+        creditor_name = creditor.get('first_name', 'Кредитор') if creditor else 'Кредитор'
+        
+        text = (f.header("ДОЛГ ОПЛАЧЕН", "✅") + "\n"
+                f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
+                f"{f.list_item('Получатель: ' + creditor_name)}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+        
+        try:
+            await context.bot.send_message(
+                chat_id=creditor_id,
+                text=(f.header("ДОЛГ ОПЛАЧЕН", "💰") + "\n"
+                      f"{f.list_item('Должник: ' + update.effective_user.first_name)}\n"
+                      f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}")
+            )
+        except:
+            pass
+
+    # ========== МОДУЛЬ ДОСТИЖЕНИЙ ==========
+    
+    async def cmd_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список достижений"""
+        user_id = update.effective_user.id
+        achievements = self.db.get_achievements(user_id)
+        
+        if not achievements:
+            text = (f.header("ДОСТИЖЕНИЯ", "🏆") + "\n"
+                    f"{f.info('У вас пока нет достижений')}\n\n"
+                    f"{f.section('ДОСТУПНЫЕ ДОСТИЖЕНИЯ')}\n"
+                    f"{f.list_item('👾 Охотник на боссов — убить 10 боссов (+500 💰)')}\n"
+                    f"{f.list_item('👾 Легендарный охотник — убить 50 боссов (+2000 💰)')}\n"
+                    f"{f.list_item('📈 Новичок — достичь 10 уровня')}\n"
+                    f"{f.list_item('📈 Ветеран — достичь 25 уровня')}\n"
+                    f"{f.list_item('🎰 Игроман — сыграть 50 игр в казино')}\n"
+                    f"{f.list_item('🔪 Мафиози — выиграть 10 игр в мафию')}\n"
+                    f"{f.list_item('👥 Социальный — вступить в клан')}\n"
+                    f"{f.list_item('💎 Богач — накопить 10000 монет')}")
+            
+            await update.message.reply_text(text, parse_mode='Markdown')
+            return
+        
+        text = f.header("ВАШИ ДОСТИЖЕНИЯ", "🏆") + "\n"
+        
+        for name, desc, date, reward in achievements:
+            date_obj = datetime.datetime.fromisoformat(date)
+            date_str = date_obj.strftime("%d.%m.%Y")
+            text += f"**{name}**\n{desc}\n📅 {date_str}"
+            if reward > 0:
+                text += f" (+{reward} 💰)"
+            text += "\n\n"
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    # ========== ПРОЧИЕ КОМАНДЫ ==========
+    
+    async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Погода"""
+        city = " ".join(context.args) if context.args else "Москва"
+        
+        weathers = ["☀️ солнечно", "⛅ облачно", "☁️ пасмурно", "🌧 дождь", "⛈ гроза", "❄️ снег", "🌫 туман"]
+        temp = random.randint(-20, 35)
+        wind = random.randint(0, 20)
+        humidity = random.randint(30, 95)
+        weather = random.choice(weathers)
+        
+        text = (f.header(f"ПОГОДА: {city.upper()}", "🌍") + "\n"
+                f"{weather}, {temp}°C\n"
+                f"💨 Ветер: {wind} м/с\n"
+                f"💧 Влажность: {humidity}%\n"
+                f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_news(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Новости бота"""
+        news_list = [
+            "🎉 Добро пожаловать в Spectrum Bot!",
+            "👾 Новые боссы уже на арене! Проверьте /bosses",
+            "🔪 Мафия ждет вас! Играйте в /mafia",
+            "💰 Зарабатывайте монеты и покупайте предметы в /shop",
+            "🏆 Система достижений запущена! Собирайте /achievements",
+            "👥 Создайте свой клан командой /clancreate",
+            "🎰 Казино всегда ждет смельчаков!",
+            "📊 Топ игроков показывает лидеров по разным категориям"
+        ]
+        
+        text = (f.header("НОВОСТИ", "📰") + "\n"
+                f"{random.choice(news_list)}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Цитата дня"""
+        quotes = [
+            "Успех — это способность идти от поражения к поражению, не теряя энтузиазма.",
+            "Сложнее всего начать действовать, все остальное зависит только от упорства.",
+            "Лучший способ предсказать будущее — создать его.",
+            "Не бойтесь, что у вас не получится. Бойтесь, что вы не попробуете.",
+            "Будьте собой, остальные роли уже заняты.",
+            "Каждый день — это новая возможность изменить свою жизнь."
+        ]
+        
+        text = (f.header("ЦИТАТА ДНЯ", "📝") + "\n"
+                f"«{random.choice(quotes)}»")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_players(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Количество игроков"""
+        count = self.db.get_players_count()
+        
+        text = (f.header("СТАТИСТИКА", "👥") + "\n"
+                f"Всего игроков: {count}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_mycrime(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Случайная статья УК РФ"""
+        crimes = [
+            ("158", "Кража"),
+            ("161", "Грабеж"),
+            ("162", "Разбой"),
+            ("163", "Вымогательство"),
+            ("205", "Террористический акт"),
+            ("228", "Незаконный оборот наркотиков"),
+            ("261", "Уничтожение лесных насаждений"),
+            ("105", "Убийство"),
+            ("111", "Умышленное причинение тяжкого вреда здоровью"),
+            ("131", "Изнасилование"),
+            ("159", "Мошенничество"),
+            ("213", "Хулиганство")
+        ]
+        
+        article_num, article_name = random.choice(crimes)
+        sentence = random.randint(1, 15)
+        
+        today = datetime.datetime.now().strftime("%d.%m.%Y")
+        user = update.effective_user
+        
+        text = (f"🤷‍♂️ Сегодня {today} {f.user_link(user.id, user.first_name)} "
+                f"приговаривается к статье {article_num}. {article_name}\n"
+                f"⌛ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_eng_free(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Бесплатная энергия (раз в час)"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        last_free = user_data.get('last_free_energy')
+        if last_free:
+            last = datetime.datetime.fromisoformat(last_free)
+            if (datetime.datetime.now() - last).seconds < 3600:
+                remaining = 3600 - (datetime.datetime.now() - last).seconds
+                minutes = remaining // 60
+                await update.message.reply_text(f.error(f"Бесплатную энергию можно получать раз в час. Осталось: {minutes} мин"))
+                return
+        
+        energy = 20
+        self.db.add_energy(user_id, energy)
+        
+        self.db.cursor.execute(
+            "UPDATE users SET last_free_energy = ? WHERE user_id = ?",
+            (datetime.datetime.now(), user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Получено {energy} ⚡ энергии"), parse_mode='Markdown')
+    
+    async def cmd_sms(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Личное сообщение"""
+        if len(context.args) < 2:
+            await update.message.reply_text(f.error("Использование: /sms @user сообщение"))
+            return
+        
+        query = context.args[0]
+        message = " ".join(context.args[1:])
+        
+        target_user = self.db.get_user_by_username(query)
+        if not target_user:
+            await update.message.reply_text(f.error("Пользователь не найден"))
+            return
+        
+        sender = update.effective_user
+        
+        try:
+            await context.bot.send_message(
+                chat_id=target_user['user_id'],
+                text=(f.header("ЛИЧНОЕ СООБЩЕНИЕ", "💬") + "\n"
+                      f"{f.list_item('От: ' + f.user_link(sender.id, sender.first_name))}\n"
+                      f"{f.list_item('Сообщение: ' + message)}")
+            )
+            await update.message.reply_text(f.success("Сообщение отправлено!"), parse_mode='Markdown')
+        except Exception as e:
+            await update.message.reply_text(f.error("Не удалось отправить сообщение. Возможно, пользователь не запускал бота."))
+    
+    # ========== ОБРАБОТЧИКИ СООБЩЕНИЙ ==========
+    
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка обычных сообщений (AI-чат)"""
+        user = update.effective_user
+        message_text = update.message.text
+        
+        if message_text.startswith('/'):
+            return
+        
+        user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
+        self.db.add_stat(user.id, "messages_count", 1)
+        
+        if self.db.is_banned(user.id):
+            return
+        
+        if self.db.is_muted(user.id):
+            remaining = self.db.get_mute_time(user.id)
+            await update.message.reply_text(f.error(f"Вы в муте. Осталось: {remaining}"))
+            return
+        
+        if await self.check_spam(update):
+            return
+        
+        chat_id = update.effective_chat.id
+        trigger_response = self.db.check_trigger(chat_id, message_text)
+        if trigger_response:
+            await update.message.reply_text(trigger_response, parse_mode='Markdown')
+            return
+        
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
+        response = await self.ai.get_response(user.id, message_text)
+        await update.message.reply_text(f"🤖 {response}", parse_mode='Markdown')
+    
+    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Приветствие новых участников"""
+        chat_id = update.effective_chat.id
+        welcome = self.db.get_welcome(chat_id)
+        
+        for member in update.message.new_chat_members:
+            if member.is_bot:
+                continue
+            
+            if welcome:
+                text = welcome.replace('{user}', f.user_link(member.id, member.first_name))
+            else:
+                text = f"👋 Добро пожаловать, {f.user_link(member.id, member.first_name)}!\nИспользуйте /help для списка команд."
+            
+            await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Прощание с уходящими участниками"""
+        member = update.message.left_chat_member
+        if member.is_bot:
+            return
+        
+        await update.message.reply_text(
+            f"👋 {member.first_name} покинул чат. Будем ждать возвращения!",
+            parse_mode='Markdown'
+        )
+    
     # ========== ИСПРАВЛЕННЫЙ CALLBACK КНОПКИ ==========
     
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3677,7 +4674,25 @@ class SpectrumBot:
             return
         
         elif data == "menu_moderation":
-            await self.cmd_moderation_menu(update, context)
+            text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n"
+                    f"{f.section('ОСНОВНЫЕ КОМАНДЫ')}\n"
+                    f"{f.command('warn @user [причина]', 'предупреждение')}\n"
+                    f"{f.command('mute @user минут [причина]', 'заглушить')}\n"
+                    f"{f.command('ban @user [причина]', 'заблокировать')}\n"
+                    f"{f.command('kick @user', 'исключить')}\n"
+                    f"{f.command('banlist', 'список банов')}\n"
+                    f"{f.command('mutelist', 'список мутов')}\n\n"
+                    f"{f.section('НАСТРОЙКИ ЧАТА')}\n"
+                    f"{f.command('rules', 'правила')}\n"
+                    f"{f.command('setrules [текст]', 'установить правила')}\n"
+                    f"{f.command('welcome', 'приветствие')}\n"
+                    f"{f.command('setwelcome [текст]', 'установить приветствие')}")
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=IrisKeyboard.back_button(),
+                parse_mode='Markdown'
+            )
             return
         
         elif data == "menu_clan":
@@ -3852,29 +4867,6 @@ class SpectrumBot:
                 parse_mode='Markdown'
             )
     
-    async def cmd_moderation_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Меню модерации"""
-        query = update.callback_query
-        text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n"
-                f"{f.section('ОСНОВНЫЕ КОМАНДЫ')}\n"
-                f"{f.command('warn @user [причина]', 'предупреждение')}\n"
-                f"{f.command('mute @user минут [причина]', 'заглушить')}\n"
-                f"{f.command('ban @user [причина]', 'заблокировать')}\n"
-                f"{f.command('kick @user', 'исключить')}\n"
-                f"{f.command('banlist', 'список банов')}\n"
-                f"{f.command('mutelist', 'список мутов')}\n\n"
-                f"{f.section('НАСТРОЙКИ ЧАТА')}\n"
-                f"{f.command('rules', 'правила')}\n"
-                f"{f.command('setrules [текст]', 'установить правила')}\n"
-                f"{f.command('welcome', 'приветствие')}\n"
-                f"{f.command('setwelcome [текст]', 'установить приветствие')}")
-        
-        await query.edit_message_text(
-            text,
-            reply_markup=IrisKeyboard.back_button(),
-            parse_mode='Markdown'
-        )
-    
     # ========== ИСПРАВЛЕННЫЙ ЗАПУСК ==========
     
     def run(self):
@@ -3905,8 +4897,40 @@ class SpectrumBot:
             print("✅ Вебхук удален, старые подключения сброшены")
         except Exception as e:
             print(f"⚠️ Ошибка при удалении вебхука: {e}")
+            traceback.print_exc()
         
         print("🚀 Запуск polling...")
         
         # Запускаем с очисткой
-        self.application.run_polling(drop_pending_updates=True)
+        try:
+            self.application.run_polling(drop_pending_updates=True)
+        except Exception as e:
+            print(f"❌ Ошибка при запуске polling: {e}")
+            traceback.print_exc()
+            raise
+
+
+# ========== ТОЧКА ВХОДА С ОТЛАДКОЙ ==========
+if __name__ == "__main__":
+    try:
+        print("=" * 60)
+        print("🚀 ИНИЦИАЛИЗАЦИЯ БОТА «SPECTRUM»")
+        print("=" * 60)
+        
+        print("🔄 Создание экземпляра бота...")
+        bot = SpectrumBot()
+        
+        print("✅ Бот успешно инициализирован")
+        print("🚀 Запуск бота...")
+        
+        bot.run()
+    except Exception as e:
+        print("\n" + "="*60)
+        print("❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:")
+        print("="*60)
+        print(f"Тип ошибки: {type(e).__name__}")
+        print(f"Сообщение: {e}")
+        print("\nПолная трассировка:")
+        traceback.print_exc()
+        print("="*60)
+        sys.exit(1)
