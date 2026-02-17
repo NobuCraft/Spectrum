@@ -773,24 +773,24 @@ class GameBot:
 
     # ========== ОСНОВНЫЕ КОМАНДЫ ==========
 
-        async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
-        
-        text = self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n" + \
-               f"🌟 **Привет, {user.first_name}!**\n" + \
-               f"Я — **«СПЕКТР»**, твой игровой помощник\n\n" + \
-               self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n" + \
-               f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n" + \
-               f"{self.f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n" + \
-               f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n" + \
-               f"{self.f.list_item('Энергия: ' + str(user_data.get('energy', 100)) + ' ⚡')}\n\n" + \
-               self.f.section("БЫСТРЫЙ СТАРТ", "🚀") + "\n" + \
-               f"{self.f.command('profile', 'твой профиль')}\n" + \
-               f"{self.f.command('bosses', 'битва с боссами')}\n" + \
-               f"{self.f.command('daily', 'ежедневный бонус')}\n" + \
-               f"{self.f.command('help', 'все команды')}\n\n" + \
-               f"👑 **Владелец:** {OWNER_USERNAME}"
+
+        text = (f"{self.f.header('ДОБРО ПОЖАЛОВАТЬ', '⚔️')}\n\n"
+                f"🌟 **Привет, {user.first_name}!**\n"
+                f"Я — **«СПЕКТР»**, твой игровой помощник\n\n"
+                f"{self.f.section('ТВОЙ ПРОФИЛЬ', '👤')}\n"
+                f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n"
+                f"{self.f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n"
+                f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n"
+                f"{self.f.list_item('Энергия: ' + str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
+                f"{self.f.section('БЫСТРЫЙ СТАРТ', '🚀')}\n"
+                f"{self.f.command('profile', 'твой профиль')}\n"
+                f"{self.f.command('bosses', 'битва с боссами')}\n"
+                f"{self.f.command('daily', 'ежедневный бонус')}\n"
+                f"{self.f.command('help', 'все команды')}\n\n"
+                f"👑 **Владелец:** {OWNER_USERNAME}")
 
         await update.message.reply_text(
             text,
@@ -801,36 +801,34 @@ class GameBot:
 
     async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
-            self.f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\n\nВыбери раздел:",
+            f"{self.f.header('ГЛАВНОЕ МЕНЮ', '🎮')}\n\nВыбери раздел:",
             reply_markup=IrisKeyboard.main_menu(),
             parse_mode='Markdown'
         )
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = (
-            self.f.header("СПРАВКА", "📚") + "\n\n"
-            self.f.section("ОСНОВНЫЕ КОМАНДЫ", "🔹") + "\n"
-            f"{self.f.command('start', 'начать работу')}\n"
-            f"{self.f.command('menu', 'главное меню')}\n"
-            f"{self.f.command('profile', 'твой профиль')}\n"
-            f"{self.f.command('mystats', 'твоя статистика')}\n\n"
-            self.f.section("ИГРЫ", "🎮") + "\n"
-            f"{self.f.command('bosses', 'битва с боссами')}\n"
-            f"{self.f.command('casino', 'казино')}\n"
-            f"{self.f.command('rps', 'камень-ножницы-бумага')}\n\n"
-            self.f.section("ЭКОНОМИКА", "💰") + "\n"
-            f"{self.f.command('daily', 'ежедневный бонус')}\n"
-            f"{self.f.command('weekly', 'недельный бонус')}\n"
-            f"{self.f.command('shop', 'магазин')}\n"
-            f"{self.f.command('pay @ник сумма', 'перевести монеты')}\n"
-            f"{self.f.command('donate', 'привилегии')}\n\n"
-            self.f.section("МОДЕРАЦИЯ", "⚙️") + "\n"
-            f"{self.f.command('warn @ник [причина]', 'предупреждение')}\n"
-            f"{self.f.command('mute @ник минут [причина]', 'заглушить')}\n"
-            f"{self.f.command('ban @ник [причина]', 'заблокировать')}\n"
-            f"{self.f.command('banlist', 'список забаненных')}\n\n"
-            f"👑 **Владелец:** {OWNER_USERNAME}"
-        )
+        text = (f"{self.f.header('СПРАВКА', '📚')}\n\n"
+                f"{self.f.section('ОСНОВНЫЕ КОМАНДЫ', '🔹')}\n"
+                f"{self.f.command('start', 'начать работу')}\n"
+                f"{self.f.command('menu', 'главное меню')}\n"
+                f"{self.f.command('profile', 'твой профиль')}\n"
+                f"{self.f.command('mystats', 'твоя статистика')}\n\n"
+                f"{self.f.section('ИГРЫ', '🎮')}\n"
+                f"{self.f.command('bosses', 'битва с боссами')}\n"
+                f"{self.f.command('casino', 'казино')}\n"
+                f"{self.f.command('rps', 'камень-ножницы-бумага')}\n\n"
+                f"{self.f.section('ЭКОНОМИКА', '💰')}\n"
+                f"{self.f.command('daily', 'ежедневный бонус')}\n"
+                f"{self.f.command('weekly', 'недельный бонус')}\n"
+                f"{self.f.command('shop', 'магазин')}\n"
+                f"{self.f.command('pay @ник сумма', 'перевести монеты')}\n"
+                f"{self.f.command('donate', 'привилегии')}\n\n"
+                f"{self.f.section('МОДЕРАЦИЯ', '⚙️')}\n"
+                f"{self.f.command('warn @ник [причина]', 'предупреждение')}\n"
+                f"{self.f.command('mute @ник минут [причина]', 'заглушить')}\n"
+                f"{self.f.command('ban @ник [причина]', 'заблокировать')}\n"
+                f"{self.f.command('banlist', 'список забаненных')}\n\n"
+                f"👑 **Владелец:** {OWNER_USERNAME}")
 
         await update.message.reply_text(
             text,
@@ -855,32 +853,30 @@ class GameBot:
         warns = user_data.get('warns', 0)
         warns_display = "🔴" * warns + "⚪" * (3 - warns)
 
-        text = (
-            self.f.header("ПРОФИЛЬ ИГРОКА", "👤") + "\n\n"
-            f"**{user_data.get('nickname') or user.first_name}** "
-            f"{user_data.get('title', '')}\n"
-            f"_{user_data.get('motto', 'Нет девиза')}_\n\n"
-            self.f.section("ХАРАКТЕРИСТИКИ", "📊") + "\n"
-            f"{self.f.stat('Уровень', str(current_level))}\n"
-            f"{self.f.stat('Опыт', exp_progress)}\n"
-            f"{self.f.stat('Монеты', str(user_data.get('coins', 0)) + ' 💰')}\n"
-            f"{self.f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
-            f"{self.f.stat('Энергия', str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
-            self.f.section("БОЕВЫЕ", "⚔️") + "\n"
-            f"{self.f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
-            f"{self.f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
-            f"{self.f.stat('🛡 Броня', str(user_data.get('armor', 0)))}\n"
-            f"{self.f.stat('👾 Боссов убито', str(user_data.get('boss_kills', 0)))}\n\n"
-            self.f.section("СТАТУС", "💎") + "\n"
-            f"{self.f.list_item(vip_status)}\n"
-            f"{self.f.list_item(premium_status)}\n"
-            f"{self.f.list_item('Предупреждения: ' + warns_display)}\n"
-            f"{self.f.list_item('Репутация: ' + str(user_data.get('rep', 0)) + ' ⭐')}\n\n"
-            self.f.section("О СЕБЕ", "ℹ️") + "\n"
-            f"{self.f.list_item('Пол: ' + user_data.get('gender', 'не указан'))}\n"
-            f"{self.f.list_item('Город: ' + user_data.get('city', 'не указан'))}\n"
-            f"{self.f.list_item('ID: ' + self.f.code(str(user.id)))}"
-        )
+        text = (f"{self.f.header('ПРОФИЛЬ ИГРОКА', '👤')}\n\n"
+                f"**{user_data.get('nickname') or user.first_name}** "
+                f"{user_data.get('title', '')}\n"
+                f"_{user_data.get('motto', 'Нет девиза')}_\n\n"
+                f"{self.f.section('ХАРАКТЕРИСТИКИ', '📊')}\n"
+                f"{self.f.stat('Уровень', str(current_level))}\n"
+                f"{self.f.stat('Опыт', exp_progress)}\n"
+                f"{self.f.stat('Монеты', str(user_data.get('coins', 0)) + ' 💰')}\n"
+                f"{self.f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
+                f"{self.f.stat('Энергия', str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
+                f"{self.f.section('БОЕВЫЕ', '⚔️')}\n"
+                f"{self.f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
+                f"{self.f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
+                f"{self.f.stat('🛡 Броня', str(user_data.get('armor', 0)))}\n"
+                f"{self.f.stat('👾 Боссов убито', str(user_data.get('boss_kills', 0)))}\n\n"
+                f"{self.f.section('СТАТУС', '💎')}\n"
+                f"{self.f.list_item(vip_status)}\n"
+                f"{self.f.list_item(premium_status)}\n"
+                f"{self.f.list_item('Предупреждения: ' + warns_display)}\n"
+                f"{self.f.list_item('Репутация: ' + str(user_data.get('rep', 0)) + ' ⭐')}\n\n"
+                f"{self.f.section('О СЕБЕ', 'ℹ️')}\n"
+                f"{self.f.list_item('Пол: ' + user_data.get('gender', 'не указан'))}\n"
+                f"{self.f.list_item('Город: ' + user_data.get('city', 'не указан'))}\n"
+                f"{self.f.list_item('ID: ' + self.f.code(str(user.id)))}")
 
         keyboard = [
             [
@@ -903,7 +899,7 @@ class GameBot:
     async def cmd_edit_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
             await update.message.reply_text(
-                self.f.header("РЕДАКТИРОВАНИЕ НИКА", "✏️") + "\n\n"
+                f"{self.f.header('РЕДАКТИРОВАНИЕ НИКА', '✏️')}\n\n"
                 f"{self.f.command('edit_nick [ник]', 'установить ник')}\n"
                 f"{self.f.example('edit_nick Spectr')}",
                 parse_mode='Markdown'
@@ -927,7 +923,7 @@ class GameBot:
     async def cmd_edit_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
             await update.message.reply_text(
-                self.f.header("РЕДАКТИРОВАНИЕ ТИТУЛА", "🏷") + "\n\n"
+                f"{self.f.header('РЕДАКТИРОВАНИЕ ТИТУЛА', '🏷')}\n\n"
                 f"{self.f.command('edit_title [титул]', 'установить титул')}\n"
                 f"{self.f.example('edit_title Легенда')}",
                 parse_mode='Markdown'
@@ -951,7 +947,7 @@ class GameBot:
     async def cmd_edit_motto(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
             await update.message.reply_text(
-                self.f.header("РЕДАКТИРОВАНИЕ ДЕВИЗА", "📝") + "\n\n"
+                f"{self.f.header('РЕДАКТИРОВАНИЕ ДЕВИЗА', '📝')}\n\n"
                 f"{self.f.command('edit_motto [девиз]', 'установить девиз')}\n"
                 f"{self.f.example('edit_motto Carpe diem')}",
                 parse_mode='Markdown'
@@ -975,7 +971,7 @@ class GameBot:
     async def cmd_edit_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args or context.args[0].lower() not in ['м', 'ж', 'др']:
             await update.message.reply_text(
-                self.f.header("РЕДАКТИРОВАНИЕ ПОЛА", "👤") + "\n\n"
+                f"{self.f.header('РЕДАКТИРОВАНИЕ ПОЛА', '👤')}\n\n"
                 f"{self.f.command('edit_gender [м|ж|др]', 'установить пол')}\n"
                 f"{self.f.example('edit_gender м')}",
                 parse_mode='Markdown'
@@ -1001,14 +997,12 @@ class GameBot:
         self.db.cursor.execute("SELECT * FROM stats WHERE user_id = ?", (user.id,))
         stats = self.db.cursor.fetchone()
 
-        text = (
-            self.f.header("ТВОЯ СТАТИСТИКА", "📊") + "\n\n"
-            f"{self.f.stat('Сообщений', str(stats[1] if stats else 0))}\n"
-            f"{self.f.stat('Команд', str(stats[2] if stats else 0))}\n"
-            f"{self.f.stat('Игр сыграно', str(stats[3] if stats else 0))}\n"
-            f"{self.f.stat('РПС побед', str(user_data.get('rps_wins', 0)))}\n"
-            f"{self.f.stat('Казино побед', str(user_data.get('casino_wins', 0)))}\n"
-        )
+        text = (f"{self.f.header('ТВОЯ СТАТИСТИКА', '📊')}\n\n"
+                f"{self.f.stat('Сообщений', str(stats[1] if stats else 0))}\n"
+                f"{self.f.stat('Команд', str(stats[2] if stats else 0))}\n"
+                f"{self.f.stat('Игр сыграно', str(stats[3] if stats else 0))}\n"
+                f"{self.f.stat('РПС побед', str(user_data.get('rps_wins', 0)))}\n"
+                f"{self.f.stat('Казино побед', str(user_data.get('casino_wins', 0)))}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1017,18 +1011,18 @@ class GameBot:
         top_level = self.db.get_top("level", 10)
         top_boss = self.db.get_top("boss_kills", 10)
 
-        text = self.f.header("ТОП ИГРОКОВ", "🏆") + "\n\n"
-        text += self.f.section("ПО МОНЕТАМ", "💰") + "\n"
+        text = f"{self.f.header('ТОП ИГРОКОВ', '🏆')}\n\n"
+        text += f"{self.f.section('ПО МОНЕТАМ', '💰')}\n"
         for i, (name, value) in enumerate(top_coins, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
             text += f"{medal} **{i}.** {name} — {value} 💰\n"
 
-        text += "\n" + self.f.section("ПО УРОВНЮ", "📊") + "\n"
+        text += f"\n{self.f.section('ПО УРОВНЮ', '📊')}\n"
         for i, (name, value) in enumerate(top_level, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
             text += f"{medal} **{i}.** {name} — {value} ур.\n"
 
-        text += "\n" + self.f.section("ПО УБИЙСТВУ БОССОВ", "👾") + "\n"
+        text += f"\n{self.f.section('ПО УБИЙСТВУ БОССОВ', '👾')}\n"
         for i, (name, value) in enumerate(top_boss, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
             text += f"{medal} **{i}.** {name} — {value} боссов\n"
@@ -1068,13 +1062,11 @@ class GameBot:
         self.db.add_coins(user_id, coins)
         self.db.add_exp(user_id, exp)
 
-        text = (
-            self.f.header("ЕЖЕДНЕВНЫЙ БОНУС", "🎁") + "\n\n"
-            f"{self.f.list_item('Стрик: ' + str(streak) + ' дней 🔥')}\n"
-            f"{self.f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
-            f"{self.f.list_item('Опыт: +' + str(exp) + ' ✨')}\n\n"
-            f"{self.f.info('Заходите завтра за новым бонусом!')}"
-        )
+        text = (f"{self.f.header('ЕЖЕДНЕВНЫЙ БОНУС', '🎁')}\n\n"
+                f"{self.f.list_item('Стрик: ' + str(streak) + ' дней 🔥')}\n"
+                f"{self.f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
+                f"{self.f.list_item('Опыт: +' + str(exp) + ' ✨')}\n\n"
+                f"{self.f.info('Заходите завтра за новым бонусом!')}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1108,12 +1100,10 @@ class GameBot:
         )
         self.db.conn.commit()
 
-        text = (
-            self.f.header("НЕДЕЛЬНЫЙ БОНУС", "📅") + "\n\n"
-            f"{self.f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
-            f"{self.f.list_item('Алмазы: +' + str(diamonds) + ' 💎')}\n\n"
-            f"{self.f.info('Возвращайтесь через неделю!')}"
-        )
+        text = (f"{self.f.header('НЕДЕЛЬНЫЙ БОНУС', '📅')}\n\n"
+                f"{self.f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
+                f"{self.f.list_item('Алмазы: +' + str(diamonds) + ' 💎')}\n\n"
+                f"{self.f.info('Возвращайтесь через неделю!')}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1130,12 +1120,10 @@ class GameBot:
         else:
             days_missed = 0
 
-        text = (
-            self.f.header("ТЕКУЩИЙ СТРИК", "🔥") + "\n\n"
-            f"{self.f.list_item('Дней подряд: ' + str(streak))}\n"
-            f"{self.f.list_item('Последний вход: ' + (last_daily[:10] if last_daily != 'никогда' else 'никогда'))}\n"
-            f"{self.f.list_item('Пропущено дней: ' + str(days_missed))}"
-        )
+        text = (f"{self.f.header('ТЕКУЩИЙ СТРИК', '🔥')}\n\n"
+                f"{self.f.list_item('Дней подряд: ' + str(streak))}\n"
+                f"{self.f.list_item('Последний вход: ' + (last_daily[:10] if last_daily != 'никогда' else 'никогда'))}\n"
+                f"{self.f.list_item('Пропущено дней: ' + str(days_missed))}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1150,36 +1138,32 @@ class GameBot:
             self.db.respawn_bosses()
             bosses = self.db.get_bosses(alive_only=True)
 
-        text = self.f.header("АРЕНА БОССОВ", "👾") + "\n\n"
+        text = f"{self.f.header('АРЕНА БОССОВ', '👾')}\n\n"
 
         if bosses:
             boss = bosses[0]
             health_bar = self.f.progress(boss[3], boss[4], 20)
 
-            text += (
-                f"**ТЕКУЩИЙ БОСС**\n"
-                f"└ {boss[1]} (ур. {boss[2]})\n"
-                f"└ ❤️ Здоровье: {health_bar}\n"
-                f"└ ⚔️ Урон: {boss[5]}\n"
-                f"└ Награда: {boss[6]} 💰\n\n"
-            )
+            text += (f"**ТЕКУЩИЙ БОСС**\n"
+                     f"└ {boss[1]} (ур. {boss[2]})\n"
+                     f"└ ❤️ Здоровье: {health_bar}\n"
+                     f"└ ⚔️ Урон: {boss[5]}\n"
+                     f"└ Награда: {boss[6]} 💰\n\n")
 
             if len(bosses) > 1:
-                text += self.f.section("ОЧЕРЕДЬ", "📋") + "\n"
+                text += f"{self.f.section('ОЧЕРЕДЬ', '📋')}\n"
                 for i, b in enumerate(bosses[1:], 2):
                     text += f"{i}. {b[1]} — ❤️ {b[3]}/{b[4]}\n"
 
-        text += (
-            "\n" + self.f.section("ТВОИ ПОКАЗАТЕЛИ", "⚔️") + "\n"
-            f"{self.f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
-            f"{self.f.stat('⚡ Энергия', str(user_data.get('energy', 100)) + '/100')}\n"
-            f"{self.f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
-            f"{self.f.stat('👾 Убито боссов', str(user_data.get('boss_kills', 0)))}\n\n"
-            self.f.section("КОМАНДЫ", "⌨️") + "\n"
-            f"{self.f.command('bossfight [ID]', 'атаковать босса', '1')}\n"
-            f"{self.f.command('regen', 'восстановить ❤️ и ⚡')}\n"
-            f"{self.f.command('bossinfo [ID]', 'информация о боссе', '1')}"
-        )
+        text += (f"\n{self.f.section('ТВОИ ПОКАЗАТЕЛИ', '⚔️')}\n"
+                 f"{self.f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
+                 f"{self.f.stat('⚡ Энергия', str(user_data.get('energy', 100)) + '/100')}\n"
+                 f"{self.f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
+                 f"{self.f.stat('👾 Убито боссов', str(user_data.get('boss_kills', 0)))}\n\n"
+                 f"{self.f.section('КОМАНДЫ', '⌨️')}\n"
+                 f"{self.f.command('bossfight [ID]', 'атаковать босса', '1')}\n"
+                 f"{self.f.command('regen', 'восстановить ❤️ и ⚡')}\n"
+                 f"{self.f.command('bossinfo [ID]', 'информация о боссе', '1')}")
 
         keyboard = []
         for i, boss in enumerate(bosses[:3], 1):
@@ -1235,7 +1219,7 @@ class GameBot:
         boss_killed = self.db.damage_boss(boss_id, player_damage)
         self.db.damage(user.id, player_taken)
 
-        text = self.f.header("БИТВА С БОССОМ", "⚔️") + "\n\n"
+        text = f"{self.f.header('БИТВА С БОССОМ', '⚔️')}\n\n"
         text += f"{self.f.list_item('Ваш урон: ' + str(player_damage))}\n"
         text += f"{self.f.list_item('Урон босса: ' + str(player_taken))}\n\n"
 
@@ -1250,12 +1234,12 @@ class GameBot:
             self.db.add_boss_kill(user.id)
             self.db.add_exp(user.id, boss[2] * 10)
 
-            text += self.f.success("ПОБЕДА!") + "\n"
+            text += f"{self.f.success('ПОБЕДА!')}\n"
             text += f"{self.f.list_item('💰 Награда: ' + str(reward) + ' 💰')}\n"
             text += f"{self.f.list_item('✨ Опыт: +' + str(boss[2] * 10))}\n\n"
         else:
             boss_info = self.db.get_boss(boss_id)
-            text += self.f.warning("Босс еще жив!") + "\n"
+            text += f"{self.f.warning('Босс еще жив!')}\n"
             text += f"❤️ Осталось: {boss_info[3]} здоровья\n\n"
 
         if user_data['health'] <= player_taken:
@@ -1283,14 +1267,12 @@ class GameBot:
         status = "ЖИВ" if boss[8] else "ПОВЕРЖЕН"
         health_bar = self.f.progress(boss[3], boss[4], 20)
 
-        text = (
-            self.f.header(f"БОСС: {boss[1]}", "👾") + "\n\n"
-            f"{self.f.stat('Уровень', str(boss[2]))}\n"
-            f"{self.f.stat('❤️ Здоровье', health_bar)}\n"
-            f"{self.f.stat('⚔️ Урон', str(boss[5]))}\n"
-            f"{self.f.stat('Награда', str(boss[6]) + ' 💰')}\n"
-            f"{self.f.stat('📊 Статус', status)}"
-        )
+        text = (f"{self.f.header(f'БОСС: {boss[1]}', '👾')}\n\n"
+                f"{self.f.stat('Уровень', str(boss[2]))}\n"
+                f"{self.f.stat('❤️ Здоровье', health_bar)}\n"
+                f"{self.f.stat('⚔️ Урон', str(boss[5]))}\n"
+                f"{self.f.stat('Награда', str(boss[6]) + ' 💰')}\n"
+                f"{self.f.stat('📊 Статус', status)}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1308,7 +1290,7 @@ class GameBot:
         self.db.add_energy(user_id, 20)
 
         await update.message.reply_text(
-            self.f.success("Регенерация завершена!") + "\n" +
+            f"{self.f.success('Регенерация завершена!')}\n"
             f"{self.f.list_item('❤️ Здоровье +50')}\n"
             f"{self.f.list_item('⚡ Энергия +20')}",
             parse_mode='Markdown'
@@ -1317,14 +1299,12 @@ class GameBot:
     # ========== КАЗИНО ==========
 
     async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = (
-            self.f.header("КАЗИНО", "🎰") + "\n\n"
-            f"{self.f.command('roulette [ставка] [цвет]', 'игра в рулетку')}\n"
-            f"{self.f.command('dice [ставка]', 'игра в кости')}\n"
-            f"{self.f.command('rps', 'камень-ножницы-бумага')}\n\n"
-            f"{self.f.example('roulette 10 red')}\n"
-            f"{self.f.example('dice 50')}"
-        )
+        text = (f"{self.f.header('КАЗИНО', '🎰')}\n\n"
+                f"{self.f.command('roulette [ставка] [цвет]', 'игра в рулетку')}\n"
+                f"{self.f.command('dice [ставка]', 'игра в кости')}\n"
+                f"{self.f.command('rps', 'камень-ножницы-бумага')}\n\n"
+                f"{self.f.example('roulette 10 red')}\n"
+                f"{self.f.example('dice 50')}")
 
         await update.message.reply_text(
             text,
@@ -1382,13 +1362,11 @@ class GameBot:
             self.db.add_stat(user_id, "casino_losses", 1)
             result_text = self.f.error(f"Вы проиграли {bet} 💰")
 
-        text = (
-            self.f.header("РУЛЕТКА", "🎰") + "\n\n"
-            f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
-            f"{self.f.list_item('Выбрано: ' + choice)}\n"
-            f"{self.f.list_item('Выпало: ' + str(result_num) + ' ' + result_color)}\n\n"
-            f"{result_text}"
-        )
+        text = (f"{self.f.header('РУЛЕТКА', '🎰')}\n\n"
+                f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
+                f"{self.f.list_item('Выбрано: ' + choice)}\n"
+                f"{self.f.list_item('Выпало: ' + str(result_num) + ' ' + result_color)}\n\n"
+                f"{result_text}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1428,19 +1406,17 @@ class GameBot:
             self.db.add_coins(user_id, -bet)
             self.db.add_stat(user_id, "casino_losses", 1)
 
-        text = (
-            self.f.header("КОСТИ", "🎲") + "\n\n"
-            f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
-            f"{self.f.list_item('Кубики: ' + str(dice1) + ' + ' + str(dice2))}\n"
-            f"{self.f.list_item('Сумма: ' + str(total))}\n\n"
-            f"{result_text}"
-        )
+        text = (f"{self.f.header('КОСТИ', '🎲')}\n\n"
+                f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
+                f"{self.f.list_item('Кубики: ' + str(dice1) + ' + ' + str(dice2))}\n"
+                f"{self.f.list_item('Сумма: ' + str(total))}\n\n"
+                f"{result_text}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
     async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
-            self.f.header("КАМЕНЬ-НОЖНИЦЫ-БУМАГА", "✊") + "\n\nВыберите свой ход:",
+            f"{self.f.header('КАМЕНЬ-НОЖНИЦЫ-БУМАГА', '✊')}\n\nВыберите свой ход:",
             reply_markup=IrisKeyboard.rps_game(),
             parse_mode='Markdown'
         )
@@ -1448,21 +1424,19 @@ class GameBot:
     # ========== ЭКОНОМИКА ==========
 
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = (
-            self.f.header("МАГАЗИН", "🛍") + "\n\n"
-            self.f.section("ЗЕЛЬЯ", "💊") + "\n"
-            f"{self.f.command('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
-            f"{self.f.command('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
-            self.f.section("ОРУЖИЕ", "⚔️") + "\n"
-            f"{self.f.command('buy меч', '200 💰 (⚔️+10)')}\n"
-            f"{self.f.command('buy легендарный меч', '500 💰 (⚔️+30)')}\n\n"
-            self.f.section("БРОНЯ", "🛡") + "\n"
-            f"{self.f.command('buy щит', '150 💰 (🛡+5)')}\n"
-            f"{self.f.command('buy доспехи', '400 💰 (🛡+15)')}\n\n"
-            self.f.section("ЭНЕРГИЯ", "⚡") + "\n"
-            f"{self.f.command('buy энергетик', '30 💰 (⚡+20)')}\n"
-            f"{self.f.command('buy батарейка', '80 💰 (⚡+50)')}"
-        )
+        text = (f"{self.f.header('МАГАЗИН', '🛍')}\n\n"
+                f"{self.f.section('ЗЕЛЬЯ', '💊')}\n"
+                f"{self.f.command('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
+                f"{self.f.command('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
+                f"{self.f.section('ОРУЖИЕ', '⚔️')}\n"
+                f"{self.f.command('buy меч', '200 💰 (⚔️+10)')}\n"
+                f"{self.f.command('buy легендарный меч', '500 💰 (⚔️+30)')}\n\n"
+                f"{self.f.section('БРОНЯ', '🛡')}\n"
+                f"{self.f.command('buy щит', '150 💰 (🛡+5)')}\n"
+                f"{self.f.command('buy доспехи', '400 💰 (🛡+15)')}\n\n"
+                f"{self.f.section('ЭНЕРГИЯ', '⚡')}\n"
+                f"{self.f.command('buy энергетик', '30 💰 (⚡+20)')}\n"
+                f"{self.f.command('buy батарейка', '80 💰 (⚡+50)')}")
 
         await update.message.reply_text(
             text,
@@ -1554,33 +1528,29 @@ class GameBot:
         self.db.add_coins(user_id, -amount)
         self.db.add_coins(target_user['user_id'], amount)
 
-        text = (
-            self.f.header("ПЕРЕВОД", "💰") + "\n\n"
-            f"{self.f.list_item('Получатель: ' + (target_user.get('first_name') or 'Пользователь'))}\n"
-            f"{self.f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
-            f"{self.f.list_item('Отправитель: ' + update.effective_user.first_name)}"
-        )
+        text = (f"{self.f.header('ПЕРЕВОД', '💰')}\n\n"
+                f"{self.f.list_item('Получатель: ' + (target_user.get('first_name') or 'Пользователь'))}\n"
+                f"{self.f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
+                f"{self.f.list_item('Отправитель: ' + update.effective_user.first_name)}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
     async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = (
-            self.f.header("ПРИВИЛЕГИИ", "💎") + "\n\n"
-            self.f.section("VIP СТАТУС", "🌟") + "\n"
-            f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n"
-            f"{self.f.list_item('Урон в битвах +20%')}\n"
-            f"{self.f.list_item('Награда с боссов +50%')}\n"
-            f"{self.f.list_item('Ежедневный бонус +50%')}\n\n"
-            self.f.section("PREMIUM СТАТУС", "💎") + "\n"
-            f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n"
-            f"{self.f.list_item('Все бонусы VIP')}\n"
-            f"{self.f.list_item('Урон в битвах +50%')}\n"
-            f"{self.f.list_item('Награда с боссов +100%')}\n"
-            f"{self.f.list_item('Ежедневный бонус +100%')}\n\n"
-            f"{self.f.command('vip', 'купить VIP')}\n"
-            f"{self.f.command('premium', 'купить PREMIUM')}\n\n"
-            f"👑 **Владелец:** {OWNER_USERNAME}"
-        )
+        text = (f"{self.f.header('ПРИВИЛЕГИИ', '💎')}\n\n"
+                f"{self.f.section('VIP СТАТУС', '🌟')}\n"
+                f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n"
+                f"{self.f.list_item('Урон в битвах +20%')}\n"
+                f"{self.f.list_item('Награда с боссов +50%')}\n"
+                f"{self.f.list_item('Ежедневный бонус +50%')}\n\n"
+                f"{self.f.section('PREMIUM СТАТУС', '💎')}\n"
+                f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n"
+                f"{self.f.list_item('Все бонусы VIP')}\n"
+                f"{self.f.list_item('Урон в битвах +50%')}\n"
+                f"{self.f.list_item('Награда с боссов +100%')}\n"
+                f"{self.f.list_item('Ежедневный бонус +100%')}\n\n"
+                f"{self.f.command('vip', 'купить VIP')}\n"
+                f"{self.f.command('premium', 'купить PREMIUM')}\n\n"
+                f"👑 **Владелец:** {OWNER_USERNAME}")
 
         await update.message.reply_text(
             text,
@@ -1604,9 +1574,9 @@ class GameBot:
         self.db.set_vip(user_id, VIP_DAYS)
 
         await update.message.reply_text(
-            self.f.success("VIP СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{self.f.success('VIP СТАТУС АКТИВИРОВАН')}\n\n"
             f"Срок действия: {VIP_DAYS} дней\n"
-            "Все бонусы активны.",
+            f"Все бонусы активны.",
             parse_mode='Markdown'
         )
 
@@ -1626,9 +1596,9 @@ class GameBot:
         self.db.set_premium(user_id, PREMIUM_DAYS)
 
         await update.message.reply_text(
-            self.f.success("PREMIUM СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{self.f.success('PREMIUM СТАТУС АКТИВИРОВАН')}\n\n"
             f"Срок действия: {PREMIUM_DAYS} дней\n"
-            "Все бонусы активны.",
+            f"Все бонусы активны.",
             parse_mode='Markdown'
         )
 
@@ -1659,13 +1629,11 @@ class GameBot:
         name = target_user.get('first_name', 'Пользователь')
         warns_count = result['warns_count']
 
-        text = (
-            self.f.header("ПРЕДУПРЕЖДЕНИЕ", "⚠️") + "\n\n"
-            f"{self.f.list_item('Пользователь: ' + name)}\n"
-            f"{self.f.list_item('Предупреждений: ' + str(warns_count) + '/3')}\n"
-            f"{self.f.list_item('Причина: ' + reason)}\n"
-            f"{self.f.list_item('Администратор: ' + admin.first_name)}"
-        )
+        text = (f"{self.f.header('ПРЕДУПРЕЖДЕНИЕ', '⚠️')}\n\n"
+                f"{self.f.list_item('Пользователь: ' + name)}\n"
+                f"{self.f.list_item('Предупреждений: ' + str(warns_count) + '/3')}\n"
+                f"{self.f.list_item('Причина: ' + reason)}\n"
+                f"{self.f.list_item('Администратор: ' + admin.first_name)}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1687,19 +1655,17 @@ class GameBot:
             await update.message.reply_text(self.f.info(f"У пользователя {name} нет предупреждений"))
             return
 
-        text = self.f.header(f"ПРЕДУПРЕЖДЕНИЯ: {name}", "📋") + "\n\n"
+        text = f"{self.f.header(f'ПРЕДУПРЕЖДЕНИЯ: {name}', '📋')}\n\n"
 
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
             admin_name = admin.get('first_name', 'Система') if admin else 'Система'
             date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
 
-            text += (
-                f"**ID: {warn['id']}**\n"
-                f"{self.f.list_item('Причина: ' + warn['reason'])}\n"
-                f"{self.f.list_item('Администратор: ' + admin_name)}\n"
-                f"{self.f.list_item('Дата: ' + date)}\n\n"
-            )
+            text += (f"**ID: {warn['id']}**\n"
+                     f"{self.f.list_item('Причина: ' + warn['reason'])}\n"
+                     f"{self.f.list_item('Администратор: ' + admin_name)}\n"
+                     f"{self.f.list_item('Дата: ' + date)}\n\n")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1763,14 +1729,12 @@ class GameBot:
 
         until_str = mute_until.strftime("%d.%m.%Y %H:%M")
 
-        text = (
-            self.f.header("МУТ", "🔇") + "\n\n"
-            f"{self.f.list_item('Пользователь: ' + name)}\n"
-            f"{self.f.list_item('Срок: ' + str(minutes) + ' минут')}\n"
-            f"{self.f.list_item('До: ' + until_str)}\n"
-            f"{self.f.list_item('Причина: ' + reason)}\n"
-            f"{self.f.list_item('Администратор: ' + admin.first_name)}"
-        )
+        text = (f"{self.f.header('МУТ', '🔇')}\n\n"
+                f"{self.f.list_item('Пользователь: ' + name)}\n"
+                f"{self.f.list_item('Срок: ' + str(minutes) + ' минут')}\n"
+                f"{self.f.list_item('До: ' + until_str)}\n"
+                f"{self.f.list_item('Причина: ' + reason)}\n"
+                f"{self.f.list_item('Администратор: ' + admin.first_name)}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1811,7 +1775,7 @@ class GameBot:
             await update.message.reply_text(self.f.info("Нет пользователей в муте"))
             return
 
-        text = self.f.header("СПИСОК ЗАМУЧЕННЫХ", "🔇") + "\n\n"
+        text = f"{self.f.header('СПИСОК ЗАМУЧЕННЫХ', '🔇')}\n\n"
 
         for user_id, name, mute_until in muted[:10]:
             if mute_until:
@@ -1850,12 +1814,10 @@ class GameBot:
         self.db.ban_user(target_user['user_id'], admin.id, reason)
         name = target_user.get('first_name', 'Пользователь')
 
-        text = (
-            self.f.header("БЛОКИРОВКА", "🔴") + "\n\n"
-            f"{self.f.list_item('Пользователь: ' + name)}\n"
-            f"{self.f.list_item('Причина: ' + reason)}\n"
-            f"{self.f.list_item('Администратор: ' + admin.first_name)}"
-        )
+        text = (f"{self.f.header('БЛОКИРОВКА', '🔴')}\n\n"
+                f"{self.f.list_item('Пользователь: ' + name)}\n"
+                f"{self.f.list_item('Причина: ' + reason)}\n"
+                f"{self.f.list_item('Администратор: ' + admin.first_name)}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1901,17 +1863,15 @@ class GameBot:
             await update.message.reply_text(self.f.info("Список заблокированных пуст"))
             return
 
-        text = self.f.header("СПИСОК ЗАБЛОКИРОВАННЫХ", "📋") + "\n"
+        text = f"{self.f.header('СПИСОК ЗАБЛОКИРОВАННЫХ', '📋')}\n"
         text += f"Страница {page}/{total_pages}\n\n"
 
         for i, ban in enumerate(bans, 1):
             date = datetime.datetime.fromisoformat(ban['date']).strftime("%d.%m.%Y") if ban['date'] else "неизвестно"
-            text += (
-                f"{i}. {ban['name']}\n"
-                f"└ Причина: {ban['reason']}\n"
-                f"└ Дата: {date}\n"
-                f"└ Заблокировал: {ban['admin']}\n\n"
-            )
+            text += (f"{i}. {ban['name']}\n"
+                     f"└ Причина: {ban['reason']}\n"
+                     f"└ Дата: {date}\n"
+                     f"└ Заблокировал: {ban['admin']}\n\n")
 
         await update.message.reply_text(
             text,
@@ -1955,13 +1915,11 @@ class GameBot:
         humidity = random.randint(30, 90)
         weather = random.choice(weathers)
 
-        text = (
-            self.f.header(f"ПОГОДА: {city.upper()}", "🌍") + "\n\n"
-            f"{weather}, {temp}°C\n"
-            f"💨 Ветер: {wind} м/с\n"
-            f"💧 Влажность: {humidity}%\n"
-            f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
+        text = (f"{self.f.header(f'ПОГОДА: {city.upper()}', '🌍')}\n\n"
+                f"{weather}, {temp}°C\n"
+                f"💨 Ветер: {wind} м/с\n"
+                f"💧 Влажность: {humidity}%\n"
+                f"📅 {datetime.datetime.now().strftime('%d.%m.%Y %H:%M')}")
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1975,10 +1933,7 @@ class GameBot:
             "Интегрирован Gemini AI"
         ]
 
-        text = (
-            self.f.header("НОВОСТИ", "📰") + "\n\n"
-            f"{random.choice(news_list)}"
-        )
+        text = f"{self.f.header('НОВОСТИ', '📰')}\n\n" + f"{random.choice(news_list)}"
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -1992,20 +1947,14 @@ class GameBot:
             "Каждый день — это новая возможность изменить свою жизнь."
         ]
 
-        text = (
-            self.f.header("ЦИТАТА ДНЯ", "📝") + "\n\n"
-            f"«{random.choice(quotes)}»"
-        )
+        text = f"{self.f.header('ЦИТАТА ДНЯ', '📝')}\n\n" + f"«{random.choice(quotes)}»"
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
     async def cmd_players(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         count = self.db.get_players_count()
 
-        text = (
-            self.f.header("СТАТИСТИКА", "👥") + "\n\n"
-            f"Всего игроков: {count}"
-        )
+        text = f"{self.f.header('СТАТИСТИКА', '👥')}\n\n" + f"Всего игроков: {count}"
 
         await update.message.reply_text(text, parse_mode='Markdown')
 
@@ -2114,7 +2063,7 @@ class GameBot:
 
         elif data == "menu_back":
             await query.edit_message_text(
-                self.f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\n\nВыберите раздел:",
+                f"{self.f.header('ГЛАВНОЕ МЕНЮ', '🎮')}\n\nВыберите раздел:",
                 reply_markup=IrisKeyboard.main_menu(),
                 parse_mode='Markdown'
             )
@@ -2139,17 +2088,15 @@ class GameBot:
 
         elif data == "menu_moderation":
             admin_data = self.db.get_user_by_id(user.id)
-            text = self.f.header("МОДЕРАЦИЯ", "⚙️") + "\n\n"
+            text = f"{self.f.header('МОДЕРАЦИЯ', '⚙️')}\n\n"
 
             if self.has_permission(admin_data, 'moderator'):
-                text += (
-                    f"{self.f.command('warn @ник [причина]', 'предупреждение')}\n"
-                    f"{self.f.command('mute @ник минут [причина]', 'заглушить')}\n"
-                    f"{self.f.command('ban @ник [причина]', 'заблокировать')}\n"
-                    f"{self.f.command('banlist', 'список заблокированных')}\n"
-                    f"{self.f.command('mutelist', 'список замученных')}\n"
-                    f"{self.f.command('kick @ник', 'исключить')}"
-                )
+                text += (f"{self.f.command('warn @ник [причина]', 'предупреждение')}\n"
+                         f"{self.f.command('mute @ник минут [причина]', 'заглушить')}\n"
+                         f"{self.f.command('ban @ник [причина]', 'заблокировать')}\n"
+                         f"{self.f.command('banlist', 'список заблокированных')}\n"
+                         f"{self.f.command('mutelist', 'список замученных')}\n"
+                         f"{self.f.command('kick @ник', 'исключить')}")
             else:
                 text += self.f.error("Недостаточно прав для просмотра раздела")
 
@@ -2198,7 +2145,7 @@ class GameBot:
             emoji = {"rock": "🪨", "scissors": "✂️", "paper": "📄"}
             names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
 
-            text = self.f.header("КНБ", "✊") + "\n\n"
+            text = f"{self.f.header('КНБ', '✊')}\n\n"
             text += f"{emoji[choice]} **Вы:** {names[choice]}\n"
             text += f"{emoji[bot_choice]} **Бот:** {names[bot_choice]}\n\n"
 
