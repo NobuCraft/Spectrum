@@ -18,6 +18,8 @@ import os
 import re
 from collections import defaultdict
 import time
+import random
+import string
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -49,6 +51,29 @@ VIP_PRICE = 5000
 PREMIUM_PRICE = 15000
 VIP_DAYS = 30
 PREMIUM_DAYS = 30
+
+# Генерируем уникальный ID для этого инстанса
+INSTANCE_ID = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+print(f"🆔 Instance ID: {INSTANCE_ID}")
+
+# Используем его в polling
+async def run(self):
+    try:
+        # Добавляем уникальный параметр в polling
+        await self.application.initialize()
+        await self.application.start()
+        await self.application.updater.start_polling(
+            allowed_updates=['message', 'callback_query'],
+            drop_pending_updates=True,  # Очищаем старые обновления
+            pool_timeout=30
+        )
+        logger.info(f"🚀 Бот «СПЕКТР» запущен (ID: {INSTANCE_ID})")
+        while True:
+            await asyncio.sleep(1)
+    except Exception as e:
+        logger.error(f"Ошибка: {e}")
+        await asyncio.sleep(5)
+        await self.run()
 
 # ========== GEMINI AI ==========
 class GeminiAI:
