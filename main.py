@@ -87,6 +87,7 @@ class Config:
     WEEKLY_COOLDOWN = 604800
 
 # ========== НАДЁЖНАЯ ЗАЩИТА ОТ ЭКЗЕМПЛЯРОВ ==========
+# ========== УЛУЧШЕННАЯ ЗАЩИТА ОТ МНОЖЕСТВЕННЫХ ЭКЗЕМПЛЯРОВ ==========
 class SingleInstance:
     """Гарантирует запуск только одного экземпляра бота"""
     
@@ -95,36 +96,85 @@ class SingleInstance:
         self.token_hash = hashlib.md5(Config.TELEGRAM_TOKEN.encode()).hexdigest()[:16]
         
     def kill_other_instances(self):
-        """Принудительно убивает все другие процессы с этим токеном"""
+        """Агрессивно убивает все другие процессы с этим токеном"""
         current_pid = os.getpid()
         killed = False
         
         try:
+            # Ищем все Python процессы
             for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
                 try:
+                    # Пропускаем текущий процесс
                     if proc.info['pid'] == current_pid:
                         continue
                     
+                    # Проверяем командную строку
                     cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
                     
-                    # Ищем процессы с нашим токеном
-                    if Config.TELEGRAM_TOKEN in cmdline and 'python' in cmdline.lower():
-                        logger.warning(f"🔪 Найден старый процесс {proc.info['pid']}, убиваем...")
-                        proc.kill()
+                    # Ищем процессы с нашим токеном или именем бота
+                    if ('python' in proc.info['name'].lower() and 
+                        (Config.TELEGRAM_TOKEN in cmdline or 'spectrum' in cmdline.lower())):
+                        
+                        logger.warning(f"🔪 Найден процесс-конкурент {proc.info['pid']}, убиваем...")
+                        
+                        # Сначала SIGTERM
+                        proc.terminate()
+                        time.sleep(1)
+                        
+                        # Если ещё жив - SIGKILL
+                        if proc.is_running():
+                            logger.warning(f"💀 Процесс {proc.info['pid']} не отвечает, применяем SIGKILL")
+                            proc.kill()
+                        
                         killed = True
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     pass
+                    
         except Exception as e:
             logger.error(f"Ошибка при убийстве процессов: {e}")
         
         if killed:
-            logger.info("✅ Все старые процессы остановлены")
+            logger.info("✅ Все конкурирующие процессы убиты")
             time.sleep(2)
             return True
+            
         return False
     
+    def force_delete_old_lock(self):
+        """Принудительно удаляет старые lock-файлы"""
+        try:
+            lock_dir = "/tmp/spectrum_locks"
+            if os.path.exists(lock_dir):
+                for file in os.listdir(lock_dir):
+                    if file.startswith(f"bot_{self.token_hash}"):
+                        lock_path = os.path.join(lock_dir, file)
+                        try:
+                            # Проверяем, есть ли живой процесс с этим PID
+                            with open(lock_path, 'r') as f:
+                                old_pid = int(f.read().strip())
+                            
+                            try:
+                                os.kill(old_pid, 0)
+                                # Процесс жив - убиваем
+                                os.kill(old_pid, signal.SIGKILL)
+                                time.sleep(1)
+                            except OSError:
+                                pass  # Процесс мертв
+                                
+                            os.remove(lock_path)
+                            logger.info(f"✅ Удален старый lock-файл: {lock_path}")
+                            
+                        except:
+                            try:
+                                os.remove(lock_path)
+                            except:
+                                pass
+        except Exception as e:
+            logger.error(f"Ошибка при удалении lock-файлов: {e}")
+    
     def create_lock(self):
-        """Создает lock-файл"""
+        """Создает lock-файл с проверкой"""
         try:
             lock_dir = "/tmp/spectrum_locks"
             os.makedirs(lock_dir, exist_ok=True)
@@ -140,11 +190,19 @@ class SingleInstance:
                     # Проверяем жив ли процесс
                     try:
                         os.kill(old_pid, 0)
-                        # Процесс жив - убиваем
-                        os.kill(old_pid, signal.SIGTERM)
+                        # Процесс жив - убиваем его
+                        logger.warning(f"🔪 Найден живой процесс {old_pid}, убиваем...")
+                        os.kill(old_pid, signal.SIGKILL)
                         time.sleep(1)
                     except OSError:
                         pass  # Процесс мертв
+                        
+                except Exception as e:
+                    logger.error(f"Ошибка при чтении lock-файла: {e}")
+                
+                # Удаляем старый lock-файл
+                try:
+                    os.remove(self.lock_file)
                 except:
                     pass
             
@@ -165,13 +223,20 @@ class SingleInstance:
             try:
                 os.remove(self.lock_file)
                 logger.info("✅ Lock-файл удален")
-            except:
-                pass
+            except Exception as e:
+                logger.error(f"Ошибка при удалении lock-файла: {e}")
 
 # Создаем экземпляр защиты
 guard = SingleInstance()
+
+# Агрессивно убиваем все конкурирующие процессы
 guard.kill_other_instances()
+guard.force_delete_old_lock()
 guard.create_lock()
+
+# Дополнительная проверка при импорте
+import atexit
+atexit.register(guard.cleanup)
 
 # ========== ФОРМАТТЕР В СТИЛЕ IRIS ==========
 class Formatter:
