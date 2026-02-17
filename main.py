@@ -1948,9 +1948,9 @@ class SpectrumBot:
                 f"{f.section('ХАРАКТЕРИСТИКИ', '📊')}\n"
                 f"{f.stat('Уровень', str(current_level))}\n"
                 f"{f.stat('Опыт', exp_progress)}\n"
-                f"{f.stat('Монеты', f"{user_data.get('coins', 0):,} 💰".replace(',', ' '))}\n"
-                f"{f.stat('Алмазы', f"{user_data.get('diamonds', 0):,} 💎".replace(',', ' '))}\n"
-                f"{f.stat('Кристаллы', f"{user_data.get('crystals', 0):,} 🔮".replace(',', ' '))}\n\n"
+                f"{f.stat('Монеты', str(user_data.get('coins', 0)) + ' 💰')}\n"
+                f"{f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
+                f"{f.stat('Кристаллы', str(user_data.get('crystals', 0)) + ' 🔮')}\n"
                 
                 f"{f.section('БОЕВЫЕ', '⚔️')}\n"
                 f"{f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
@@ -2053,7 +2053,7 @@ class SpectrumBot:
         text += f.section("ПО МОНЕТАМ", "💰") + "\n"
         for i, (name, value) in enumerate(top_coins, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
-            text += f"{medal} **{i}.** {name} — {value:,} 💰\n".replace(',', ' ')
+            text += f"{medal} **{i}.** {name} — {value} 💰\n"
         
         text += f"\n{f.section('ПО УРОВНЮ', '📊')}\n"
         for i, (name, value) in enumerate(top_level, 1):
@@ -3723,7 +3723,7 @@ class SpectrumBot:
                 f"{f.stat('Уровень', str(boss[2]))}\n"
                 f"{f.stat('❤️ Здоровье', health_bar)}\n"
                 f"{f.stat('⚔️ Урон', str(boss[5]))}\n"
-                f"{f.stat('💰 Награда', str(boss[6]) + ' 💰')}\n"
+                f"{f.stat('Награда', str(boss[6]) + ' 💰')}\n"
                 f"{f.stat('📊 Статус', status)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
