@@ -3664,7 +3664,7 @@ class SpectrumBot:
             parse_mode='Markdown'
         )
 
-        # ========== МОДУЛЬ КАЗИНО ==========
+            # ========== МОДУЛЬ КАЗИНО ==========
     
     async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню казино"""
