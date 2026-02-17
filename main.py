@@ -72,6 +72,37 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
+# ========== ПРИНУДИТЕЛЬНЫЙ СБРОС СТАРЫХ ПОДКЛЮЧЕНИЙ ==========
+async def force_reset_webhook():
+    """Принудительно сбрасывает все подключения"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Сначала удаляем вебхук
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
+            async with session.post(url, json={"drop_pending_updates": True}) as resp:
+                result = await resp.json()
+                print(f"📡 Удаление вебхука: {result}")
+            
+            # Получаем информацию о вебхуке
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+            async with session.get(url) as resp:
+                result = await resp.json()
+                print(f"📡 Информация о вебхуке: {result}")
+            
+            # Закрываем все активные сессии
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/close"
+            async with session.post(url) as resp:
+                result = await resp.json()
+                print(f"📡 Закрытие сессий: {result}")
+    except Exception as e:
+        print(f"⚠️ Ошибка при сбросе: {e}")
+
+# Запускаем принудительный сброс
+loop = asyncio.new_event_loop()
+asyncio.set_event_loop(loop)
+loop.run_until_complete(force_reset_webhook())
+loop.close()
+
 # ========== ИМПОРТЫ TELEGRAM ==========
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -4869,7 +4900,7 @@ class SpectrumBot:
     
             # ========== ИСПРАВЛЕННЫЙ ЗАПУСК (100% РАБОЧИЙ) ==========
     
-    def run(self):
+        def run(self):
         """Запуск бота с защитой от конфликтов"""
         print("=" * 60)
         print("🚀 ЗАПУСК БОТА «SPECTRUM»")
@@ -4888,56 +4919,26 @@ class SpectrumBot:
         print("👑 Владелец:", OWNER_USERNAME)
         print("=" * 60)
         
-        # СОЗДАЕМ ЦИКЛ СОБЫТИЙ ВРУЧНУЮ И ДЕЛАЕМ ЕГО ТЕКУЩИМ
+        # СОЗДАЕМ ЦИКЛ СОБЫТИЙ
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        # Удаляем вебхук в этом цикле
-        try:
-            loop.run_until_complete(
-                self.application.bot.delete_webhook(drop_pending_updates=True)
-            )
-            print("✅ Вебхук удален, старые подключения сброшены")
-        except Exception as e:
-            print(f"⚠️ Ошибка при удалении вебхука: {e}")
-            traceback.print_exc()
+        # Принудительно удаляем вебхук несколько раз для гарантии
+        for i in range(3):
+            try:
+                loop.run_until_complete(
+                    self.application.bot.delete_webhook(drop_pending_updates=True)
+                )
+                print(f"✅ Вебхук удален (попытка {i+1})")
+            except Exception as e:
+                print(f"⚠️ Ошибка при удалении вебхука: {e}")
         
         print("🚀 Запуск polling...")
         
-        # Теперь run_polling будет использовать этот же цикл
         try:
-            # Важно: не закрываем цикл!
+            # Запускаем polling в этом же цикле
             self.application.run_polling(drop_pending_updates=True)
         except Exception as e:
             print(f"❌ Ошибка при запуске polling: {e}")
             traceback.print_exc()
             raise
-        finally:
-            # Закрываем цикл только после завершения работы
-            loop.close()
-
-
-# ========== ТОЧКА ВХОДА С ОТЛАДКОЙ ==========
-if __name__ == "__main__":
-    try:
-        print("=" * 60)
-        print("🚀 ИНИЦИАЛИЗАЦИЯ БОТА «SPECTRUM»")
-        print("=" * 60)
-        
-        print("🔄 Создание экземпляра бота...")
-        bot = SpectrumBot()
-        
-        print("✅ Бот успешно инициализирован")
-        print("🚀 Запуск бота...")
-        
-        bot.run()
-    except Exception as e:
-        print("\n" + "="*60)
-        print("❌ КРИТИЧЕСКАЯ ОШИБКА ПРИ ЗАПУСКЕ:")
-        print("="*60)
-        print(f"Тип ошибки: {type(e).__name__}")
-        print(f"Сообщение: {e}")
-        print("\nПолная трассировка:")
-        traceback.print_exc()
-        print("="*60)
-        sys.exit(1)
