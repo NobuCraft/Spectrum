@@ -3664,7 +3664,7 @@ class SpectrumBot:
             parse_mode='Markdown'
         )
 
-    # ========== МОДУЛЬ КАЗИНО ==========
+        # ========== МОДУЛЬ КАЗИНО ==========
     
     async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню казино"""
@@ -4867,7 +4867,7 @@ class SpectrumBot:
                 parse_mode='Markdown'
             )
     
-    # ========== ИСПРАВЛЕННЫЙ ЗАПУСК ==========
+    # ========== ИСПРАВЛЕННЫЙ ЗАПУСК (БЕЗ ОШИБКИ EVENT LOOP) ==========
     
     def run(self):
         """Запуск бота с защитой от конфликтов"""
@@ -4890,10 +4890,11 @@ class SpectrumBot:
         
         # Принудительно удаляем вебхук и сбрасываем все обновления
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            loop.run_until_complete(self.application.bot.delete_webhook(drop_pending_updates=True))
-            loop.close()
+            # Используем asyncio.run() вместо создания и закрытия цикла вручную
+            async def delete_webhook():
+                await self.application.bot.delete_webhook(drop_pending_updates=True)
+            
+            asyncio.run(delete_webhook())
             print("✅ Вебхук удален, старые подключения сброшены")
         except Exception as e:
             print(f"⚠️ Ошибка при удалении вебхука: {e}")
