@@ -1008,6 +1008,9 @@ class Database:
         settings = self.get_chat_settings(chat_id)
         return settings.get('goodbye_message')
 
+# ========== СОЗДАНИЕ ЭКЗЕМПЛЯРА БАЗЫ ДАННЫХ ==========
+db = Database()
+
 # ========== GEMINI AI (КАК В ANYA) ==========
 class GeminiAI:
     """Полноценный AI с памятью и контекстом"""
