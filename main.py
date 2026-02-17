@@ -4274,7 +4274,7 @@ class SpectrumBot:
                 if game['first_pick'] is None:
                     game['first_pick'] = card
                     await update.message.reply_text(
-                        f"{f.info(f'Выбрана карта {context.args[0]}: {game["cards"][card]}')}\n"
+                        f"{f.info('Выбрана карта ' + context.args[0] + ': ' + game['cards'][card])}\n"
                         f"Выбери вторую карту: /memoryplay [номер]",
                         parse_mode='Markdown'
                     )
