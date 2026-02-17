@@ -974,6 +974,19 @@ class Database:
     def get_welcome(self, chat_id: int) -> Optional[str]:
         settings = self.get_chat_settings(chat_id)
         return settings.get('welcome_message')
+
+    def get_goodbye(self, chat_id: int) -> Optional[str]:
+        """Получить прощание чата"""
+        settings = self.get_chat_settings(chat_id)
+        return settings.get('goodbye_message')
+    
+    def set_goodbye(self, chat_id: int, message: str):
+        """Установить прощание чата"""
+        self.cursor.execute(
+            "UPDATE chat_settings SET goodbye_message = ? WHERE chat_id = ?",
+            (message, chat_id)
+        )
+        self.conn.commit()
     
     # ========== МЕТОДЫ ДЛЯ МАФИИ (TRUEMAFIA) ==========
     
@@ -2598,6 +2611,63 @@ class SpectrumBot:
             f.success(f"Амнистия проведена! Разбанено {len(bans)} пользователей."),
             parse_mode='Markdown'
         )
+
+     async def cmd_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать правила чата"""
+        chat_id = update.effective_chat.id
+        rules = self.db.get_rules(chat_id)
+        text = (f.header("ПРАВИЛА ЧАТА", "📜") + "\n\n" + rules)
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить правила чата"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите правила: /setrules Текст правил"))
+            return
+        rules = " ".join(context.args)
+        chat_id = update.effective_chat.id
+        self.db.set_rules(chat_id, rules)
+        await update.message.reply_text(f.success("Правила установлены!"), parse_mode='Markdown')
+    
+    async def cmd_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать приветствие чата"""
+        chat_id = update.effective_chat.id
+        welcome = self.db.get_welcome(chat_id)
+        if welcome:
+            text = f.header("ПРИВЕТСТВИЕ", "👋") + "\n\n" + welcome
+        else:
+            text = f.info("Приветствие не установлено")
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить приветствие чата"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите текст приветствия"))
+            return
+        welcome = " ".join(context.args)
+        chat_id = update.effective_chat.id
+        self.db.set_welcome(chat_id, welcome)
+        await update.message.reply_text(f.success("Приветствие установлено!"), parse_mode='Markdown')
+    
+    async def cmd_goodbye(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать прощание чата"""
+        chat_id = update.effective_chat.id
+        goodbye = self.db.get_goodbye(chat_id)
+        if goodbye:
+            text = f.header("ПРОЩАНИЕ", "👋") + "\n\n" + goodbye
+        else:
+            text = f.info("Прощание не установлено")
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_set_goodbye(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить прощание чата"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите текст прощания"))
+            return
+        goodbye = " ".join(context.args)
+        chat_id = update.effective_chat.id
+        self.db.set_goodbye(chat_id, goodbye)
+        await update.message.reply_text(f.success("Прощание установлено!"), parse_mode='Markdown')
     
     # ========== МОДУЛЬ МАФИИ (TRUEMAFIA) ==========
     
