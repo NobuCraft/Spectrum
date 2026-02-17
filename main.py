@@ -808,8 +808,8 @@ class GameBot:
     
     # ========== ОСНОВНЫЕ КОМАНДЫ ==========
         async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
+            user = update.effective_user
+                user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
         
         text = (
             self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n"
