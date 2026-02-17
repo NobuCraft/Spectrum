@@ -292,7 +292,7 @@ class Database:
                 first_name TEXT,
                 last_name TEXT,
                 
-                -- Экономика (TReanfer)
+                -- Экономика
                 coins INTEGER DEFAULT 1000,
                 diamonds INTEGER DEFAULT 0,
                 crystals INTEGER DEFAULT 0,
@@ -304,7 +304,7 @@ class Database:
                 lord_until TIMESTAMP,
                 ultra_until TIMESTAMP,
                 
-                -- Модерация (Iris)
+                -- Модерация
                 rank INTEGER DEFAULT 0,
                 warns INTEGER DEFAULT 0,
                 warns_list TEXT DEFAULT '[]',
@@ -362,7 +362,7 @@ class Database:
             )
         ''')
         
-        # ===== ТАБЛИЦА МОДЕРАЦИИ (IRIS) =====
+        # ===== ТАБЛИЦА МОДЕРАЦИИ =====
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS moderation (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -376,7 +376,7 @@ class Database:
             )
         ''')
         
-        # ===== ТАБЛИЦА ТРИГГЕРОВ (IRIS) =====
+        # ===== ТАБЛИЦА ТРИГГЕРОВ =====
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS triggers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -388,7 +388,7 @@ class Database:
             )
         ''')
         
-        # ===== ТАБЛИЦА НАСТРОЕК ЧАТА (IRIS) =====
+        # ===== ТАБЛИЦА НАСТРОЕК ЧАТА =====
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
@@ -403,7 +403,7 @@ class Database:
             )
         ''')
         
-        # ===== ТАБЛИЦА ИГР МАФИИ (TRUEMAFIA) =====
+        # ===== ТАБЛИЦА ИГР МАФИИ =====
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS mafia_games (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -419,7 +419,7 @@ class Database:
             )
         ''')
         
-        # ===== ТАБЛИЦА МАГАЗИНА (TREANFER) =====
+        # ===== ТАБЛИЦА МАГАЗИНА =====
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS shop_items (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -511,21 +511,6 @@ class Database:
                 created_at TIMESTAMP,
                 deadline TIMESTAMP,
                 is_paid INTEGER DEFAULT 0
-            )
-        ''')
-        
-        # ===== ТАБЛИЦА ТУРНИРОВ =====
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS tournaments (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT,
-                game_type TEXT,
-                status TEXT DEFAULT 'registering',
-                prize_pool INTEGER,
-                max_participants INTEGER,
-                participants TEXT,
-                start_date TIMESTAMP,
-                created_at TIMESTAMP
             )
         ''')
         
@@ -629,7 +614,7 @@ class Database:
         self.cursor.execute("SELECT COUNT(*) FROM users")
         return self.cursor.fetchone()[0]
     
-    # ========== МЕТОДЫ ДЛЯ ЭКОНОМИКИ (TREANFER) ==========
+    # ========== МЕТОДЫ ДЛЯ ЭКОНОМИКИ ==========
     
     def add_coins(self, user_id: int, amount: int):
         self.cursor.execute("UPDATE users SET coins = coins + ? WHERE user_id = ?", (amount, user_id))
@@ -729,7 +714,7 @@ class Database:
         ''', (user_id,))
         return self.cursor.fetchall()
     
-    # ========== МЕТОДЫ ДЛЯ МОДЕРАЦИИ (IRIS) ==========
+    # ========== МЕТОДЫ ДЛЯ МОДЕРАЦИИ ==========
     
     def get_user_rank(self, user_id: int, chat_id: int = None) -> int:
         user = self.get_user_by_id(user_id)
@@ -922,7 +907,7 @@ class Database:
             }
         return None
     
-    # ========== МЕТОДЫ ДЛЯ ТРИГГЕРОВ (IRIS) ==========
+    # ========== МЕТОДЫ ДЛЯ ТРИГГЕРОВ ==========
     
     def add_trigger(self, chat_id: int, trigger_word: str, response: str, created_by: int):
         self.cursor.execute('''
@@ -1152,6 +1137,301 @@ class DeepSeekAI:
     async def close(self):
         if self.session:
             await self.session.close()
+
+# ========== СОЗДАНИЕ ЭКЗЕМПЛЯРА AI ==========
+ai = DeepSeekAI(DEEPSEEK_API_KEY)
+
+# ========== ОСНОВНОЙ КЛАСС БОТА (НАЧАЛО) ==========
+class SpectrumBot:
+    def __init__(self):
+        self.db = db
+        self.ai = ai
+        self.spam_tracker = defaultdict(list)
+        self.active_games = {}
+        self.mafia_games = {}
+        self.application = Application.builder().token(TELEGRAM_TOKEN).build()
+        self.setup_handlers()
+        print("✅ Бот Spectrum инициализирован")
+
+    def setup_handlers(self):
+        """Регистрация всех обработчиков команд"""
+        
+        # ===== БАЗОВЫЕ КОМАНДЫ =====
+        self.application.add_handler(CommandHandler("start", self.cmd_start))
+        self.application.add_handler(CommandHandler("help", self.cmd_help))
+        self.application.add_handler(CommandHandler("menu", self.cmd_menu))
+        
+        # ===== ПРОФИЛЬ =====
+        self.application.add_handler(CommandHandler("profile", self.cmd_profile))
+        self.application.add_handler(CommandHandler("editprofile", self.cmd_edit_profile))
+        self.application.add_handler(CommandHandler("top", self.cmd_top))
+        self.application.add_handler(CommandHandler("stats", self.cmd_stats))
+        
+        # ===== РЕДАКТИРОВАНИЕ ПРОФИЛЯ =====
+        self.application.add_handler(CommandHandler("nick", self.cmd_nick))
+        self.application.add_handler(CommandHandler("title", self.cmd_title))
+        self.application.add_handler(CommandHandler("motto", self.cmd_motto))
+        self.application.add_handler(CommandHandler("gender", self.cmd_gender))
+        self.application.add_handler(CommandHandler("city", self.cmd_city))
+        self.application.add_handler(CommandHandler("bio", self.cmd_bio))
+        
+        # ===== МОДЕРАЦИЯ =====
+        self.application.add_handler(CommandHandler("rank", self.cmd_rank))
+        self.application.add_handler(CommandHandler("setrank", self.cmd_set_rank))
+        self.application.add_handler(CommandHandler("ranks", self.cmd_ranks_list))
+        
+        self.application.add_handler(CommandHandler("warn", self.cmd_warn))
+        self.application.add_handler(CommandHandler("warns", self.cmd_warns))
+        self.application.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
+        self.application.add_handler(CommandHandler("unwarn", self.cmd_unwarn))
+        self.application.add_handler(CommandHandler("unwarnall", self.cmd_unwarn_all))
+        
+        self.application.add_handler(CommandHandler("mute", self.cmd_mute))
+        self.application.add_handler(CommandHandler("unmute", self.cmd_unmute))
+        self.application.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
+        self.application.add_handler(CommandHandler("checkmute", self.cmd_check_mute))
+        
+        self.application.add_handler(CommandHandler("ban", self.cmd_ban))
+        self.application.add_handler(CommandHandler("unban", self.cmd_unban))
+        self.application.add_handler(CommandHandler("banlist", self.cmd_banlist))
+        self.application.add_handler(CommandHandler("banreason", self.cmd_ban_reason))
+        self.application.add_handler(CommandHandler("kick", self.cmd_kick))
+        self.application.add_handler(CommandHandler("amnesty", self.cmd_amnesty))
+        
+        # ===== НАСТРОЙКИ ЧАТА =====
+        self.application.add_handler(CommandHandler("rules", self.cmd_rules))
+        self.application.add_handler(CommandHandler("setrules", self.cmd_set_rules))
+        self.application.add_handler(CommandHandler("welcome", self.cmd_welcome))
+        self.application.add_handler(CommandHandler("setwelcome", self.cmd_set_welcome))
+        self.application.add_handler(CommandHandler("goodbye", self.cmd_goodbye))
+        self.application.add_handler(CommandHandler("setgoodbye", self.cmd_set_goodbye))
+        
+        self.application.add_handler(CommandHandler("trigger", self.cmd_trigger))
+        self.application.add_handler(CommandHandler("addtrigger", self.cmd_add_trigger))
+        self.application.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
+        self.application.add_handler(CommandHandler("deltrigger", self.cmd_del_trigger))
+        
+        # ===== МАФИЯ =====
+        self.application.add_handler(CommandHandler("mafia", self.cmd_mafia))
+        self.application.add_handler(CommandHandler("mafiacreate", self.cmd_mafia_create))
+        self.application.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
+        self.application.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
+        self.application.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
+        self.application.add_handler(CommandHandler("mafialist", self.cmd_mafia_list))
+        self.application.add_handler(CommandHandler("mafiavote", self.cmd_mafia_vote))
+        self.application.add_handler(CommandHandler("mafianight", self.cmd_mafia_night_action))
+        self.application.add_handler(CommandHandler("mafiaday", self.cmd_mafia_day_vote))
+        self.application.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
+        
+        # ===== ЭКОНОМИКА =====
+        self.application.add_handler(CommandHandler("shop", self.cmd_shop))
+        self.application.add_handler(CommandHandler("buy", self.cmd_buy))
+        self.application.add_handler(CommandHandler("inventory", self.cmd_inventory))
+        self.application.add_handler(CommandHandler("use", self.cmd_use))
+        self.application.add_handler(CommandHandler("pay", self.cmd_pay))
+        self.application.add_handler(CommandHandler("paydiamond", self.cmd_pay_diamond))
+        self.application.add_handler(CommandHandler("paycrystal", self.cmd_pay_crystal))
+        self.application.add_handler(CommandHandler("daily", self.cmd_daily))
+        self.application.add_handler(CommandHandler("weekly", self.cmd_weekly))
+        self.application.add_handler(CommandHandler("streak", self.cmd_streak))
+        
+        # ===== ПРИВИЛЕГИИ =====
+        self.application.add_handler(CommandHandler("donate", self.cmd_donate))
+        self.application.add_handler(CommandHandler("vip", self.cmd_vip))
+        self.application.add_handler(CommandHandler("premium", self.cmd_premium))
+        self.application.add_handler(CommandHandler("lord", self.cmd_lord))
+        self.application.add_handler(CommandHandler("ultra", self.cmd_ultra))
+        self.application.add_handler(CommandHandler("buymoderator", self.cmd_buy_moderator))
+        
+        # ===== КЛАНЫ =====
+        self.application.add_handler(CommandHandler("clan", self.cmd_clan))
+        self.application.add_handler(CommandHandler("clancreate", self.cmd_clan_create))
+        self.application.add_handler(CommandHandler("clanjoin", self.cmd_clan_join))
+        self.application.add_handler(CommandHandler("clanleave", self.cmd_clan_leave))
+        self.application.add_handler(CommandHandler("clantop", self.cmd_clan_top))
+        self.application.add_handler(CommandHandler("clanwar", self.cmd_clan_war))
+        
+        # ===== БОССЫ =====
+        self.application.add_handler(CommandHandler("bosses", self.cmd_boss_list))
+        self.application.add_handler(CommandHandler("boss", self.cmd_boss_info))
+        self.application.add_handler(CommandHandler("bossfight", self.cmd_boss_fight))
+        self.application.add_handler(CommandHandler("bossstats", self.cmd_boss_stats))
+        self.application.add_handler(CommandHandler("regen", self.cmd_regen))
+        
+        # ===== КАЗИНО =====
+        self.application.add_handler(CommandHandler("casino", self.cmd_casino))
+        self.application.add_handler(CommandHandler("roulette", self.cmd_roulette))
+        self.application.add_handler(CommandHandler("dice", self.cmd_dice))
+        self.application.add_handler(CommandHandler("blackjack", self.cmd_blackjack))
+        self.application.add_handler(CommandHandler("slots", self.cmd_slots))
+        
+        # ===== ИГРЫ =====
+        self.application.add_handler(CommandHandler("rps", self.cmd_rps))
+        self.application.add_handler(CommandHandler("ttt", self.cmd_ttt))
+        self.application.add_handler(CommandHandler("tttmove", self.cmd_ttt_move))
+        self.application.add_handler(CommandHandler("memory", self.cmd_memory))
+        self.application.add_handler(CommandHandler("memoryplay", self.cmd_memory_play))
+        self.application.add_handler(CommandHandler("minesweeper", self.cmd_minesweeper))
+        self.application.add_handler(CommandHandler("mineopen", self.cmd_mine_open))
+        
+        # ===== ДОЛГИ =====
+        self.application.add_handler(CommandHandler("debt", self.cmd_debt))
+        self.application.add_handler(CommandHandler("debts", self.cmd_debts))
+        self.application.add_handler(CommandHandler("paydebt", self.cmd_pay_debt))
+        
+        # ===== ДОСТИЖЕНИЯ =====
+        self.application.add_handler(CommandHandler("achievements", self.cmd_achievements))
+        
+        # ===== ПРОЧИЕ КОМАНДЫ =====
+        self.application.add_handler(CommandHandler("weather", self.cmd_weather))
+        self.application.add_handler(CommandHandler("news", self.cmd_news))
+        self.application.add_handler(CommandHandler("quote", self.cmd_quote))
+        self.application.add_handler(CommandHandler("players", self.cmd_players))
+        self.application.add_handler(CommandHandler("mycrime", self.cmd_mycrime))
+        self.application.add_handler(CommandHandler("engfree", self.cmd_eng_free))
+        self.application.add_handler(CommandHandler("sms", self.cmd_sms))
+        
+        # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+        self.application.add_handler(CallbackQueryHandler(self.button_callback))
+        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
+        self.application.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
+        
+        print("✅ Зарегистрировано 80+ обработчиков команд")
+
+    def get_role_emoji(self, role: str) -> str:
+        """Эмодзи для ролей"""
+        emojis = {
+            'owner': '👑',
+            'admin': '⚜️',
+            'moderator': '🛡️',
+            'premium': '💎',
+            'vip': '🌟',
+            'lord': '👑',
+            'ultra': '🦅',
+            'user': '👤'
+        }
+        return emojis.get(role, '👤')
+
+    def get_rank_name(self, rank: int) -> str:
+        """Название ранга модератора"""
+        return RANK_NAMES.get(rank, f"Ранг {rank}")
+
+    def has_permission(self, user_data: Dict, required_rank: int) -> bool:
+        """Проверка прав"""
+        user_rank = user_data.get('rank', 0)
+        return user_rank >= required_rank
+
+    async def check_spam(self, update: Update) -> bool:
+        """Проверка на спам"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        if self.has_permission(user_data, 1):
+            return False
+        
+        current_time = time.time()
+        self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if current_time - t < SPAM_WINDOW]
+        self.spam_tracker[user_id].append(current_time)
+        
+        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+            self.db.mute_user(user_id, SPAM_MUTE_TIME, 0, "Автоматический спам")
+            await update.message.reply_text(
+                f.error(f"Спам-фильтр. Вы замучены на {SPAM_MUTE_TIME} минут."),
+                parse_mode='Markdown'
+            )
+            self.spam_tracker[user_id] = []
+            return True
+        return False
+
+    # ========== БАЗОВЫЕ КОМАНДЫ ==========
+    
+    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда /start"""
+        user = update.effective_user
+        user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
+        
+        text = (f.header("SPECTRUM", "⚡") + "\n"
+                f"👋 **Здравствуйте, {user.first_name}!**\n\n"
+                f"Добро пожаловать в официального бота Spectrum.\n"
+                f"Здесь вы найдёте всё для приятного времяпрепровождения:\n"
+                f"• 🛡️ **Модерация чата**\n"
+                f"• 🎮 **Разнообразные игры**\n"
+                f"• 💰 **Экономика и привилегии**\n"
+                f"• 🤖 **Умный собеседник**\n\n"
+                
+                f"{f.section('ВАШ ПРОФИЛЬ', '📊')}\n"
+                f"{f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n"
+                f"{f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n"
+                f"{f.list_item('Ранг: ' + self.get_rank_name(user_data.get('rank', 0)))}\n\n"
+                
+                f"{f.section('БЫСТРЫЙ СТАРТ', '🚀')}\n"
+                f"{f.command('menu', 'главное меню')}\n"
+                f"{f.command('profile', 'ваш профиль')}\n"
+                f"{f.command('help', 'полный список команд')}\n\n"
+                
+                f"👑 **Владелец:** {OWNER_USERNAME}")
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=IrisKeyboard.main_menu(),
+            parse_mode='Markdown'
+        )
+        self.db.add_stat(user.id, "commands_used", 1)
+    
+    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Главное меню"""
+        await update.message.reply_text(
+            f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыберите раздел:",
+            reply_markup=IrisKeyboard.main_menu(),
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Полная справка"""
+        text = (f.header("ПОЛНАЯ СПРАВКА", "📚") + "\n"
+                
+                f"{f.section('👤 ПРОФИЛЬ')}\n"
+                f"{f.command('profile', 'ваш профиль')}\n"
+                f"{f.command('editprofile', 'редактировать профиль')}\n"
+                f"{f.command('stats', 'статистика игр')}\n"
+                f"{f.command('top', 'топ игроков')}\n\n"
+                
+                f"{f.section('🛡️ МОДЕРАЦИЯ')}\n"
+                f"{f.command('rank [@user]', 'узнать ранг')}\n"
+                f"{f.command('warn @user [причина]', 'предупреждение')}\n"
+                f"{f.command('mute @user минут [причина]', 'заглушить')}\n"
+                f"{f.command('ban @user [причина]', 'заблокировать')}\n"
+                f"{f.command('banlist', 'список забаненных')}\n"
+                f"{f.command('rules', 'правила чата')}\n"
+                f"{f.command('setrules [текст]', 'установить правила')}\n\n"
+                
+                f"{f.section('🔪 МАФИЯ')}\n"
+                f"{f.command('mafia', 'информация')}\n"
+                f"{f.command('mafiacreate', 'создать игру')}\n"
+                f"{f.command('mafiajoin [ID]', 'присоединиться')}\n"
+                f"{f.command('mafiastart', 'начать игру')}\n\n"
+                
+                f"{f.section('💰 ЭКОНОМИКА')}\n"
+                f"{f.command('shop', 'магазин')}\n"
+                f"{f.command('buy [ID]', 'купить предмет')}\n"
+                f"{f.command('daily', 'ежедневный бонус')}\n"
+                f"{f.command('pay @user сумма', 'перевести монеты')}\n\n"
+                
+                f"{f.section('👾 ИГРЫ')}\n"
+                f"{f.command('bosses', 'список боссов')}\n"
+                f"{f.command('casino', 'казино')}\n"
+                f"{f.command('rps', 'КНБ')}\n"
+                f"{f.command('ttt', 'крестики-нолики')}\n"
+                f"{f.command('memory', 'мемори')}\n\n"
+                
+                f"👑 **Владелец:** {OWNER_USERNAME}")
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=IrisKeyboard.back_button(),
+            parse_mode='Markdown'
+        )
 
     # ========== ПРОФИЛЬ ==========
     
@@ -1937,7 +2217,7 @@ class DeepSeekAI:
             parse_mode='Markdown'
         )
     
-    # ========== НАСТРОЙКИ ЧАТА (IRIS) ==========
+    # ========== НАСТРОЙКИ ЧАТА ==========
     
     async def cmd_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать правила чата"""
@@ -2085,7 +2365,7 @@ class DeepSeekAI:
             parse_mode='Markdown'
         )
     
-    # ========== МОДУЛЬ МАФИИ (TRUEMAFIA) ==========
+    # ========== МОДУЛЬ МАФИИ ==========
     
     async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о мафии"""
@@ -2106,9 +2386,12 @@ class DeepSeekAI:
                 f"{f.section('КОМАНДЫ')}\n"
                 f"{f.command('mafiacreate', 'создать игру')}\n"
                 f"{f.command('mafiajoin [ID]', 'присоединиться')}\n"
+                f"{f.command('mafialeave', 'покинуть игру')}\n"
                 f"{f.command('mafialist', 'список игр')}\n"
                 f"{f.command('mafiastart', 'начать игру')}\n"
-                f"{f.command('mafiavote @user', 'проголосовать днём')}")
+                f"{f.command('mafiavote @user', 'проголосовать днём')}\n"
+                f"{f.command('mafianight [убить] [спасти] [проверить]', 'ночные действия')}\n"
+                f"{f.command('mafiastats', 'статистика')}")
         
         await update.message.reply_text(
             text,
@@ -2120,9 +2403,10 @@ class DeepSeekAI:
         """Создать игру в мафию"""
         user_id = update.effective_user.id
         
+        # Проверяем, не участвует ли уже в игре
         active_games = self.db.get_active_mafia_games()
         for game in active_games:
-            players = json.loads(game[4])
+            players = json.loads(game[4]) if isinstance(game[4], str) else []
             if user_id in players:
                 await update.message.reply_text(f.error("Вы уже участвуете в игре!"))
                 return
@@ -2159,7 +2443,7 @@ class DeepSeekAI:
             return
         
         user_id = update.effective_user.id
-        players = json.loads(game['players'])
+        players = json.loads(game['players']) if isinstance(game['players'], str) else []
         
         if user_id in players:
             await update.message.reply_text(f.error("Вы уже в игре"))
@@ -2182,11 +2466,12 @@ class DeepSeekAI:
         """Покинуть игру"""
         user_id = update.effective_user.id
         
+        # Ищем игру, где участвует пользователь
         active_games = self.db.get_active_mafia_games()
         game_id = None
         
         for game in active_games:
-            players = json.loads(game[4])
+            players = json.loads(game[4]) if isinstance(game[4], str) else []
             if user_id in players:
                 game_id = game[0]
                 break
@@ -2212,7 +2497,7 @@ class DeepSeekAI:
         
         for game in games:
             game_id, creator_id, status, players_str = game[0], game[1], game[2], game[4]
-            players = json.loads(players_str)
+            players = json.loads(players_str) if isinstance(players_str, str) else []
             creator = self.db.get_user_by_id(creator_id)
             creator_name = creator.get('first_name', 'Неизвестно') if creator else 'Неизвестно'
             
@@ -2227,6 +2512,7 @@ class DeepSeekAI:
         """Начать игру"""
         user_id = update.effective_user.id
         
+        # Ищем игру, созданную пользователем
         games = self.db.get_active_mafia_games()
         game_id = None
         
@@ -2244,9 +2530,10 @@ class DeepSeekAI:
             await update.message.reply_text(f.error("Не удалось начать игру (нужно минимум 5 игроков)"))
             return
         
+        # Отправляем роли игрокам в личку
         game = self.db.get_mafia_game(game_id)
-        players = json.loads(game['players'])
-        roles = json.loads(game['roles'])
+        players = json.loads(game['players']) if isinstance(game['players'], str) else []
+        roles = json.loads(game['roles']) if isinstance(game['roles'], str) else {}
         
         for player_id in players:
             role = roles.get(str(player_id), 'civilian')
@@ -2301,22 +2588,24 @@ class DeepSeekAI:
         
         target_id = target_user['user_id']
         
+        # Ищем активную игру, где участвует пользователь
         games = self.db.get_active_mafia_games()
         game_id = None
+        game_data = None
         
         for game in games:
             if game[2] == 'playing':
-                players = json.loads(game[4])
+                players = json.loads(game[4]) if isinstance(game[4], str) else []
                 if user_id in players:
                     game_id = game[0]
+                    game_data = game
                     break
         
         if not game_id:
             await update.message.reply_text(f.error("Вы не участвуете в активной игре"))
             return
         
-        game = self.db.get_mafia_game(game_id)
-        if game['phase'] != 'day':
+        if game_data[5] != 'day':
             await update.message.reply_text(f.error("Сейчас ночная фаза. Голосование невозможно."))
             return
         
@@ -2334,17 +2623,21 @@ class DeepSeekAI:
         """Ночные действия (для мафии, шерифа, доктора)"""
         user_id = update.effective_user.id
         
+        # Ищем активную игру
         games = self.db.get_active_mafia_games()
         game_id = None
         user_role = None
+        players = []
+        roles = {}
         
         for game in games:
             if game[2] == 'playing':
-                players = json.loads(game[4])
-                if user_id in players:
+                current_players = json.loads(game[4]) if isinstance(game[4], str) else []
+                if user_id in current_players:
                     game_id = game[0]
-                    roles = json.loads(game[5])
+                    roles = json.loads(game[5]) if isinstance(game[5], str) else {}
                     user_role = roles.get(str(user_id))
+                    players = current_players
                     break
         
         if not game_id:
@@ -2356,6 +2649,7 @@ class DeepSeekAI:
             await update.message.reply_text(f.error("Сейчас дневная фаза. Действия ночью невозможны."))
             return
         
+        # Парсим аргументы в зависимости от роли
         mafia_kill = None
         doctor_save = None
         sheriff_check = None
@@ -2393,7 +2687,9 @@ class DeepSeekAI:
                     parse_mode='Markdown'
                 )
             
+            # Если все действия совершены, завершаем ночь
             if result.get('day'):
+                # Завершаем день и переходим к голосованию
                 day_result = self.db.mafia_end_day(game_id)
                 
                 if day_result['success']:
@@ -2419,6 +2715,7 @@ class DeepSeekAI:
                         winner = "Мафия" if day_result['winner'] == 'mafia' else "Мирные"
                         text += f"\n{f.success(f'ИГРА ОКОНЧЕНА! Победила {winner}!')}"
                         
+                        # Обновляем статистику
                         for player_id in players:
                             if day_result['winner'] == 'mafia' and roles.get(str(player_id)) == 'mafia':
                                 self.db.add_stat(player_id, "mafia_wins", 1)
@@ -2445,14 +2742,16 @@ class DeepSeekAI:
         wins = user_data.get('mafia_wins', 0)
         games = user_data.get('mafia_games', 0)
         
+        winrate = round(wins / games * 100, 1) if games > 0 else 0
+        
         text = (f.header("СТАТИСТИКА МАФИИ", "🔪") + "\n"
                 f"{f.stat('Побед', str(wins))}\n"
                 f"{f.stat('Сыграно игр', str(games))}\n"
-                f"{f.stat('Винрейт', str(round(wins/games*100 if games > 0 else 0, 1)) + '%')}")
+                f"{f.stat('Винрейт', str(winrate) + '%')}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
 
-    # ========== МОДУЛЬ ЭКОНОМИКИ (TREANFER) ==========
+    # ========== МОДУЛЬ ЭКОНОМИКИ ==========
     
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Магазин предметов"""
@@ -2507,11 +2806,13 @@ class DeepSeekAI:
             await update.message.reply_text(f.error(f"Недостаточно алмазов. Нужно {price_diamonds} 💎"))
             return
         
+        # Списание средств
         if price_coins > 0:
             self.db.add_coins(user_id, -price_coins)
         if price_diamonds > 0:
             self.db.add_diamonds(user_id, -price_diamonds)
         
+        # Применение эффекта
         effect_text = ""
         if item_type == "heal":
             self.db.heal(user_id, int(value))
@@ -2527,14 +2828,25 @@ class DeepSeekAI:
         elif item_type == "energy":
             self.db.add_energy(user_id, int(value))
             effect_text = f"⚡ Энергия +{value}"
-        elif item_type in ["vip", "premium"]:
+        elif item_type in ["vip", "premium", "lord", "ultra"]:
             days = int(value)
             if item_type == "vip":
                 self.db.set_vip(user_id, days)
-            else:
+            elif item_type == "premium":
                 self.db.set_premium(user_id, days)
+            elif item_type == "lord":
+                # Установка lord статуса
+                lord_until = datetime.datetime.now() + datetime.timedelta(days=days)
+                self.db.cursor.execute("UPDATE users SET lord_until = ?, role = 'lord' WHERE user_id = ?", (lord_until, user_id))
+                self.db.conn.commit()
+            elif item_type == "ultra":
+                # Установка ultra статуса
+                ultra_until = datetime.datetime.now() + datetime.timedelta(days=days)
+                self.db.cursor.execute("UPDATE users SET ultra_until = ?, role = 'ultra' WHERE user_id = ?", (ultra_until, user_id))
+                self.db.conn.commit()
             effect_text = f"✨ Статус {item_type.upper()} на {days} дней"
         else:
+            # Добавляем в инвентарь
             self.db.cursor.execute('''
                 INSERT INTO inventory (user_id, item_id, quantity, acquired_at)
                 VALUES (?, ?, ?, ?)
@@ -2621,6 +2933,7 @@ class DeepSeekAI:
             await update.message.reply_text(f.error("Этот предмет нельзя использовать"))
             return
         
+        # Уменьшаем количество или удаляем
         if quantity > 1:
             self.db.cursor.execute("UPDATE inventory SET quantity = quantity - 1 WHERE id = ?", (inv_id,))
         else:
@@ -2798,9 +3111,12 @@ class DeepSeekAI:
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        if not self.db.can_claim_weekly(user_id):
-            await update.message.reply_text(f.error("Недельный бонус можно получать раз в 7 дней"))
-            return
+        last_weekly = user_data.get('last_weekly')
+        if last_weekly:
+            last = datetime.datetime.fromisoformat(last_weekly)
+            if (datetime.datetime.now() - last).days < 7:
+                await update.message.reply_text(f.error("Недельный бонус можно получать раз в 7 дней"))
+                return
         
         coins = random.randint(1000, 3000)
         diamonds = random.randint(10, 30)
@@ -2818,7 +3134,12 @@ class DeepSeekAI:
         self.db.add_coins(user_id, coins)
         self.db.add_diamonds(user_id, diamonds)
         self.db.add_crystals(user_id, crystals)
-        self.db.claim_weekly(user_id)
+        
+        self.db.cursor.execute(
+            "UPDATE users SET last_weekly = ? WHERE user_id = ?",
+            (datetime.datetime.now(), user_id)
+        )
+        self.db.conn.commit()
         
         text = (f.header("НЕДЕЛЬНЫЙ БОНУС", "📅") + "\n"
                 f"{f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
@@ -2856,26 +3177,26 @@ class DeepSeekAI:
         text = (f.header("ПРИВИЛЕГИИ", "💎") + "\n"
                 
                 f"{f.section('VIP СТАТУС', '🌟')}\n"
-                f"Цена: {PRIVILEGE_PRICES['vip']} 💰 / {PRIVILEGE_DAYS['vip']} дней\n"
+                f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n"
                 f"{f.list_item('Урон в битвах +20%')}\n"
                 f"{f.list_item('Награда с боссов +50%')}\n"
                 f"{f.list_item('Ежедневный бонус +50%')}\n"
                 f"{f.list_item('Нет спам-фильтра')}\n\n"
                 
                 f"{f.section('PREMIUM СТАТУС', '💎')}\n"
-                f"Цена: {PRIVILEGE_PRICES['premium']} 💰 / {PRIVILEGE_DAYS['premium']} дней\n"
+                f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n"
                 f"{f.list_item('Все бонусы VIP')}\n"
                 f"{f.list_item('Урон в битвах +50%')}\n"
                 f"{f.list_item('Награда с боссов +100%')}\n"
                 f"{f.list_item('Ежедневный бонус +100%')}\n\n"
                 
                 f"{f.section('LORD СТАТУС', '👑')}\n"
-                f"Цена: {PRIVILEGE_PRICES['lord']} 💰 / {PRIVILEGE_DAYS['lord']} дней\n"
+                f"Цена: {LORD_PRICE} 💰 / {LORD_DAYS} дней\n"
                 f"{f.list_item('Все бонусы PREMIUM')}\n"
                 f"{f.list_item('Эксклюзивные команды')}\n\n"
                 
                 f"{f.section('ULTRA СТАТУС', '🦅')}\n"
-                f"Цена: {PRIVILEGE_PRICES['ultra']} 💰 / {PRIVILEGE_DAYS['ultra']} дней\n"
+                f"Цена: {ULTRA_PRICE} 💰 / {ULTRA_DAYS} дней\n"
                 f"{f.list_item('Все бонусы LORD')}\n"
                 f"{f.list_item('Личный цвет в профиле')}\n\n"
                 
@@ -2885,28 +3206,26 @@ class DeepSeekAI:
     
     async def cmd_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Купить VIP"""
-        await self.buy_privilege(update, "vip")
+        await self.buy_privilege(update, "vip", VIP_PRICE, VIP_DAYS)
     
     async def cmd_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Купить PREMIUM"""
-        await self.buy_privilege(update, "premium")
+        await self.buy_privilege(update, "premium", PREMIUM_PRICE, PREMIUM_DAYS)
     
     async def cmd_lord(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Купить LORD"""
-        await self.buy_privilege(update, "lord")
+        await self.buy_privilege(update, "lord", LORD_PRICE, LORD_DAYS)
     
     async def cmd_ultra(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Купить ULTRA"""
-        await self.buy_privilege(update, "ultra")
+        await self.buy_privilege(update, "ultra", ULTRA_PRICE, ULTRA_DAYS)
     
-    async def buy_privilege(self, update: Update, priv_type: str):
+    async def buy_privilege(self, update: Update, priv_type: str, price: int, days: int):
         """Общая функция покупки привилегий"""
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        price = PRIVILEGE_PRICES.get(priv_type, 0)
-        days = PRIVILEGE_DAYS.get(priv_type, 30)
-        
+        # Проверка на уже активную привилегию
         if priv_type == "vip" and self.db.is_vip(user_id):
             await update.message.reply_text(f.error("VIP статус уже активен"))
             return
@@ -2946,7 +3265,7 @@ class DeepSeekAI:
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        price = PRIVILEGE_PRICES.get('moderator', 100000)
+        price = 100000  # Цена за статус модератора
         
         if user_data['coins'] < price:
             await update.message.reply_text(f.error(f"Недостаточно монет. Нужно {price} 💰"))
@@ -2976,6 +3295,7 @@ class DeepSeekAI:
                     f"{f.info('Вы не состоите в клане')}\n\n"
                     f"{f.command('clancreate [название]', 'создать клан')}\n"
                     f"{f.command('clanjoin [ID]', 'вступить в клан')}\n"
+                    f"{f.command('clanleave', 'покинуть клан')}\n"
                     f"{f.command('clantop', 'топ кланов')}")
             
             await update.message.reply_text(text, parse_mode='Markdown')
@@ -3107,6 +3427,13 @@ class DeepSeekAI:
     
     async def cmd_clan_war(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Клановая война"""
+        user_id = update.effective_user.id
+        clan = self.db.get_user_clan(user_id)
+        
+        if not clan:
+            await update.message.reply_text(f.error("Вы не в клане"))
+            return
+        
         await update.message.reply_text(
             f.info("Клановые войны будут доступны в следующем обновлении!"),
             parse_mode='Markdown'
@@ -3229,6 +3556,7 @@ class DeepSeekAI:
         
         self.db.add_energy(user.id, -10)
         
+        # Расчёт урона
         damage_bonus = 1.0
         if self.db.is_vip(user.id):
             damage_bonus += 0.2
@@ -3259,6 +3587,7 @@ class DeepSeekAI:
             self.db.add_boss_kill(user.id)
             self.db.add_exp(user.id, boss[2] * 10)
             
+            # Проверка достижений
             boss_kills = user_data.get('boss_kills', 0) + 1
             if boss_kills == 10:
                 self.db.add_achievement(user.id, "👾 Охотник на боссов", "Убито 10 боссов", 500)
@@ -4109,13 +4438,13 @@ class DeepSeekAI:
     async def cmd_news(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Новости бота"""
         news_list = [
-            "🎉 Мега-обновление! Бот объединил Iris, TrueMafia, TReanfer и Anya!",
+            "🎉 Добро пожаловать в Spectrum Bot!",
             "👾 Новые боссы уже на арене! Проверьте /bosses",
-            "🔪 Мафия теперь с полными ролями! Играйте в /mafia",
-            "💰 Введены кристаллы — новая валюта для донатеров!",
+            "🔪 Мафия ждет вас! Играйте в /mafia",
+            "💰 Зарабатывайте монеты и покупайте предметы в /shop",
             "🏆 Система достижений запущена! Собирайте /achievements",
-            "👥 Кланы теперь с рейтингами! Создайте свой /clancreate",
-            "🎰 Казино обновлено: добавлен блэкджек!",
+            "👥 Создайте свой клан командой /clancreate",
+            "🎰 Казино всегда ждет смельчаков!",
             "📊 Топ игроков показывает лидеров по разным категориям"
         ]
         
@@ -4291,27 +4620,37 @@ class DeepSeekAI:
             parse_mode='Markdown'
         )
     
-    # ========== CALLBACK КНОПКИ ==========
+    # ========== ИСПРАВЛЕННЫЙ CALLBACK КНОПКИ ==========
     
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка нажатий на инлайн-кнопки"""
+        """Обработка нажатий на инлайн-кнопки (ПОЛНОСТЬЮ ИСПРАВЛЕНО)"""
         query = update.callback_query
         await query.answer()
         data = query.data
         user = query.from_user
         
+        # Отладка
+        print(f"🔘 Нажата кнопка: {data} от {user.first_name}")
+        
         if data == "noop":
             return
         
+        # ===== ГЛАВНОЕ МЕНЮ =====
         elif data == "menu_back":
             await query.edit_message_text(
                 f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыберите раздел:",
                 reply_markup=IrisKeyboard.main_menu(),
                 parse_mode='Markdown'
             )
+            return
         
         elif data == "menu_profile":
             await self.cmd_profile(update, context)
+            return
+        
+        elif data == "menu_stats":
+            await self.cmd_stats(update, context)
+            return
         
         elif data == "menu_moderation":
             text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n"
@@ -4333,29 +4672,11 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
+            return
         
-        elif data == "menu_mafia":
-            await self.cmd_mafia(update, context)
-        
-        elif data == "menu_economy":
-            text = (f.header("ЭКОНОМИКА", "💰") + "\n"
-                    f"{f.section('МАГАЗИН')}\n"
-                    f"{f.command('shop', 'магазин')}\n"
-                    f"{f.command('buy [ID]', 'купить предмет')}\n"
-                    f"{f.command('inventory', 'инвентарь')}\n\n"
-                    f"{f.section('ПЕРЕВОДЫ')}\n"
-                    f"{f.command('pay @user сумма', 'перевести монеты')}\n"
-                    f"{f.command('paydiamond @user сумма', 'перевести алмазы')}\n\n"
-                    f"{f.section('БОНУСЫ')}\n"
-                    f"{f.command('daily', 'ежедневный бонус')}\n"
-                    f"{f.command('weekly', 'недельный бонус')}\n"
-                    f"{f.command('streak', 'текущий стрик')}")
-            
-            await query.edit_message_text(
-                text,
-                reply_markup=IrisKeyboard.back_button(),
-                parse_mode='Markdown'
-            )
+        elif data == "menu_clan":
+            await self.cmd_clan(update, context)
+            return
         
         elif data == "menu_games":
             text = (f.header("ИГРЫ", "🎮") + "\n"
@@ -4374,42 +4695,112 @@ class DeepSeekAI:
             
             await query.edit_message_text(
                 text,
-                reply_markup=IrisKeyboard.back_button(),
+                reply_markup=IrisKeyboard.games_menu(),
                 parse_mode='Markdown'
             )
+            return
         
-        elif data == "menu_ai":
-            text = (f.header("AI-ЧАТ", "🤖") + "\n"
-                    f"{f.info('Просто напишите мне что-нибудь!')}\n"
-                    f"{f.list_item('Я отвечу с помощью Gemini AI')}\n"
-                    f"{f.list_item('Понимаю контекст разговора')}\n"
-                    f"{f.list_item('Могу помочь с любыми вопросами')}")
+        elif data == "menu_economy":
+            text = (f.header("ЭКОНОМИКА", "💰") + "\n"
+                    f"{f.section('МАГАЗИН')}\n"
+                    f"{f.command('shop', 'магазин')}\n"
+                    f"{f.command('buy [ID]', 'купить предмет')}\n"
+                    f"{f.command('inventory', 'инвентарь')}\n\n"
+                    f"{f.section('ПЕРЕВОДЫ')}\n"
+                    f"{f.command('pay @user сумма', 'перевести монеты')}\n"
+                    f"{f.command('paydiamond @user сумма', 'перевести алмазы')}\n\n"
+                    f"{f.section('БОНУСЫ')}\n"
+                    f"{f.command('daily', 'ежедневный бонус')}\n"
+                    f"{f.command('weekly', 'недельный бонус')}\n"
+                    f"{f.command('streak', 'текущий стрик')}")
             
             await query.edit_message_text(
                 text,
-                reply_markup=IrisKeyboard.back_button(),
+                reply_markup=IrisKeyboard.economy_menu(),
                 parse_mode='Markdown'
             )
+            return
         
         elif data == "menu_donate":
             await self.cmd_donate(update, context)
+            return
         
         elif data == "menu_help":
             await self.cmd_help(update, context)
+            return
         
-        elif data == "edit_profile":
-            await self.cmd_edit_profile(update, context)
+        # ===== ИГРЫ =====
+        elif data == "bosses":
+            await self.cmd_boss_list(update, context)
+            return
         
-        elif data.startswith("boss_fight_"):
-            boss_id = int(data.split('_')[2])
-            context.args = [str(boss_id)]
-            await self.cmd_boss_fight(update, context)
+        elif data == "casino":
+            await self.cmd_casino(update, context)
+            return
         
-        elif data.startswith("banlist_page_"):
-            page = int(data.split('_')[2])
-            context.args = [str(page)]
-            await self.cmd_banlist(update, context)
+        elif data == "rps":
+            await self.cmd_rps(update, context)
+            return
         
+        elif data == "ttt":
+            await self.cmd_ttt(update, context)
+            return
+        
+        elif data == "memory":
+            await self.cmd_memory(update, context)
+            return
+        
+        elif data == "minesweeper":
+            await self.cmd_minesweeper(update, context)
+            return
+        
+        # ===== ЭКОНОМИКА =====
+        elif data == "shop":
+            await self.cmd_shop(update, context)
+            return
+        
+        elif data == "inventory":
+            await self.cmd_inventory(update, context)
+            return
+        
+        elif data == "top":
+            await self.cmd_top(update, context)
+            return
+        
+        elif data == "pay":
+            await update.message.reply_text("Используйте: /pay @user сумма", parse_mode='Markdown')
+            return
+        
+        elif data == "bonuses":
+            text = (f.header("БОНУСЫ", "🎁") + "\n"
+                    f"{f.command('daily', 'ежедневный бонус')}\n"
+                    f"{f.command('weekly', 'недельный бонус')}\n"
+                    f"{f.command('streak', 'текущий стрик')}")
+            await query.edit_message_text(text, reply_markup=IrisKeyboard.back_button(), parse_mode='Markdown')
+            return
+        
+        # ===== МАФИЯ =====
+        elif data == "mafia_create":
+            await self.cmd_mafia_create(update, context)
+            return
+        
+        elif data == "mafia_join":
+            await self.cmd_mafia_join(update, context)
+            return
+        
+        elif data == "mafia_start":
+            await self.cmd_mafia_start(update, context)
+            return
+        
+        elif data == "mafia_vote":
+            await self.cmd_mafia_vote(update, context)
+            return
+        
+        elif data == "mafia_stats":
+            await self.cmd_mafia_stats(update, context)
+            return
+        
+        # ===== КНБ =====
         elif data.startswith("rps_"):
             choice = data.split('_')[1]
             bot_choice = random.choice(["rock", "scissors", "paper"])
@@ -4447,35 +4838,58 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
+            return
         
-        elif data in ["mafia_create", "mafia_join", "mafia_start", "mafia_vote"]:
-            if data == "mafia_create":
-                await self.cmd_mafia_create(update, context)
-            elif data == "mafia_join":
-                await self.cmd_mafia_join(update, context)
-            elif data == "mafia_start":
-                await self.cmd_mafia_start(update, context)
-            elif data == "mafia_vote":
-                await self.cmd_mafia_vote(update, context)
+        # ===== БОССЫ =====
+        elif data.startswith("boss_fight_"):
+            boss_id = int(data.split('_')[2])
+            context.args = [str(boss_id)]
+            await self.cmd_boss_fight(update, context)
+            return
+        
+        # ===== БАНЛИСТ =====
+        elif data.startswith("banlist_page_"):
+            page = int(data.split('_')[2])
+            context.args = [str(page)]
+            await self.cmd_banlist(update, context)
+            return
+        
+        # ===== РЕДАКТИРОВАНИЕ ПРОФИЛЯ =====
+        elif data == "edit_profile":
+            await self.cmd_edit_profile(update, context)
+            return
+        
+        # Если неизвестная кнопка
+        else:
+            await query.edit_message_text(
+                f"❓ Неизвестная команда. Нажмите /menu",
+                reply_markup=IrisKeyboard.back_button(),
+                parse_mode='Markdown'
+            )
     
     # ========== ЗАПУСК ==========
     
     def run(self):
         """Запуск бота"""
         print("=" * 60)
-        print("🚀 ЗАПУСК МЕГА-БОТА «СПЕКТР»")
+        print("🚀 ЗАПУСК БОТА «SPECTRUM»")
         print("=" * 60)
         print("📦 Модули:")
-        print("  ✅ Iris (полная модерация)")
-        print("  ✅ TrueMafia (классическая мафия)")
-        print("  ✅ TReanfer (экономика и донат)")
-        print("  ✅ Anya (AI-чат с Gemini)")
-        print("  ✅ Ваши игры (боссы, казино, КНБ, ТТТ, мемори, сапёр)")
+        print("  ✅ Профиль и статистика")
+        print("  ✅ Модерация чата")
+        print("  ✅ Мафия")
+        print("  ✅ Экономика и магазин")
+        print("  ✅ Кланы")
+        print("  ✅ Боссы")
+        print("  ✅ Казино и игры")
+        print("  ✅ Долги и достижения")
+        print("  ✅ AI-чат с DeepSeek")
         print("=" * 60)
         print("👑 Владелец:", OWNER_USERNAME)
         print("=" * 60)
         
-        self.application.run_polling()
+        # Запускаем с очисткой старых подключений
+        self.application.run_polling(drop_pending_updates=True)
 
 
 # ========== ТОЧКА ВХОДА ==========
