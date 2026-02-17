@@ -819,7 +819,7 @@ class GameBot:
             
             self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n"
             f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n"
-            f"{self.f.list_item('Монеты: ' + f"{user_data.get('coins', 1000):,}".replace(',', ' ') + ' 🪙')}\n"
+            f"{self.f.list_item('Монеты: ' + f"{user_data.get('coins', 1000):,}".replace(',', ' ') + ' 💰')}\n"
             f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n"
             f"{self.f.list_item('Энергия: ' + str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
             
@@ -912,7 +912,7 @@ class GameBot:
             self.f.section("ХАРАКТЕРИСТИКИ", "📊") + "\n"
             f"{self.f.stat('Уровень', str(current_level))}\n"
             f"{self.f.stat('Опыт', exp_progress)}\n"
-            f"{self.f.stat('Монеты', f"{user_data.get('coins', 0):,}".replace(',', ' ') + ' 🪙')}\n"
+            f"{self.f.stat('Монеты', f"{user_data.get('coins', 0):,}".replace(',', ' ') + ' 💰')}\n"
             f"{self.f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
             f"{self.f.stat('Энергия', str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
             
@@ -1085,7 +1085,7 @@ class GameBot:
         text += self.f.section("ПО МОНЕТАМ", "💰") + "\n"
         for i, (name, value) in enumerate(top_coins, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
-            text += f"{medal} **{i}.** {name} — {value:,} 🪙\n".replace(',', ' ')
+            text += f"{medal} **{i}.** {name} — {value:,} 💰\n".replace(',', ' ')
         
         text += "\n" + self.f.section("ПО УРОВНЮ", "📊") + "\n"
         for i, (name, value) in enumerate(top_level, 1):
@@ -1135,7 +1135,7 @@ class GameBot:
         text = (
             self.f.header("ЕЖЕДНЕВНЫЙ БОНУС", "🎁") + "\n\n"
             f"{self.f.list_item('Стрик: ' + str(streak) + ' дней 🔥')}\n"
-            f"{self.f.list_item('Монеты: +' + f"{coins:,}".replace(',', ' ') + ' 🪙')}\n"
+            f"{self.f.list_item('Монеты: +' + f"{coins:,}".replace(',', ' ') + ' 💰')}\n"
             f"{self.f.list_item('Опыт: +' + str(exp) + ' ✨')}\n\n"
             f"{self.f.info('Заходите завтра за новым бонусом!')}"
         )
@@ -1174,7 +1174,7 @@ class GameBot:
         
         text = (
             self.f.header("НЕДЕЛЬНЫЙ БОНУС", "📅") + "\n\n"
-            f"{self.f.list_item('Монеты: +' + f"{coins:,}".replace(',', ' ') + ' 🪙')}\n"
+            f"{self.f.list_item('Монеты: +' + f"{coins:,}".replace(',', ' ') + ' 💰')}\n"
             f"{self.f.list_item('Алмазы: +' + str(diamonds) + ' 💎')}\n\n"
             f"{self.f.info('Возвращайтесь через неделю!')}"
         )
@@ -1227,7 +1227,7 @@ class GameBot:
                 f"└ {boss[1]} (ур. {boss[2]})\n"
                 f"└ ❤️ Здоровье: {health_bar}\n"
                 f"└ ⚔️ Урон: {boss[5]}\n"
-                f"└ 💰 Награда: {boss[6]:,} 🪙\n\n".replace(',', ' ')
+                f"└ 💰 Награда: {boss[6]:,} 💰\n\n".replace(',', ' ')
             )
             
             # Другие боссы
@@ -1320,7 +1320,7 @@ class GameBot:
             self.db.add_exp(user.id, boss[2] * 10)
             
             text += self.f.success("ПОБЕДА!") + "\n"
-            text += f"{self.f.list_item('💰 Награда: ' + f"{reward:,}".replace(',', ' ') + ' 🪙')}\n"
+            text += f"{self.f.list_item('💰 Награда: ' + f"{reward:,}".replace(',', ' ') + ' 💰')}\n"
             text += f"{self.f.list_item('✨ Опыт: +' + str(boss[2] * 10))}\n\n"
         else:
             boss_info = self.db.get_boss(boss_id)
@@ -1358,7 +1358,7 @@ class GameBot:
             f"{self.f.stat('Уровень', str(boss[2]))}\n"
             f"{self.f.stat('❤️ Здоровье', health_bar)}\n"
             f"{self.f.stat('⚔️ Урон', str(boss[5]))}\n"
-            f"{self.f.stat('💰 Награда', f"{boss[6]:,} 🪙".replace(',', ' '))}\n"
+            f"{self.f.stat('💰 Награда', f"{boss[6]:,} 💰".replace(',', ' '))}\n"
             f"{self.f.stat('📊 Статус', status)}"
         )
         
@@ -1370,7 +1370,7 @@ class GameBot:
         
         cost = 20
         if user_data['coins'] < cost:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {cost} 🪙"))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {cost} 💰"))
             return
         
         self.db.add_coins(user_id, -cost)
@@ -1418,7 +1418,7 @@ class GameBot:
                 pass
         
         if bet > user_data['coins']:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 🪙"))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
         numbers = list(range(0, 37))
@@ -1446,15 +1446,15 @@ class GameBot:
             winnings = bet * multiplier
             self.db.add_coins(user_id, winnings)
             self.db.add_stat(user_id, "casino_wins", 1)
-            result_text = self.f.success(f"Вы выиграли {winnings} 🪙!")
+            result_text = self.f.success(f"Вы выиграли {winnings} 💰!")
         else:
             self.db.add_coins(user_id, -bet)
             self.db.add_stat(user_id, "casino_losses", 1)
-            result_text = self.f.error(f"Вы проиграли {bet} 🪙")
+            result_text = self.f.error(f"Вы проиграли {bet} 💰")
         
         text = (
             self.f.header("РУЛЕТКА", "🎰") + "\n\n"
-            f"{self.f.list_item('Ставка: ' + str(bet) + ' 🪙')}\n"
+            f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
             f"{self.f.list_item('Выбрано: ' + choice)}\n"
             f"{self.f.list_item('Выпало: ' + str(result_num) + ' ' + result_color)}\n\n"
             f"{result_text}"
@@ -1474,7 +1474,7 @@ class GameBot:
                 pass
         
         if bet > user_data['coins']:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 🪙"))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
         dice1 = random.randint(1, 6)
@@ -1483,13 +1483,13 @@ class GameBot:
         
         if total in [7, 11]:
             win = bet * 2
-            result_text = self.f.success(f"Вы выиграли {win} 🪙!")
+            result_text = self.f.success(f"Вы выиграли {win} 💰!")
         elif total in [2, 3, 12]:
             win = 0
-            result_text = self.f.error(f"Вы проиграли {bet} 🪙")
+            result_text = self.f.error(f"Вы проиграли {bet} 💰")
         else:
             win = bet
-            result_text = self.f.info(f"Ничья, ставка возвращена: {bet} 🪙")
+            result_text = self.f.info(f"Ничья, ставка возвращена: {bet} 💰")
         
         if win > 0:
             self.db.add_coins(user_id, win)
@@ -1500,7 +1500,7 @@ class GameBot:
         
         text = (
             self.f.header("КОСТИ", "🎲") + "\n\n"
-            f"{self.f.list_item('Ставка: ' + str(bet) + ' 🪙')}\n"
+            f"{self.f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
             f"{self.f.list_item('Кубики: ' + str(dice1) + ' + ' + str(dice2))}\n"
             f"{self.f.list_item('Сумма: ' + str(total))}\n\n"
             f"{result_text}"
@@ -1521,17 +1521,17 @@ class GameBot:
         text = (
             self.f.header("МАГАЗИН", "🛍") + "\n\n"
             self.f.section("ЗЕЛЬЯ", "💊") + "\n"
-            f"{self.f.command('buy зелье здоровья', '50 🪙 (❤️+30)')}\n"
-            f"{self.f.command('buy большое зелье', '100 🪙 (❤️+70)')}\n\n"
+            f"{self.f.command('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
+            f"{self.f.command('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
             self.f.section("ОРУЖИЕ", "⚔️") + "\n"
-            f"{self.f.command('buy меч', '200 🪙 (⚔️+10)')}\n"
-            f"{self.f.command('buy легендарный меч', '500 🪙 (⚔️+30)')}\n\n"
+            f"{self.f.command('buy меч', '200 💰 (⚔️+10)')}\n"
+            f"{self.f.command('buy легендарный меч', '500 💰 (⚔️+30)')}\n\n"
             self.f.section("БРОНЯ", "🛡") + "\n"
-            f"{self.f.command('buy щит', '150 🪙 (🛡+5)')}\n"
-            f"{self.f.command('buy доспехи', '400 🪙 (🛡+15)')}\n\n"
+            f"{self.f.command('buy щит', '150 💰 (🛡+5)')}\n"
+            f"{self.f.command('buy доспехи', '400 💰 (🛡+15)')}\n\n"
             self.f.section("ЭНЕРГИЯ", "⚡") + "\n"
-            f"{self.f.command('buy энергетик', '30 🪙 (⚡+20)')}\n"
-            f"{self.f.command('buy батарейка', '80 🪙 (⚡+50)')}"
+            f"{self.f.command('buy энергетик', '30 💰 (⚡+20)')}\n"
+            f"{self.f.command('buy батарейка', '80 💰 (⚡+50)')}"
         )
         
         await update.message.reply_text(
@@ -1567,7 +1567,7 @@ class GameBot:
         item_data = items[item]
         
         if user_data['coins'] < item_data['price']:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {item_data['price']} 🪙"))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {item_data['price']} 💰"))
             return
         
         self.db.add_coins(user_id, -item_data['price'])
@@ -1618,7 +1618,7 @@ class GameBot:
             return
         
         if user_data['coins'] < amount:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 🪙"))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
         self.db.add_coins(user_id, -amount)
@@ -1627,7 +1627,7 @@ class GameBot:
         text = (
             self.f.header("ПЕРЕВОД", "💰") + "\n\n"
             f"{self.f.list_item('Получатель: ' + (target_user.get('first_name') or 'Пользователь'))}\n"
-            f"{self.f.list_item('Сумма: ' + f"{amount:,}".replace(',', ' ') + ' 🪙')}\n"
+            f"{self.f.list_item('Сумма: ' + f"{amount:,}".replace(',', ' ') + ' 💰')}\n"
             f"{self.f.list_item('Отправитель: ' + update.effective_user.first_name)}"
         )
         
@@ -1637,12 +1637,12 @@ class GameBot:
         text = (
             self.f.header("ПРИВИЛЕГИИ", "💎") + "\n\n"
             self.f.section("VIP СТАТУС", "🌟") + "\n"
-            f"Цена: {VIP_PRICE:,} 🪙 / {VIP_DAYS} дней\n".replace(',', ' ')
+            f"Цена: {VIP_PRICE:,} 💰 / {VIP_DAYS} дней\n".replace(',', ' ')
             f"{self.f.list_item('Урон в битвах +20%')}\n"
             f"{self.f.list_item('Награда с боссов +50%')}\n"
             f"{self.f.list_item('Ежедневный бонус +50%')}\n\n"
             self.f.section("PREMIUM СТАТУС", "💎") + "\n"
-            f"Цена: {PREMIUM_PRICE:,} 🪙 / {PREMIUM_DAYS} дней\n".replace(',', ' ')
+            f"Цена: {PREMIUM_PRICE:,} 💰 / {PREMIUM_DAYS} дней\n".replace(',', ' ')
             f"{self.f.list_item('Все бонусы VIP')}\n"
             f"{self.f.list_item('Урон в битвах +50%')}\n"
             f"{self.f.list_item('Награда с боссов +100%')}\n"
@@ -1663,7 +1663,7 @@ class GameBot:
         user_data = self.db.get_user_by_id(user_id)
         
         if user_data['coins'] < VIP_PRICE:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {VIP_PRICE:,} 🪙".replace(',', ' ')))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {VIP_PRICE:,} 💰".replace(',', ' ')))
             return
         
         if self.db.is_vip(user_id):
@@ -1685,7 +1685,7 @@ class GameBot:
         user_data = self.db.get_user_by_id(user_id)
         
         if user_data['coins'] < PREMIUM_PRICE:
-            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {PREMIUM_PRICE:,} 🪙".replace(',', ' ')))
+            await update.message.reply_text(self.f.error(f"Недостаточно монет. Нужно {PREMIUM_PRICE:,} 💰".replace(',', ' ')))
             return
         
         if self.db.is_premium(user_id):
@@ -2280,7 +2280,7 @@ class GameBot:
                 self.db.add_stat(user.id, "rps_wins")
                 reward = random.randint(10, 30)
                 self.db.add_coins(user.id, reward)
-                text += self.f.success(f"🎉 **ПОБЕДА!** +{reward} 🪙")
+                text += self.f.success(f"🎉 **ПОБЕДА!** +{reward} 💰")
             else:
                 self.db.add_stat(user.id, "rps_losses")
                 text += self.f.error("😢 **ПОРАЖЕНИЕ!**")
