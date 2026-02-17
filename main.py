@@ -72,37 +72,6 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 signal.signal(signal.SIGTERM, signal_handler)
 
-# ========== ПРИНУДИТЕЛЬНЫЙ СБРОС СТАРЫХ ПОДКЛЮЧЕНИЙ ==========
-async def force_reset_webhook():
-    """Принудительно сбрасывает все подключения"""
-    try:
-        async with aiohttp.ClientSession() as session:
-            # Сначала удаляем вебхук
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
-            async with session.post(url, json={"drop_pending_updates": True}) as resp:
-                result = await resp.json()
-                print(f"📡 Удаление вебхука: {result}")
-            
-            # Получаем информацию о вебхуке
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
-            async with session.get(url) as resp:
-                result = await resp.json()
-                print(f"📡 Информация о вебхуке: {result}")
-            
-            # Закрываем все активные сессии
-            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/close"
-            async with session.post(url) as resp:
-                result = await resp.json()
-                print(f"📡 Закрытие сессий: {result}")
-    except Exception as e:
-        print(f"⚠️ Ошибка при сбросе: {e}")
-
-# Запускаем принудительный сброс
-loop = asyncio.new_event_loop()
-asyncio.set_event_loop(loop)
-loop.run_until_complete(force_reset_webhook())
-loop.close()
-
 # ========== ИМПОРТЫ TELEGRAM ==========
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -325,6 +294,42 @@ class IrisKeyboard:
 
 print("✅ Часть 1/7 загружена (импорты, конфиг, клавиатуры)")
 
+# ========== ПРИНУДИТЕЛЬНЫЙ СБРОС СТАРЫХ ПОДКЛЮЧЕНИЙ ==========
+# ЭТОТ КОД ТЕПЕРЬ ПОСЛЕ ОПРЕДЕЛЕНИЯ TELEGRAM_TOKEN
+async def force_reset_webhook():
+    """Принудительно сбрасывает все подключения"""
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Сначала удаляем вебхук
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/deleteWebhook"
+            async with session.post(url, json={"drop_pending_updates": True}) as resp:
+                result = await resp.json()
+                print(f"📡 Удаление вебхука: {result}")
+            
+            # Получаем информацию о вебхуке
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/getWebhookInfo"
+            async with session.get(url) as resp:
+                result = await resp.json()
+                print(f"📡 Информация о вебхуке: {result}")
+            
+            # Закрываем все активные сессии
+            url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/close"
+            async with session.post(url) as resp:
+                result = await resp.json()
+                print(f"📡 Закрытие сессий: {result}")
+    except Exception as e:
+        print(f"⚠️ Ошибка при сбросе: {e}")
+
+# Запускаем принудительный сброс
+try:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(force_reset_webhook())
+    loop.close()
+    print("✅ Принудительный сброс выполнен")
+except Exception as e:
+    print(f"⚠️ Ошибка при сбросе: {e}")
+    
 # ========== БАЗА ДАННЫХ (ПОЛНАЯ, ИСПРАВЛЕННАЯ) ==========
 class Database:
     def __init__(self, db_name="spectrum_mega.db"):
