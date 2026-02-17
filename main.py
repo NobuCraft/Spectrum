@@ -653,7 +653,7 @@ class Database:
     
     def add_exp(self, user_id: int, exp: int):
         self.cursor.execute("UPDATE users SET exp = exp + ? WHERE user_id = ?", (exp, user_id))
-        
+
         self.cursor.execute("SELECT exp, level FROM users WHERE user_id = ?", (user_id,))
         user = self.cursor.fetchone()
         
@@ -667,7 +667,12 @@ class Database:
     def get_top(self, by="coins", limit=10):
         self.cursor.execute(f"SELECT first_name, {by} FROM users ORDER BY {by} DESC LIMIT ?", (limit,))
         return self.cursor.fetchall()
-    
+
+    def get_players_count(self) -> int:
+        """Возвращает общее количество игроков"""
+        self.cursor.execute("SELECT COUNT(*) FROM users")
+        return self.cursor.fetchone()[0]
+        
     # ========== МЕТОДЫ ДЛЯ ПРИВИЛЕГИЙ ==========
     
     def is_vip(self, user_id: int) -> bool:
@@ -4538,8 +4543,8 @@ class SpectrumBot:
             deadline_str = datetime.datetime.fromisoformat(deadline).strftime("%d.%m.%Y")
             
             text += (f"**ID: {debt_id}**\n"
-                     f"{f.list_item(f'{role}: {other_name}')}\n"
-                     f"{f.list_item(f'Сумма: {amount} 💰')}\n"
+                     f"{f.list_item(role + ': ' + other_name)}\n"
+                     f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
                      f"{f.list_item(f'Причина: {reason}')}\n"
                      f"{f.list_item(f'Создан: {created_str}')}\n"
                      f"{f.list_item(f'Срок: {deadline_str}')}\n\n")
@@ -4733,7 +4738,7 @@ class SpectrumBot:
         
         text = (f"🤷‍♂️ Сегодня {today} {f.user_link(user.id, user.first_name)} "
                 f"приговаривается к статье {article_num}. {article_name}\n"
-                f"⏱ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}")
+                f"⏱ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -5002,7 +5007,7 @@ class SpectrumBot:
                 self.db.add_stat(user.id, "rps_wins", 1)
                 reward = random.randint(10, 30)
                 self.db.add_coins(user.id, reward)
-                text += f.success(f"🎉 **ПОБЕДА!** +{reward} 💰")
+                text += f.success('🎉 **ПОБЕДА!** +' + str(reward) + ' 💰')
             else:
                 self.db.add_stat(user.id, "rps_losses", 1)
                 text += f.error("😢 **ПОРАЖЕНИЕ!**")
