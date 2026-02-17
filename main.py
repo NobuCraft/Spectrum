@@ -4737,8 +4737,8 @@ class SpectrumBot:
         user = update.effective_user
         
         text = (f"🤷‍♂️ Сегодня {today} {f.user_link(user.id, user.first_name)} "
-                f"приговаривается к статье {article_num}. {article_name}\n"
-                f"⏱ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}"
+            f"приговаривается к статье {article_num}. {article_name}\n"
+            f" ⏱ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
