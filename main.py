@@ -4298,7 +4298,7 @@ class SpectrumBot:
                             await update.message.reply_text(
                                 f.header("ПОБЕДА!", "🎉") + "\n\n"
                                 f"{f.list_item('Пар найдено: 8/8')}\n"
-                                f"{f.list_item('Ходов: ' + str(game['moves']))}\n
+                                f"{f.list_item('Ходов: ' + str(game['moves']))}\n"
                                 f"{f.list_item('Награда: +' + str(reward) + ' 💰')}",
                                 parse_mode='Markdown'
                             )
