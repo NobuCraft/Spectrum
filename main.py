@@ -4297,15 +4297,15 @@ class SpectrumBot:
                             
                             await update.message.reply_text(
                                 f.header("ПОБЕДА!", "🎉") + "\n\n"
-                                f"{f.list_item(f'Пар найдено: 8/8')}\n"
-                                f"{f.list_item(f'Ходов: {game["moves"]}')}\n"
-                                f"{f.list_item(f'Награда: +{reward} 💰')}",
+                                f"{f.list_item('Пар найдено: 8/8')}\n"
+                                f"{f.list_item('Ходов: ' + str(game['moves']))}\n
+                                f"{f.list_item('Награда: +' + str(reward) + ' 💰')}",
                                 parse_mode='Markdown'
                             )
                         else:
                             await update.message.reply_text(
                                 f.success(f"Пара найдена! ({game['cards'][first]})") + "\n"
-                                f"{f.info(f'Осталось пар: {8 - game["pairs"]}')}",
+                                f.success('Пара найдена! (' + game['cards'][first] + ')'),
                                 parse_mode='Markdown'
                             )
                     else:
@@ -4315,7 +4315,7 @@ class SpectrumBot:
                         game['first_pick'] = None
                         
                         await update.message.reply_text(
-                            f.error(f"Не пара: {game['cards'][first]} и {game['cards'][card]}"),
+                            f.error('Не пара: ' + game['cards'][first] + ' и ' + game['cards'][card]),
                             parse_mode='Markdown'
                         )
                 return
