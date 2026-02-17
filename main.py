@@ -1488,43 +1488,43 @@ class GameBot:
             if referrer_id != user.id:
                 self.db.add_referral(referrer_id, user.id, 200)
                 try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=self.f.success(f"По вашей реферальной ссылке зарегистрировался {user.first_name}! +200 🪙")
-                    )
-                except:
-                    pass
-        
-        text = (
-            self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n"
-            f"🌟 **Привет, {user.first_name}!**\n\n"
-            f"Я — **«СПЕКТР»**, твой игровой помощник!\n\n"
-            self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n"
-            f"{self.f.list_item(f'Роль: {self.get_role_emoji(user_data.get("role", "user"))} {user_data.get("role", "user")}')}\n"
-            f"{self.f.list_item(f'Монеты: {user_data.get("coins", 1000)} 🪙')}\n"
-            f"{self.f.list_item(f'Уровень: {user_data.get("level", 1)}')}\n\n"
-            self.f.section("ГЛАВНОЕ МЕНЮ", "📌") + "\n"
-            f"{self.f.command('profile', 'твой профиль')}\n"
-            f"{self.f.command('bosses', 'битва с боссами')}\n"
-            f"{self.f.command('casino', 'казино')}\n"
-            f"{self.f.command('shop', 'магазин')}\n"
-            f"{self.f.command('donate', 'привилегии')}\n\n"
-            f"👑 **Владелец:** {OWNER_USERNAME}\n\n"
-            f"💡 Напиши /menu для интерактивного меню"
-        )
-        
-        await update.message.reply_text(text, parse_mode='Markdown')
-        self.db.add_stat(user.id, "commands_used")
+    await context.bot.send_message(
+        chat_id=referrer_id,
+        text=self.f.success(f"По вашей реферальной ссылке зарегистрировался {user.first_name}! +200 🪙")
+    )
+except:
+    pass
+
+text = (
+    self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n"
+    f"🌟 **Привет, {user.first_name}!**\n\n"
+    f"Я — **«СПЕКТР»**, твой игровой помощник!\n\n"
+    self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n"
+    f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n"
+    f"{self.f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 🪙')}\n"
+    f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n\n"
+    self.f.section("ГЛАВНОЕ МЕНЮ", "📌") + "\n"
+    f"{self.f.command('profile', 'твой профиль')}\n"
+    f"{self.f.command('bosses', 'битва с боссами')}\n"
+    f"{self.f.command('casino', 'казино')}\n"
+    f"{self.f.command('shop', 'магазин')}\n"
+    f"{self.f.command('donate', 'привилегии')}\n\n"
+    f"👑 **Владелец:** {OWNER_USERNAME}\n\n"
+    f"💡 Напиши /menu для интерактивного меню"
+)
+
+await update.message.reply_text(text, parse_mode='Markdown')
+self.db.add_stat(user.id, "commands_used")
+
+async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = self.get_main_menu_keyboard()
+    reply_markup = InlineKeyboardMarkup(keyboard)
     
-    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        keyboard = self.get_main_menu_keyboard()
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await update.message.reply_text(
-            self.f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыбери раздел:",
-            reply_markup=reply_markup,
-            parse_mode='Markdown'
-        )
+    await update.message.reply_text(
+        self.f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыбери раздел:",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
     
     def get_main_menu_keyboard(self):
         return [
