@@ -3,9 +3,8 @@
 
 """
 СПЕКТР МЕГА-БОТ - ПОЛНАЯ ВЕРСИЯ
+Стиль: Iris (минималистичный, официальный)
 Объединение: Iris (модерация) + TrueMafia (игра) + TReanfer (экономика) + Anya (AI)
-Автор: @NobuCraft
-Версия: 3.0.0
 """
 
 import asyncio
@@ -89,26 +88,22 @@ PRIVILEGE_DAYS = {
     "creator": 365
 }
 
-# ========== СТИЛЬ IRIS (КЛАСС ДЛЯ ФОРМАТИРОВАНИЯ) ==========
+# ========== НОВЫЙ СТИЛЬ IRIS (МИНИМАЛИЗМ, БЕЗ ПАЛОК) ==========
 class IrisFormatter:
-    """Полный набор форматирования в стиле Iris"""
+    """Класс для форматирования текста в стиле Iris (минималистичный, официальный)"""
     
     @staticmethod
-    def header(title: str, emoji: str = "📋") -> str:
-        """Красивый заголовок с рамкой"""
-        return (
-            f"╔══════════════════════════════╗\n"
-            f"║    {emoji} {title}    ║\n"
-            f"╚══════════════════════════════╝\n"
-        )
-    
-    @staticmethod
-    def section(title: str, emoji: str = "▫️") -> str:
-        """Заголовок раздела с линией"""
+    def header(title: str, emoji: str = "📌") -> str:
+        """Заголовок раздела с линией (как в Iris)"""
         return f"\n{emoji} **{title}**\n" + "━" * 25 + "\n"
     
     @staticmethod
-    def command(name: str, desc: str, usage: str = "", emoji: str = "・") -> str:
+    def section(title: str, emoji: str = "▫️") -> str:
+        """Подраздел"""
+        return f"\n{emoji} **{title}**"
+    
+    @staticmethod
+    def command(name: str, desc: str, usage: str = "", emoji: str = "•") -> str:
         """Форматирование команды"""
         if usage:
             return f"{emoji} `/{name} {usage}` — {desc}"
@@ -117,12 +112,12 @@ class IrisFormatter:
     @staticmethod
     def param(name: str, desc: str) -> str:
         """Параметр команды"""
-        return f"└ {name} — {desc}"
+        return f"  └ {name} — {desc}"
     
     @staticmethod
     def example(text: str) -> str:
         """Пример использования"""
-        return f"└ Пример: `{text}`"
+        return f"  └ Пример: `{text}`"
     
     @staticmethod
     def success(text: str) -> str:
@@ -288,7 +283,7 @@ class IrisKeyboard:
         ]
         return InlineKeyboardMarkup(keyboard)
 
-# ========== БАЗА ДАННЫХ (ПОЛНАЯ) ==========
+# ========== БАЗА ДАННЫХ (ПОЛНАЯ, ИСПРАВЛЕННАЯ) ==========
 class Database:
     def __init__(self, db_name="spectrum_mega.db"):
         self.conn = sqlite3.connect(db_name, check_same_thread=False)
@@ -546,7 +541,8 @@ class Database:
         ''')
         
         self.conn.commit()
-    
+        print("✅ Все таблицы созданы")
+
     def init_data(self):
         """Инициализация начальных данных"""
         
@@ -566,6 +562,7 @@ class Database:
                     INSERT INTO bosses (boss_name, boss_level, boss_health, boss_max_health, boss_damage, boss_reward)
                     VALUES (?, ?, ?, ?, ?, ?)
                 ''', (name, level, health, health, damage, reward))
+            print("✅ Боссы инициализированы")
         
         # Инициализация магазина
         self.cursor.execute("SELECT COUNT(*) FROM shop_items")
@@ -587,6 +584,7 @@ class Database:
                     INSERT INTO shop_items (name, description, price_coins, price_diamonds, type, value, stock)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                 ''', item)
+            print("✅ Магазин инициализирован")
         
         self.conn.commit()
     
@@ -637,6 +635,11 @@ class Database:
             return self.get_user_by_id(result[0])
         return None
     
+    def get_players_count(self) -> int:
+        """Возвращает общее количество игроков"""
+        self.cursor.execute("SELECT COUNT(*) FROM users")
+        return self.cursor.fetchone()[0]
+    
     # ========== МЕТОДЫ ДЛЯ ЭКОНОМИКИ (TREANFER) ==========
     
     def add_coins(self, user_id: int, amount: int):
@@ -667,12 +670,7 @@ class Database:
     def get_top(self, by="coins", limit=10):
         self.cursor.execute(f"SELECT first_name, {by} FROM users ORDER BY {by} DESC LIMIT ?", (limit,))
         return self.cursor.fetchall()
-
-    def get_players_count(self) -> int:
-        """Возвращает общее количество игроков"""
-        self.cursor.execute("SELECT COUNT(*) FROM users")
-        return self.cursor.fetchone()[0]
-        
+    
     # ========== МЕТОДЫ ДЛЯ ПРИВИЛЕГИЙ ==========
     
     def is_vip(self, user_id: int) -> bool:
@@ -728,8 +726,7 @@ class Database:
         self.cursor.execute('''
             INSERT INTO inventory (user_id, item_id, quantity, acquired_at)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + ?
-        ''', (user_id, item_id, quantity, datetime.datetime.now(), quantity))
+        ''', (user_id, item_id, quantity, datetime.datetime.now()))
         
         self.conn.commit()
         return True
@@ -805,6 +802,13 @@ class Database:
         self.conn.commit()
         
         return removed
+    
+    def remove_all_warns(self, user_id: int):
+        self.cursor.execute(
+            "UPDATE users SET warns = 0, warns_list = '[]' WHERE user_id = ?",
+            (user_id,)
+        )
+        self.conn.commit()
     
     def mute_user(self, user_id: int, minutes: int, admin_id: int = None, reason: str = "Нарушение"):
         mute_until = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
@@ -913,6 +917,22 @@ class Database:
         
         return bans, total
     
+    def get_ban_reason(self, user_id: int) -> Optional[Dict]:
+        """Получить причину бана"""
+        self.cursor.execute(
+            "SELECT ban_reason, ban_date, ban_admin FROM users WHERE user_id = ? AND banned = 1",
+            (user_id,)
+        )
+        result = self.cursor.fetchone()
+        if result:
+            admin_data = self.get_user_by_id(result[2]) if result[2] else None
+            return {
+                'reason': result[0],
+                'date': result[1],
+                'admin_name': admin_data.get('first_name') if admin_data else 'Система'
+            }
+        return None
+    
     # ========== МЕТОДЫ ДЛЯ ТРИГГЕРОВ (IRIS) ==========
     
     def add_trigger(self, chat_id: int, trigger_word: str, response: str, created_by: int):
@@ -974,11 +994,6 @@ class Database:
     def get_welcome(self, chat_id: int) -> Optional[str]:
         settings = self.get_chat_settings(chat_id)
         return settings.get('welcome_message')
-
-    def get_goodbye(self, chat_id: int) -> Optional[str]:
-        """Получить прощание чата"""
-        settings = self.get_chat_settings(chat_id)
-        return settings.get('goodbye_message')
     
     def set_goodbye(self, chat_id: int, message: str):
         """Установить прощание чата"""
@@ -988,452 +1003,10 @@ class Database:
         )
         self.conn.commit()
     
-    # ========== МЕТОДЫ ДЛЯ МАФИИ (TRUEMAFIA) ==========
-    
-    def create_mafia_game(self, creator_id: int) -> int:
-        self.cursor.execute('''
-            INSERT INTO mafia_games (creator_id, players, votes, killed, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (creator_id, json.dumps([creator_id]), json.dumps({}), json.dumps([]), datetime.datetime.now()))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def join_mafia_game(self, game_id: int, user_id: int) -> bool:
-        self.cursor.execute("SELECT players, status FROM mafia_games WHERE id = ?", (game_id,))
-        result = self.cursor.fetchone()
-        if not result or result[1] != 'waiting':
-            return False
-        
-        players = json.loads(result[0])
-        if user_id in players or len(players) >= 10:
-            return False
-        
-        players.append(user_id)
-        self.cursor.execute("UPDATE mafia_games SET players = ? WHERE id = ?", (json.dumps(players), game_id))
-        self.conn.commit()
-        return True
-    
-    def leave_mafia_game(self, game_id: int, user_id: int) -> bool:
-        self.cursor.execute("SELECT players, creator_id FROM mafia_games WHERE id = ?", (game_id,))
-        result = self.cursor.fetchone()
-        if not result:
-            return False
-        
-        players = json.loads(result[0])
-        creator_id = result[1]
-        
-        if user_id not in players:
-            return False
-        
-        players.remove(user_id)
-        
-        # Если создатель выходит, делаем нового создателя
-        if user_id == creator_id and players:
-            creator_id = players[0]
-        
-        self.cursor.execute(
-            "UPDATE mafia_games SET players = ?, creator_id = ? WHERE id = ?",
-            (json.dumps(players), creator_id, game_id)
-        )
-        self.conn.commit()
-        return True
-    
-    def get_mafia_game(self, game_id: int) -> Optional[Dict]:
-        self.cursor.execute("SELECT * FROM mafia_games WHERE id = ?", (game_id,))
-        row = self.cursor.fetchone()
-        if not row:
-            return None
-        
-        columns = [description[0] for description in self.cursor.description]
-        return dict(zip(columns, row))
-    
-    def get_active_mafia_games(self):
-        self.cursor.execute("SELECT * FROM mafia_games WHERE status IN ('waiting', 'playing') ORDER BY created_at DESC")
-        return self.cursor.fetchall()
-    
-    def start_mafia_game(self, game_id: int) -> Optional[Dict]:
-        game = self.get_mafia_game(game_id)
-        if not game or game['status'] != 'waiting':
-            return None
-        
-        players = json.loads(game['players'])
-        if len(players) < 5:
-            return None
-        
-        random.shuffle(players)
-        
-        # Распределение ролей
-        roles = {}
-        mafia_count = max(1, len(players) // 3)
-        sheriff_count = 1 if len(players) >= 6 else 0
-        doctor_count = 1 if len(players) >= 7 else 0
-        
-        # Назначаем мафию
-        for i in range(mafia_count):
-            roles[str(players[i])] = 'mafia'
-        
-        # Назначаем шерифа
-        if sheriff_count:
-            for player in players[mafia_count:]:
-                if str(player) not in roles:
-                    roles[str(player)] = 'sheriff'
-                    break
-        
-        # Назначаем доктора
-        if doctor_count:
-            for player in players[mafia_count:]:
-                if str(player) not in roles:
-                    roles[str(player)] = 'doctor'
-                    break
-        
-        # Остальные мирные
-        for player in players:
-            if str(player) not in roles:
-                roles[str(player)] = 'civilian'
-        
-        self.cursor.execute('''
-            UPDATE mafia_games SET status = 'playing', roles = ?, phase = 'night', day_count = 1
-            WHERE id = ?
-        ''', (json.dumps(roles), game_id))
-        self.conn.commit()
-        
-        return {
-            'players': players,
-            'roles': roles,
-            'mafia_count': mafia_count,
-            'sheriff_count': sheriff_count,
-            'doctor_count': doctor_count
-        }
-    
-    def mafia_night_action(self, game_id: int, mafia_kill: int = None, doctor_save: int = None, sheriff_check: int = None) -> Dict:
-        game = self.get_mafia_game(game_id)
-        if not game or game['phase'] != 'night':
-            return {'success': False, 'reason': 'not_night'}
-        
-        killed = json.loads(game.get('killed', '[]'))
-        votes = json.loads(game.get('votes', '{}'))
-        
-        # Мафия убивает
-        if mafia_kill:
-            killed.append(mafia_kill)
-        
-        # Доктор спасает (отменяет убийство)
-        if doctor_save and doctor_save in killed:
-            killed.remove(doctor_save)
-        
-        # Шериф проверяет
-        sheriff_result = None
-        if sheriff_check:
-            roles = json.loads(game['roles'])
-            sheriff_result = roles.get(str(sheriff_check)) == 'mafia'
-        
-        # Переходим в день
-        self.cursor.execute('''
-            UPDATE mafia_games SET phase = 'day', killed = ?, votes = ?
-            WHERE id = ?
-        ''', (json.dumps(killed), json.dumps(votes), game_id))
-        self.conn.commit()
-        
-        return {
-            'success': True,
-            'killed': killed,
-            'sheriff_result': sheriff_result,
-            'day': game['day_count']
-        }
-    
-    def mafia_day_vote(self, game_id: int, voter_id: int, target_id: int) -> Dict:
-        game = self.get_mafia_game(game_id)
-        if not game or game['phase'] != 'day':
-            return {'success': False, 'reason': 'not_day'}
-        
-        votes = json.loads(game.get('votes', '{}'))
-        votes[str(voter_id)] = target_id
-        
-        self.cursor.execute("UPDATE mafia_games SET votes = ? WHERE id = ?", (json.dumps(votes), game_id))
-        self.conn.commit()
-        
-        return {'success': True, 'votes': votes}
-    
-    def mafia_end_day(self, game_id: int) -> Dict:
-        game = self.get_mafia_game(game_id)
-        if not game or game['phase'] != 'day':
-            return {'success': False, 'reason': 'not_day'}
-        
-        votes = json.loads(game.get('votes', '{}'))
-        killed = json.loads(game.get('killed', '[]'))
-        
-        # Подсчет голосов
-        vote_count = {}
-        for target in votes.values():
-            vote_count[target] = vote_count.get(target, 0) + 1
-        
-        # Казнь
-        executed = None
-        if vote_count:
-            max_votes = max(vote_count.values())
-            candidates = [p for p, v in vote_count.items() if v == max_votes]
-            if len(candidates) == 1:
-                executed = candidates[0]
-                killed.append(executed)
-        
-        # Проверка на окончание игры
-        roles = json.loads(game['roles'])
-        players = json.loads(game['players'])
-        
-        alive = [p for p in players if p not in killed]
-        alive_mafia = sum(1 for p in alive if roles.get(str(p)) == 'mafia')
-        alive_civilians = len(alive) - alive_mafia
-        
-        game_over = False
-        winner = None
-        
-        if alive_mafia == 0:
-            game_over = True
-            winner = 'civilians'
-        elif alive_mafia >= alive_civilians:
-            game_over = True
-            winner = 'mafia'
-        
-        if game_over:
-            self.cursor.execute("UPDATE mafia_games SET status = 'finished', killed = ? WHERE id = ?", (json.dumps(killed), game_id))
-        else:
-            self.cursor.execute('''
-                UPDATE mafia_games SET phase = 'night', day_count = day_count + 1, killed = ?, votes = ?
-                WHERE id = ?
-            ''', (json.dumps(killed), json.dumps({}), game_id))
-        
-        self.conn.commit()
-        
-        return {
-            'success': True,
-            'executed': executed,
-            'killed': killed,
-            'game_over': game_over,
-            'winner': winner
-        }
-    
-    # ========== МЕТОДЫ ДЛЯ КЛАНОВ ==========
-    
-    def create_clan(self, name: str, owner_id: int) -> Optional[int]:
-        try:
-            self.cursor.execute('''
-                INSERT INTO clans (name, owner_id, created_at)
-                VALUES (?, ?, ?)
-            ''', (name, owner_id, datetime.datetime.now()))
-            clan_id = self.cursor.lastrowid
-            
-            self.cursor.execute('''
-                INSERT INTO clan_members (clan_id, user_id, role, joined_at)
-                VALUES (?, ?, ?, ?)
-            ''', (clan_id, owner_id, 'owner', datetime.datetime.now()))
-            
-            self.cursor.execute("UPDATE users SET clan_id = ? WHERE user_id = ?", (clan_id, owner_id))
-            self.conn.commit()
-            return clan_id
-        except:
-            return None
-    
-    def get_clan(self, clan_id: int) -> Optional[Tuple]:
-        self.cursor.execute("SELECT * FROM clans WHERE id = ?", (clan_id,))
-        return self.cursor.fetchone()
-    
-    def get_user_clan(self, user_id: int) -> Optional[Tuple]:
-        self.cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (user_id,))
-        result = self.cursor.fetchone()
-        if result and result[0]:
-            return self.get_clan(result[0])
-        return None
-    
-    def get_clan_members(self, clan_id: int) -> List[Tuple]:
-        self.cursor.execute('''
-            SELECT u.user_id, u.first_name, u.nickname, u.level, cm.role, cm.joined_at
-            FROM clan_members cm
-            JOIN users u ON cm.user_id = u.user_id
-            WHERE cm.clan_id = ?
-            ORDER BY cm.role = 'owner' DESC, cm.joined_at
-        ''', (clan_id,))
-        return self.cursor.fetchall()
-    
-    def join_clan(self, user_id: int, clan_id: int) -> bool:
-        if self.get_user_clan(user_id):
-            return False
-        
-        clan = self.get_clan(clan_id)
-        if not clan or clan[5] >= 50:
-            return False
-        
-        self.cursor.execute('''
-            INSERT INTO clan_members (clan_id, user_id, role, joined_at)
-            VALUES (?, ?, ?, ?)
-        ''', (clan_id, user_id, 'member', datetime.datetime.now()))
-        
-        self.cursor.execute("UPDATE users SET clan_id = ? WHERE user_id = ?", (clan_id, user_id))
-        self.cursor.execute("UPDATE clans SET members = members + 1 WHERE id = ?", (clan_id,))
-        self.conn.commit()
-        return True
-    
-    def leave_clan(self, user_id: int) -> bool:
-        clan = self.get_user_clan(user_id)
-        if not clan:
-            return False
-        
-        if clan[2] == user_id:
-            # Владелец передает права или распускает клан
-            members = self.get_clan_members(clan[0])
-            if len(members) == 1:
-                # Распускаем клан
-                self.cursor.execute("DELETE FROM clans WHERE id = ?", (clan[0],))
-                self.cursor.execute("DELETE FROM clan_members WHERE clan_id = ?", (clan[0],))
-            else:
-                # Передаем права следующему
-                next_owner = members[1][0]
-                self.cursor.execute("UPDATE clan_members SET role = 'owner' WHERE clan_id = ? AND user_id = ?", (clan[0], next_owner))
-                self.cursor.execute("UPDATE clans SET owner_id = ? WHERE id = ?", (next_owner, clan[0]))
-                self.cursor.execute("DELETE FROM clan_members WHERE clan_id = ? AND user_id = ?", (clan[0], user_id))
-                self.cursor.execute("UPDATE clans SET members = members - 1 WHERE id = ?", (clan[0],))
-        else:
-            self.cursor.execute("DELETE FROM clan_members WHERE clan_id = ? AND user_id = ?", (clan[0], user_id))
-            self.cursor.execute("UPDATE clans SET members = members - 1 WHERE id = ?", (clan[0],))
-        
-        self.cursor.execute("UPDATE users SET clan_id = 0 WHERE user_id = ?", (user_id,))
-        self.conn.commit()
-        return True
-    
-    def add_clan_exp(self, clan_id: int, exp: int):
-        self.cursor.execute("UPDATE clans SET exp = exp + ? WHERE id = ?", (exp, clan_id))
-        
-        self.cursor.execute("SELECT exp, level FROM clans WHERE id = ?", (clan_id,))
-        clan = self.cursor.fetchone()
-        if clan:
-            exp_needed = clan[1] * 500
-            if clan[0] >= exp_needed:
-                self.cursor.execute("UPDATE clans SET level = level + 1, exp = exp - ? WHERE id = ?", (exp_needed, clan_id))
-        
-        self.conn.commit()
-    
-    def get_top_clans(self, limit: int = 10):
-        self.cursor.execute("SELECT name, level, members, rating FROM clans ORDER BY rating DESC, level DESC LIMIT ?", (limit,))
-        return self.cursor.fetchall()
-    
-    # ========== МЕТОДЫ ДЛЯ БОССОВ ==========
-    
-    def get_bosses(self, alive_only: bool = True):
-        if alive_only:
-            self.cursor.execute("SELECT * FROM bosses WHERE is_alive = 1 ORDER BY boss_level")
-        else:
-            self.cursor.execute("SELECT * FROM bosses ORDER BY boss_level")
-        return self.cursor.fetchall()
-    
-    def get_boss(self, boss_id: int):
-        self.cursor.execute("SELECT * FROM bosses WHERE id = ?", (boss_id,))
-        return self.cursor.fetchone()
-    
-    def damage_boss(self, boss_id: int, damage: int) -> bool:
-        self.cursor.execute("UPDATE bosses SET boss_health = boss_health - ? WHERE id = ?", (damage, boss_id))
-        self.conn.commit()
-        
-        self.cursor.execute("SELECT boss_health FROM bosses WHERE id = ?", (boss_id,))
-        health = self.cursor.fetchone()[0]
-        
-        if health <= 0:
-            self.cursor.execute("UPDATE bosses SET is_alive = 0 WHERE id = ?", (boss_id,))
-            self.conn.commit()
-            return True
-        return False
-    
-    def respawn_bosses(self):
-        self.cursor.execute("UPDATE bosses SET is_alive = 1, boss_health = boss_max_health")
-        self.conn.commit()
-    
-    def add_boss_kill(self, user_id: int):
-        self.cursor.execute("UPDATE users SET boss_kills = boss_kills + 1 WHERE user_id = ?", (user_id,))
-        self.conn.commit()
-    
-    # ========== МЕТОДЫ ДЛЯ ДОСТИЖЕНИЙ ==========
-    
-    def add_achievement(self, user_id: int, name: str, desc: str, reward: int = 0) -> bool:
-        try:
-            self.cursor.execute('''
-                INSERT INTO achievements (user_id, achievement_name, achievement_desc, earned_date, reward_coins)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (user_id, name, desc, datetime.datetime.now(), reward))
-            
-            if reward > 0:
-                self.add_coins(user_id, reward)
-            
-            self.conn.commit()
-            return True
-        except:
-            return False
-    
-    def get_achievements(self, user_id: int) -> List[Tuple]:
-        self.cursor.execute("SELECT achievement_name, achievement_desc, earned_date, reward_coins FROM achievements WHERE user_id = ? ORDER BY earned_date DESC", (user_id,))
-        return self.cursor.fetchall()
-    
-    # ========== МЕТОДЫ ДЛЯ ДОЛГОВ ==========
-    
-    def create_debt(self, debtor_id: int, creditor_id: int, amount: int, reason: str, days: int = 30) -> int:
-        deadline = datetime.datetime.now() + datetime.timedelta(days=days)
-        self.cursor.execute('''
-            INSERT INTO debts (debtor_id, creditor_id, amount, reason, created_at, deadline)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (debtor_id, creditor_id, amount, reason, datetime.datetime.now(), deadline))
-        self.conn.commit()
-        return self.cursor.lastrowid
-    
-    def get_debts(self, user_id: int) -> List[Tuple]:
-        self.cursor.execute('''
-            SELECT * FROM debts WHERE (debtor_id = ? OR creditor_id = ?) AND is_paid = 0 ORDER BY deadline
-        ''', (user_id, user_id))
-        return self.cursor.fetchall()
-    
-    def pay_debt(self, debt_id: int):
-        self.cursor.execute("UPDATE debts SET is_paid = 1 WHERE id = ?", (debt_id,))
-        self.conn.commit()
-    
-    # ========== МЕТОДЫ ДЛЯ БОНУСОВ ==========
-    
-    def add_daily_streak(self, user_id: int) -> int:
-        today = datetime.datetime.now().date()
-        self.cursor.execute("SELECT last_daily, daily_streak FROM users WHERE user_id = ?", (user_id,))
-        result = self.cursor.fetchone()
-        
-        if result and result[0]:
-            last = datetime.datetime.fromisoformat(result[0]).date()
-            if last == today - datetime.timedelta(days=1):
-                streak = result[1] + 1
-            elif last == today:
-                return result[1]
-            else:
-                streak = 1
-        else:
-            streak = 1
-        
-        self.cursor.execute(
-            "UPDATE users SET daily_streak = ?, last_daily = ? WHERE user_id = ?",
-            (streak, datetime.datetime.now(), user_id)
-        )
-        self.conn.commit()
-        return streak
-    
-    def can_claim_weekly(self, user_id: int) -> bool:
-        self.cursor.execute("SELECT last_weekly FROM users WHERE user_id = ?", (user_id,))
-        result = self.cursor.fetchone()
-        if not result or not result[0]:
-            return True
-        
-        last = datetime.datetime.fromisoformat(result[0])
-        return (datetime.datetime.now() - last).days >= 7
-    
-    def claim_weekly(self, user_id: int):
-        self.cursor.execute("UPDATE users SET last_weekly = ? WHERE user_id = ?", (datetime.datetime.now(), user_id))
-        self.conn.commit()
-    
-    def close(self):
-        self.conn.close()
-
-# Инициализация БД
-db = Database() 
+    def get_goodbye(self, chat_id: int) -> Optional[str]:
+        """Получить прощание чата"""
+        settings = self.get_chat_settings(chat_id)
+        return settings.get('goodbye_message')
 
 # ========== GEMINI AI (КАК В ANYA) ==========
 class GeminiAI:
@@ -1446,13 +1019,13 @@ class GeminiAI:
         self.contexts = defaultdict(list)
         self.max_context_length = 10
         self.system_prompt = (
-            "Ты — СПЕКТР, дружелюбный и умный бот-помощник. "
+            "Ты — СПЕКТР, официальный бот-помощник. "
             "Ты объединяешь в себе функции чат-менеджера (как Iris), "
             "ведущего игры в мафию (как TrueMafia), экономического бота (как TReanfer) "
             "и просто собеседника (как Anya). "
-            "Отвечай кратко, но информативно, используй эмодзи. "
+            "Отвечай кратко, но информативно, используй эмодзи умеренно. "
             "Помогай пользователям с командами, играми и настройками. "
-            "Будь вежливым и дружелюбным."
+            "Будь вежливым и официальным."
         )
         print("🤖 Gemini AI (Anya style) инициализирован")
 
@@ -1468,7 +1041,7 @@ class GeminiAI:
             if user_id not in self.contexts:
                 self.contexts[user_id] = [
                     {"role": "user", "parts": [{"text": self.system_prompt}]},
-                    {"role": "model", "parts": [{"text": "Привет! Я СПЕКТР, твой помощник. Чем могу помочь?"}]}
+                    {"role": "model", "parts": [{"text": "Здравствуйте! Я СПЕКТР, ваш официальный помощник. Чем могу помочь?"}]}
                 ]
 
             self.contexts[user_id].append({"role": "user", "parts": [{"text": message}]})
@@ -1498,71 +1071,49 @@ class GeminiAI:
                         return self.get_fallback_response(message)
                 else:
                     error_text = await resp.text()
-                    print(f"Ошибка Gemini API: {resp.status} - {error_text[:200]}")
+                    print(f"Ошибка Gemini API: {resp.status}")
                     return self.get_fallback_response(message)
 
         except asyncio.TimeoutError:
-            return "⏱️ Превышено время ожидания. Попробуйте еще раз."
+            return "⏱️ Превышено время ожидания. Пожалуйста, попробуйте еще раз."
         except Exception as e:
             print(f"Ошибка Gemini: {e}")
             return self.get_fallback_response(message)
 
     def get_fallback_response(self, message: str) -> str:
-        """Умные запасные ответы"""
+        """Запасные ответы на случай ошибки API"""
         msg = message.lower()
         
         # Приветствия
-        if any(word in msg for word in ["привет", "здравствуй", "хай", "ку", "здаров"]):
-            return "👋 Привет! Как дела? Чем могу помочь сегодня?"
+        if any(word in msg for word in ["привет", "здравствуй", "хай", "ку"]):
+            return "👋 Здравствуйте! Чем могу помочь?"
         
         # Как дела
-        if any(word in msg for word in ["как дела", "как ты", "чё как", "чо как"]):
-            return "😊 Всё отлично! Работаю, помогаю игрокам. А у тебя как?"
+        if any(word in msg for word in ["как дела", "как ты"]):
+            return "💼 Всё функционирует в штатном режиме. Чем могу быть полезен?"
         
         # Спасибо
-        if any(word in msg for word in ["спасибо", "благодарю", "пасиб", "спс"]):
-            return "🤝 Всегда пожалуйста! Рад помочь."
+        if any(word in msg for word in ["спасибо", "благодарю"]):
+            return "🤝 Всегда пожалуйста! Обращайтесь."
         
         # Кто создал
-        if any(word in msg for word in ["кто создал", "создатель", "владелец", "твой папа"]):
+        if any(word in msg for word in ["кто создал", "создатель", "владелец"]):
             return f"👑 Мой создатель: {OWNER_USERNAME}"
         
         # Команды
         if any(word in msg for word in ["команды", "что умеешь", "помощь"]):
-            return "📚 Я умею многое! Напиши /help для полного списка команд.\n🔹 Модерация (как Iris)\n🔹 Мафия (как TrueMafia)\n🔹 Экономика (как TReanfer)\n🔹 Игры и развлечения\n🔹 И просто поболтать!"
+            return "📚 Полный список команд доступен по команде /help"
         
         # Игры
-        if any(word in msg for word in ["игра", "поиграть", "во что"]):
-            return "🎮 У меня есть:\n👾 Боссы (/bosses)\n🎰 Казино (/casino)\n✊ КНБ (/rps)\n🔪 Мафия (/mafia)\n⭕ Крестики-нолики (/ttt)\n💣 Сапёр (/minesweeper)\n🧠 Мемори (/memory)"
-        
-        # Боссы
-        if any(word in msg for word in ["босс", "битва"]):
-            return "👾 Боссы ждут тебя на арене! Используй /bosses для просмотра и /bossfight [ID] для битвы."
-        
-        # Казино
-        if any(word in msg for word in ["казино", "рулетка", "кости"]):
-            return "🎰 В казино тебя ждут: рулетка, кости, слоты и КНБ! Напиши /casino для подробностей."
-        
-        # Экономика
-        if any(word in msg for word in ["деньги", "монеты", "экономика"]):
-            return "💰 У нас есть полноценная экономика! Зарабатывай монеты в играх, покупай предметы в /shop, получай /daily бонусы и становись богаче!"
-        
-        # Привилегии
-        if any(word in msg for word in ["донат", "привилегии", "vip", "premium"]):
-            return "💎 Хочешь больше возможностей? Посмотри /donate! VIP, PREMIUM и другие статусы ждут тебя."
-        
-        # Мафия
-        if any(word in msg for word in ["мафия", "mafia"]):
-            return "🔪 Хочешь сыграть в мафию? Создай игру командой /mafia_create, пригласи друзей и начните расследование!"
+        if any(word in msg for word in ["игра", "поиграть"]):
+            return "🎮 Доступные игры: /bosses, /casino, /mafia, /rps, /ttt, /memory, /minesweeper"
         
         # По умолчанию
         responses = [
-            "🤔 Интересно... Расскажи подробнее!",
-            "😊 Понял, продолжай.",
-            "✨ Я внимательно слушаю.",
-            "💡 Кстати, у меня есть много игр! Напиши /games",
-            "🎯 Принято. Что дальше?",
-            "🔥 Отлично! Есть что-то ещё?"
+            "📌 Я внимательно слушаю. Можете уточнить?",
+            "ℹ️ Для получения справки используйте /help",
+            "🔍 Чем могу помочь?",
+            "💡 Используйте /menu для навигации по разделам"
         ]
         return random.choice(responses)
 
@@ -1578,8 +1129,8 @@ class SpectrumBot:
         self.db = db
         self.ai = ai
         self.spam_tracker = defaultdict(list)
-        self.active_games = {}  # Для хранения активных игр (КНБ, ТТТ, и т.д.)
-        self.mafia_games = {}   # Для кэширования игр в мафию
+        self.active_games = {}
+        self.mafia_games = {}
         self.application = Application.builder().token(TELEGRAM_TOKEN).build()
         self.setup_handlers()
         print("✅ Мега-бот «СПЕКТР» (объединённый) инициализирован")
@@ -1599,25 +1150,21 @@ class SpectrumBot:
         self.application.add_handler(CommandHandler("stats", self.cmd_stats))
         
         # ===== МОДУЛЬ МОДЕРАЦИИ (IRIS) =====
-        # Управление рангами
         self.application.add_handler(CommandHandler("rank", self.cmd_rank))
         self.application.add_handler(CommandHandler("setrank", self.cmd_set_rank))
         self.application.add_handler(CommandHandler("ranks", self.cmd_ranks_list))
         
-        # Предупреждения
         self.application.add_handler(CommandHandler("warn", self.cmd_warn))
         self.application.add_handler(CommandHandler("warns", self.cmd_warns))
         self.application.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
         self.application.add_handler(CommandHandler("unwarn", self.cmd_unwarn))
         self.application.add_handler(CommandHandler("unwarnall", self.cmd_unwarn_all))
         
-        # Мут
         self.application.add_handler(CommandHandler("mute", self.cmd_mute))
         self.application.add_handler(CommandHandler("unmute", self.cmd_unmute))
         self.application.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
         self.application.add_handler(CommandHandler("checkmute", self.cmd_check_mute))
         
-        # Бан
         self.application.add_handler(CommandHandler("ban", self.cmd_ban))
         self.application.add_handler(CommandHandler("unban", self.cmd_unban))
         self.application.add_handler(CommandHandler("banlist", self.cmd_banlist))
@@ -1625,7 +1172,7 @@ class SpectrumBot:
         self.application.add_handler(CommandHandler("kick", self.cmd_kick))
         self.application.add_handler(CommandHandler("amnesty", self.cmd_amnesty))
         
-        # Настройки чата
+        # ===== НАСТРОЙКИ ЧАТА (IRIS) =====
         self.application.add_handler(CommandHandler("rules", self.cmd_rules))
         self.application.add_handler(CommandHandler("setrules", self.cmd_set_rules))
         self.application.add_handler(CommandHandler("welcome", self.cmd_welcome))
@@ -1633,7 +1180,6 @@ class SpectrumBot:
         self.application.add_handler(CommandHandler("goodbye", self.cmd_goodbye))
         self.application.add_handler(CommandHandler("setgoodbye", self.cmd_set_goodbye))
         
-        # Триггеры
         self.application.add_handler(CommandHandler("trigger", self.cmd_trigger))
         self.application.add_handler(CommandHandler("addtrigger", self.cmd_add_trigger))
         self.application.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
@@ -1756,7 +1302,7 @@ class SpectrumBot:
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        if self.has_permission(user_data, 1):  # Модераторы не проверяются
+        if self.has_permission(user_data, 1):
             return False
         
         current_time = time.time()
@@ -1780,28 +1326,23 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
         
-        text = (f.header("СПЕКТР МЕГА-БОТ", "⚡") + "\n\n"
-                f"👋 **Привет, {user.first_name}!**\n\n"
-                f"Я — объединённый бот, который вобрал в себя лучшее от:\n"
-                f"{f.list_item('🛡️ Iris — полная модерация чатов')}\n"
-                f"{f.list_item('🔪 TrueMafia — классическая мафия')}\n"
-                f"{f.list_item('💰 TReanfer — экономика и донат')}\n"
-                f"{f.list_item('🤖 Anya — умный AI с характером')}\n\n"
+        text = (f.header("СПЕКТР МЕГА-БОТ", "⚡") + "\n"
+                f"👋 **Здравствуйте, {user.first_name}!**\n\n"
+                f"Я — официальный бот, объединяющий лучшие функции:\n"
+                f"• 🛡️ **Модерация** (как Iris)\n"
+                f"• 🔪 **Мафия** (как TrueMafia)\n"
+                f"• 💰 **Экономика** (как TReanfer)\n"
+                f"• 🤖 **ИИ-чат** (как Anya)\n\n"
                 
-                f"{f.section('ТВОЙ ПРОФИЛЬ', '👤')}\n"
+                f"{f.section('ТЕКУЩИЙ ПРОФИЛЬ', '📊')}\n"
                 f"{f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n"
-                f"{f.list_item('Алмазы: ' + str(user_data.get('diamonds', 0)) + ' 💎')}\n"
-                f"{f.list_item('Кристаллы: ' + str(user_data.get('crystals', 0)) + ' 🔮')}\n"
                 f"{f.list_item('Ранг: ' + self.get_rank_name(user_data.get('rank', 0)))}\n"
                 f"{f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n\n"
                 
                 f"{f.section('БЫСТРЫЙ СТАРТ', '🚀')}\n"
                 f"{f.command('menu', 'главное меню')}\n"
-                f"{f.command('profile', 'твой профиль')}\n"
-                f"{f.command('shop', 'магазин')}\n"
-                f"{f.command('bosses', 'битва с боссами')}\n"
-                f"{f.command('mafia', 'игра в мафию')}\n"
-                f"{f.command('help', 'все команды')}\n\n"
+                f"{f.command('profile', 'ваш профиль')}\n"
+                f"{f.command('help', 'полная справка')}\n\n"
                 
                 f"👑 **Владелец:** {OWNER_USERNAME}")
         
@@ -1815,115 +1356,47 @@ class SpectrumBot:
     async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню"""
         await update.message.reply_text(
-            f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\n\nВыбери раздел:",
+            f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыберите раздел:",
             reply_markup=IrisKeyboard.main_menu(),
             parse_mode='Markdown'
         )
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Полная справка по командам"""
-        text = (f.header("ПОЛНАЯ СПРАВКА", "📚") + "\n\n"
+        """Полная справка"""
+        text = (f.header("ПОЛНАЯ СПРАВКА", "📚") + "\n"
                 
                 f"{f.section('👤 ПРОФИЛЬ')}\n"
-                f"{f.command('profile', 'твой профиль')}\n"
+                f"{f.command('profile', 'ваш профиль')}\n"
                 f"{f.command('editprofile', 'редактировать профиль')}\n"
                 f"{f.command('stats', 'статистика игр')}\n"
                 f"{f.command('top', 'топ игроков')}\n\n"
                 
                 f"{f.section('🛡️ МОДЕРАЦИЯ (Iris)')}\n"
                 f"{f.command('rank [@user]', 'узнать ранг')}\n"
-                f"{f.command('warn @user [причина]', 'выдать предупреждение')}\n"
-                f"{f.command('warns @user', 'список предупреждений')}\n"
-                f"{f.command('unwarn @user', 'снять предупреждение')}\n"
+                f"{f.command('warn @user [причина]', 'предупреждение')}\n"
                 f"{f.command('mute @user минут [причина]', 'заглушить')}\n"
-                f"{f.command('unmute @user', 'снять мут')}\n"
                 f"{f.command('ban @user [причина]', 'заблокировать')}\n"
-                f"{f.command('unban @user', 'разблокировать')}\n"
                 f"{f.command('banlist', 'список забаненных')}\n"
-                f"{f.command('mutelist', 'список замученных')}\n"
-                f"{f.command('kick @user', 'исключить из чата')}\n"
                 f"{f.command('rules', 'правила чата')}\n"
-                f"{f.command('setrules [текст]', 'установить правила')}\n"
-                f"{f.command('welcome', 'приветствие чата')}\n"
-                f"{f.command('setwelcome [текст]', 'установить приветствие')}\n"
-                f"{f.command('trigger [слово] [ответ]', 'добавить триггер')}\n\n"
+                f"{f.command('setrules [текст]', 'установить правила')}\n\n"
                 
                 f"{f.section('🔪 МАФИЯ (TrueMafia)')}\n"
-                f"{f.command('mafia', 'информация о мафии')}\n"
-                f"{f.command('mafiacreate', 'создать новую игру')}\n"
-                f"{f.command('mafiajoin [ID]', 'присоединиться к игре')}\n"
-                f"{f.command('mafialeave', 'покинуть игру')}\n"
-                f"{f.command('mafialist', 'список активных игр')}\n"
-                f"{f.command('mafiastart', 'начать игру')}\n"
-                f"{f.command('mafiavote [@user]', 'проголосовать днём')}\n"
-                f"{f.command('mafianight [убить] [спасти] [проверить]', 'ночные действия')}\n"
-                f"{f.command('mafiastats', 'статистика игр')}\n\n"
+                f"{f.command('mafia', 'информация')}\n"
+                f"{f.command('mafiacreate', 'создать игру')}\n"
+                f"{f.command('mafiajoin [ID]', 'присоединиться')}\n"
+                f"{f.command('mafiastart', 'начать игру')}\n\n"
                 
                 f"{f.section('💰 ЭКОНОМИКА (TReanfer)')}\n"
                 f"{f.command('shop', 'магазин')}\n"
-                f"{f.command('buy [название]', 'купить предмет')}\n"
-                f"{f.command('inventory', 'инвентарь')}\n"
-                f"{f.command('use [ID]', 'использовать предмет')}\n"
-                f"{f.command('pay @user сумма', 'перевести монеты')}\n"
-                f"{f.command('paydiamond @user сумма', 'перевести алмазы')}\n"
-                f"{f.command('paycrystal @user сумма', 'перевести кристаллы')}\n"
+                f"{f.command('buy [ID]', 'купить предмет')}\n"
                 f"{f.command('daily', 'ежедневный бонус')}\n"
-                f"{f.command('weekly', 'недельный бонус')}\n"
-                f"{f.command('streak', 'текущий стрик')}\n\n"
+                f"{f.command('pay @user сумма', 'перевести монеты')}\n\n"
                 
-                f"{f.section('👑 ПРИВИЛЕГИИ')}\n"
-                f"{f.command('donate', 'информация о привилегиях')}\n"
-                f"{f.command('vip', 'купить VIP (5000💰)')}\n"
-                f"{f.command('premium', 'купить PREMIUM (15000💰)')}\n"
-                f"{f.command('lord', 'купить LORD (30000💰)')}\n"
-                f"{f.command('ultra', 'купить ULTRA (50000💰)')}\n\n"
-                
-                f"{f.section('👥 КЛАНЫ')}\n"
-                f"{f.command('clan', 'информация о твоём клане')}\n"
-                f"{f.command('clancreate [название]', 'создать клан')}\n"
-                f"{f.command('clanjoin [ID]', 'вступить в клан')}\n"
-                f"{f.command('clanleave', 'покинуть клан')}\n"
-                f"{f.command('clantop', 'топ кланов')}\n\n"
-                
-                f"{f.section('👾 БОССЫ И БИТВЫ')}\n"
+                f"{f.section('👾 ИГРЫ')}\n"
                 f"{f.command('bosses', 'список боссов')}\n"
-                f"{f.command('boss [ID]', 'информация о боссе')}\n"
-                f"{f.command('bossfight [ID]', 'атаковать босса')}\n"
-                f"{f.command('bossstats', 'статистика битв')}\n"
-                f"{f.command('regen', 'восстановить ❤️ и ⚡')}\n\n"
-                
-                f"{f.section('🎰 КАЗИНО')}\n"
-                f"{f.command('casino', 'меню казино')}\n"
-                f"{f.command('roulette [ставка] [цвет]', 'рулетка')}\n"
-                f"{f.command('dice [ставка]', 'кости')}\n"
-                f"{f.command('blackjack [ставка]', 'блэкджек')}\n"
-                f"{f.command('slots [ставка]', 'слоты')}\n\n"
-                
-                f"{f.section('🎮 ИГРЫ')}\n"
-                f"{f.command('rps', 'камень-ножницы-бумага')}\n"
-                f"{f.command('ttt', 'крестики-нолики')}\n"
-                f"{f.command('tttmove [1-9]', 'сделать ход')}\n"
-                f"{f.command('memory', 'мемори (найди пары)')}\n"
-                f"{f.command('memoryplay [номер]', 'открыть карту')}\n"
-                f"{f.command('minesweeper', 'сапёр')}\n"
-                f"{f.command('mineopen [ряд] [колонка]', 'открыть клетку')}\n\n"
-                
-                f"{f.section('💰 ДОЛГИ')}\n"
-                f"{f.command('debt @user сумма [причина]', 'дать в долг')}\n"
-                f"{f.command('debts', 'список долгов')}\n"
-                f"{f.command('paydebt [ID]', 'оплатить долг')}\n\n"
-                
-                f"{f.section('🏆 ДОСТИЖЕНИЯ')}\n"
-                f"{f.command('achievements', 'твои достижения')}\n\n"
-                
-                f"{f.section('🌍 ПРОЧЕЕ')}\n"
-                f"{f.command('weather [город]', 'погода')}\n"
-                f"{f.command('news', 'новости бота')}\n"
-                f"{f.command('quote', 'цитата дня')}\n"
-                f"{f.command('players', 'количество игроков')}\n"
-                f"{f.command('mycrime', 'случайная статья УК')}\n"
-                f"{f.command('engfree', 'бесплатная энергия (раз/час)')}\n"
-                f"{f.command('sms @user [текст]', 'личное сообщение')}\n\n"
+                f"{f.command('casino', 'казино')}\n"
+                f"{f.command('rps', 'КНБ')}\n"
+                f"{f.command('memory', 'мемори')}\n\n"
                 
                 f"👑 **Владелец:** {OWNER_USERNAME}")
         
@@ -1956,19 +1429,19 @@ class SpectrumBot:
         
         # Клан
         clan = self.db.get_user_clan(user.id)
-        clan_name = clan[1] if clan else "Нет"
+        clan_name = clan[1] if clan else "Не состоит"
         
-        text = (f.header("ПРОФИЛЬ ИГРОКА", "👤") + "\n\n"
+        text = (f.header("ПРОФИЛЬ", "👤") + "\n"
                 f"**{user_data.get('nickname') or user.first_name}** "
                 f"{user_data.get('title', '')}\n"
-                f"_{user_data.get('motto', 'Нет девиза')}_\n\n"
+                f"_{user_data.get('motto', '—')}_\n\n"
                 
                 f"{f.section('ХАРАКТЕРИСТИКИ', '📊')}\n"
                 f"{f.stat('Уровень', str(current_level))}\n"
                 f"{f.stat('Опыт', exp_progress)}\n"
                 f"{f.stat('Монеты', str(user_data.get('coins', 0)) + ' 💰')}\n"
                 f"{f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
-                f"{f.stat('Кристаллы', str(user_data.get('crystals', 0)) + ' 🔮')}\n"
+                f"{f.stat('Кристаллы', str(user_data.get('crystals', 0)) + ' 🔮')}\n\n"
                 
                 f"{f.section('БОЕВЫЕ', '⚔️')}\n"
                 f"{f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
@@ -1987,10 +1460,7 @@ class SpectrumBot:
                 f"{f.section('СТАТИСТИКА ИГР', '🎮')}\n"
                 f"{f.stat('РПС побед', str(user_data.get('rps_wins', 0)))}\n"
                 f"{f.stat('Казино побед', str(user_data.get('casino_wins', 0)))}\n"
-                f"{f.stat('Мафия побед', str(user_data.get('mafia_wins', 0)))}\n"
-                f"{f.stat('TTT побед', str(user_data.get('ttt_wins', 0)))}\n"
-                f"{f.stat('Мемори побед', str(user_data.get('memory_wins', 0)))}\n"
-                f"{f.stat('Сапёр побед', str(user_data.get('mine_wins', 0)))}\n\n"
+                f"{f.stat('Мафия побед', str(user_data.get('mafia_wins', 0)))}\n\n"
                 
                 f"{f.section('О СЕБЕ', 'ℹ️')}\n"
                 f"{f.list_item('Пол: ' + user_data.get('gender', 'не указан'))}\n"
@@ -2010,7 +1480,7 @@ class SpectrumBot:
     
     async def cmd_edit_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Редактирование профиля"""
-        text = (f.header("РЕДАКТИРОВАНИЕ ПРОФИЛЯ", "✏️") + "\n\n"
+        text = (f.header("РЕДАКТИРОВАНИЕ ПРОФИЛЯ", "✏️") + "\n"
                 f"{f.command('nick [ник]', 'установить ник')}\n"
                 f"{f.command('title [титул]', 'установить титул')}\n"
                 f"{f.command('motto [девиз]', 'установить девиз')}\n"
@@ -2021,17 +1491,128 @@ class SpectrumBot:
                 f"{f.example('title Легенда')}\n"
                 f"{f.example('motto Carpe diem')}\n"
                 f"{f.example('gender м')}\n"
-                f"{f.example('city Москва')}\n"
-                f"{f.example('bio Люблю играть в мафию')}")
+                f"{f.example('city Москва')}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить ник"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите ник: /nick НовыйНик"))
+            return
+        
+        nick = " ".join(context.args)
+        if len(nick) > 30:
+            await update.message.reply_text(f.error("Ник слишком длинный (макс 30 символов)"))
+            return
+        
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET nickname = ? WHERE user_id = ?",
+            (nick, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Ник установлен: {nick}"))
+    
+    async def cmd_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить титул"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите титул: /title Легенда"))
+            return
+        
+        title = " ".join(context.args)
+        if len(title) > 30:
+            await update.message.reply_text(f.error("Титул слишком длинный (макс 30 символов)"))
+            return
+        
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET title = ? WHERE user_id = ?",
+            (title, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Титул установлен: {title}"))
+    
+    async def cmd_motto(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить девиз"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите девиз: /motto Carpe diem"))
+            return
+        
+        motto = " ".join(context.args)
+        if len(motto) > 100:
+            await update.message.reply_text(f.error("Девиз слишком длинный (макс 100 символов)"))
+            return
+        
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET motto = ? WHERE user_id = ?",
+            (motto, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Девиз установлен: {motto}"))
+    
+    async def cmd_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить пол"""
+        if not context.args or context.args[0].lower() not in ['м', 'ж', 'др']:
+            await update.message.reply_text(f.error("Укажите пол: /gender [м|ж|др]"))
+            return
+        
+        gender = "мужской" if context.args[0].lower() == 'м' else "женский" if context.args[0].lower() == 'ж' else "другой"
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET gender = ? WHERE user_id = ?",
+            (gender, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Пол установлен: {gender}"))
+    
+    async def cmd_city(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить город"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите город: /city Москва"))
+            return
+        
+        city = " ".join(context.args)
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET city = ? WHERE user_id = ?",
+            (city, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success(f"Город установлен: {city}"))
+    
+    async def cmd_bio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить описание"""
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите описание: /bio Текст описания"))
+            return
+        
+        bio = " ".join(context.args)
+        if len(bio) > 500:
+            await update.message.reply_text(f.error("Описание слишком длинное (макс 500 символов)"))
+            return
+        
+        user_id = update.effective_user.id
+        self.db.cursor.execute(
+            "UPDATE users SET bio = ? WHERE user_id = ?",
+            (bio, user_id)
+        )
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f.success("Описание сохранено!"))
     
     async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Статистика игр"""
         user = update.effective_user
         user_data = self.db.get_user_by_id(user.id)
         
-        text = (f.header("СТАТИСТИКА ИГР", "📊") + "\n\n"
+        text = (f.header("СТАТИСТИКА ИГР", "📊") + "\n"
                 f"{f.section('✊ КНБ')}\n"
                 f"{f.stat('Побед', str(user_data.get('rps_wins', 0)))}\n"
                 f"{f.stat('Поражений', str(user_data.get('rps_losses', 0)))}\n"
@@ -2045,7 +1626,7 @@ class SpectrumBot:
                 f"{f.stat('Побед', str(user_data.get('mafia_wins', 0)))}\n"
                 f"{f.stat('Игр', str(user_data.get('mafia_games', 0)))}\n\n"
                 
-                f"{f.section('⭕ КРЕСТИКИ-НОЛИКИ')}\n"
+                f"{f.section('⭕ TTT')}\n"
                 f"{f.stat('Побед', str(user_data.get('ttt_wins', 0)))}\n"
                 f"{f.stat('Поражений', str(user_data.get('ttt_losses', 0)))}\n"
                 f"{f.stat('Ничьих', str(user_data.get('ttt_draws', 0)))}\n\n"
@@ -2066,7 +1647,7 @@ class SpectrumBot:
         top_level = self.db.get_top("level", 10)
         top_boss = self.db.get_top("boss_kills", 10)
         
-        text = f.header("ТОП ИГРОКОВ", "🏆") + "\n\n"
+        text = f.header("ТОП ИГРОКОВ", "🏆") + "\n"
         
         text += f.section("ПО МОНЕТАМ", "💰") + "\n"
         for i, (name, value) in enumerate(top_coins, 1):
@@ -2109,7 +1690,7 @@ class SpectrumBot:
         user_data = self.db.get_user_by_id(target_id)
         rank = user_data.get('rank', 0)
         
-        text = (f.header("ИНФОРМАЦИЯ О РАНГЕ", "🛡️") + "\n\n"
+        text = (f.header("ИНФОРМАЦИЯ О РАНГЕ", "🛡️") + "\n"
                 f"{f.list_item('Пользователь: ' + target_name)}\n"
                 f"{f.list_item('Ранг: ' + self.get_rank_name(rank))}\n"
                 f"{f.list_item('Уровень доступа: ' + str(rank))}")
@@ -2121,7 +1702,7 @@ class SpectrumBot:
         admin = update.effective_user
         admin_data = self.db.get_user_by_id(admin.id)
         
-        if not self.has_permission(admin_data, 4):  # Только админы 4+ ранга
+        if not self.has_permission(admin_data, 4):
             await update.message.reply_text(f.error("Недостаточно прав"))
             return
         
@@ -2146,16 +1727,16 @@ class SpectrumBot:
         
         self.db.set_user_rank(target_user['user_id'], new_rank, admin.id)
         
-        text = (f.header("РАНГ ИЗМЕНЁН", "✅") + "\n\n"
+        text = (f.header("РАНГ ИЗМЕНЁН", "✅") + "\n"
                 f"{f.list_item('Пользователь: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Новый ранг: ' + self.get_rank_name(new_rank))}\n"
-                f"{f.list_item('Админ: ' + admin.first_name)}")
+                f"{f.list_item('Администратор: ' + admin.first_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_ranks_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Список рангов"""
-        text = (f.header("СИСТЕМА РАНГОВ", "🛡️") + "\n\n"
+        text = (f.header("СИСТЕМА РАНГОВ", "🛡️") + "\n"
                 f"{f.list_item('0 - 👤 Участник')}\n"
                 f"{f.list_item('1 - 🛡️ Младший модератор')}\n"
                 f"{f.list_item('2 - 🛡️ Старший модератор')}\n"
@@ -2171,7 +1752,7 @@ class SpectrumBot:
         admin = update.effective_user
         admin_data = self.db.get_user_by_id(admin.id)
         
-        if not self.has_permission(admin_data, 1):  # Минимум младший модератор
+        if not self.has_permission(admin_data, 1):
             await update.message.reply_text(f.error("Недостаточно прав"))
             return
         
@@ -2189,20 +1770,19 @@ class SpectrumBot:
         
         result = self.db.add_warn(target_user['user_id'], admin.id, reason)
         
-        text = (f.header("ПРЕДУПРЕЖДЕНИЕ", "⚠️") + "\n\n"
+        text = (f.header("ПРЕДУПРЕЖДЕНИЕ", "⚠️") + "\n"
                 f"{f.list_item('Пользователь: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Предупреждений: ' + str(result['warns_count']) + '/3')}\n"
                 f"{f.list_item('Причина: ' + reason)}\n"
-                f"{f.list_item('Админ: ' + admin.first_name)}")
+                f"{f.list_item('Администратор: ' + admin.first_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
         
-        # Если набралось 3 варна - автоматический мут
         if result['warns_count'] >= 3:
             self.db.mute_user(target_user['user_id'], 1440, admin.id, "3 предупреждения")
             await context.bot.send_message(
                 chat_id=update.effective_chat.id,
-                text=f.warning(f"{target_user.get('first_name', 'Пользователь')} получил 3 варна и замучен на 24ч")
+                text=f.warning(f"{target_user.get('first_name')} получил 3 варна и замучен на 24 часа")
             )
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2224,7 +1804,7 @@ class SpectrumBot:
             await update.message.reply_text(f.info(f"У {name} нет предупреждений"))
             return
         
-        text = f.header(f"ПРЕДУПРЕЖДЕНИЯ: {name}", "📋") + "\n\n"
+        text = f.header(f"ПРЕДУПРЕЖДЕНИЯ: {name}", "📋") + "\n"
         
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
@@ -2232,9 +1812,9 @@ class SpectrumBot:
             date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
             
             text += (f"**ID: {warn['id']}**\n"
-                     f"{f.list_item('Причина: ' + warn['reason'])}\n"
-                     f"{f.list_item('Админ: ' + admin_name)}\n"
-                     f"{f.list_item('Дата: ' + date)}\n\n")
+                     f"{f.param('Причина', warn['reason'])}\n"
+                     f"{f.param('Администратор', admin_name)}\n"
+                     f"{f.param('Дата', date)}\n\n")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2244,10 +1824,10 @@ class SpectrumBot:
         warns_list = self.db.get_warns(user_id)
         
         if not warns_list:
-            await update.message.reply_text(f.info("У тебя нет предупреждений"))
+            await update.message.reply_text(f.info("У вас нет предупреждений"))
             return
         
-        text = f.header("ТВОИ ПРЕДУПРЕЖДЕНИЯ", "📋") + "\n\n"
+        text = f.header("ВАШИ ПРЕДУПРЕЖДЕНИЯ", "📋") + "\n"
         
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
@@ -2255,9 +1835,9 @@ class SpectrumBot:
             date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
             
             text += (f"**ID: {warn['id']}**\n"
-                     f"{f.list_item('Причина: ' + warn['reason'])}\n"
-                     f"{f.list_item('Админ: ' + admin_name)}\n"
-                     f"{f.list_item('Дата: ' + date)}\n\n")
+                     f"{f.param('Причина', warn['reason'])}\n"
+                     f"{f.param('Администратор', admin_name)}\n"
+                     f"{f.param('Дата', date)}\n\n")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2297,7 +1877,7 @@ class SpectrumBot:
         admin = update.effective_user
         admin_data = self.db.get_user_by_id(admin.id)
         
-        if not self.has_permission(admin_data, 3):  # Минимум младший админ
+        if not self.has_permission(admin_data, 3):
             await update.message.reply_text(f.error("Недостаточно прав"))
             return
         
@@ -2350,12 +1930,12 @@ class SpectrumBot:
         
         until_str = mute_until.strftime("%d.%m.%Y %H:%M")
         
-        text = (f.header("МУТ", "🔇") + "\n\n"
+        text = (f.header("МУТ", "🔇") + "\n"
                 f"{f.list_item('Пользователь: ' + name)}\n"
                 f"{f.list_item('Срок: ' + str(minutes) + ' минут')}\n"
                 f"{f.list_item('До: ' + until_str)}\n"
                 f"{f.list_item('Причина: ' + reason)}\n"
-                f"{f.list_item('Админ: ' + admin.first_name)}")
+                f"{f.list_item('Администратор: ' + admin.first_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2398,7 +1978,7 @@ class SpectrumBot:
             await update.message.reply_text(f.info("Нет пользователей в муте"))
             return
         
-        text = f.header("СПИСОК ЗАМУЧЕННЫХ", "🔇") + "\n\n"
+        text = f.header("СПИСОК ЗАМУЧЕННЫХ", "🔇") + "\n"
         
         for user_id, name, mute_until in muted[:10]:
             if mute_until:
@@ -2439,7 +2019,7 @@ class SpectrumBot:
         admin = update.effective_user
         admin_data = self.db.get_user_by_id(admin.id)
         
-        if not self.has_permission(admin_data, 2):  # Минимум старший модератор
+        if not self.has_permission(admin_data, 2):
             await update.message.reply_text(f.error("Недостаточно прав"))
             return
         
@@ -2458,10 +2038,10 @@ class SpectrumBot:
         self.db.ban_user(target_user['user_id'], admin.id, reason)
         name = target_user.get('first_name', 'Пользователь')
         
-        text = (f.header("БЛОКИРОВКА", "🔴") + "\n\n"
+        text = (f.header("БЛОКИРОВКА", "🔴") + "\n"
                 f"{f.list_item('Пользователь: ' + name)}\n"
                 f"{f.list_item('Причина: ' + reason)}\n"
-                f"{f.list_item('Админ: ' + admin.first_name)}")
+                f"{f.list_item('Администратор: ' + admin.first_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2495,7 +2075,7 @@ class SpectrumBot:
             f.success(f"Блокировка снята с {name}"),
             parse_mode='Markdown'
         )
-    
+
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Список забаненных"""
         page = 1
@@ -2515,9 +2095,9 @@ class SpectrumBot:
         for i, ban in enumerate(bans, 1):
             date = datetime.datetime.fromisoformat(ban['date']).strftime("%d.%m.%Y") if ban['date'] else "неизвестно"
             text += (f"{i}. {ban['name']}\n"
-                     f"└ Причина: {ban['reason']}\n"
-                     f"└ Дата: {date}\n"
-                     f"└ Заблокировал: {ban['admin']}\n\n")
+                     f"{f.param('Причина', ban['reason'])}\n"
+                     f"{f.param('Дата', date)}\n"
+                     f"{f.param('Заблокировал', ban['admin'])}\n\n")
         
         await update.message.reply_text(
             text,
@@ -2547,11 +2127,11 @@ class SpectrumBot:
         
         date = datetime.datetime.fromisoformat(ban_info['date']).strftime("%d.%m.%Y %H:%M") if ban_info['date'] else "неизвестно"
         
-        text = (f.header("ПРИЧИНА БАНА", "🔴") + "\n\n"
+        text = (f.header("ПРИЧИНА БАНА", "🔴") + "\n"
                 f"{f.list_item('Пользователь: ' + name)}\n"
                 f"{f.list_item('Причина: ' + ban_info['reason'])}\n"
                 f"{f.list_item('Дата: ' + date)}\n"
-                f"{f.list_item('Админ: ' + ban_info['admin_name'])}")
+                f"{f.list_item('Администратор: ' + ban_info['admin_name'])}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2578,14 +2158,13 @@ class SpectrumBot:
         
         name = target_user.get('first_name', 'Пользователь')
         
-        text = (f.header("ИСКЛЮЧЕНИЕ", "👢") + "\n\n"
+        text = (f.header("ИСКЛЮЧЕНИЕ", "👢") + "\n"
                 f"{f.list_item('Пользователь: ' + name)}\n"
                 f"{f.list_item('Причина: ' + reason)}\n"
-                f"{f.list_item('Админ: ' + admin.first_name)}")
+                f"{f.list_item('Администратор: ' + admin.first_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
         
-        # Здесь код для исключения из чата
         try:
             await context.bot.ban_chat_member(update.effective_chat.id, target_user['user_id'])
             await context.bot.unban_chat_member(update.effective_chat.id, target_user['user_id'])
@@ -2597,26 +2176,29 @@ class SpectrumBot:
         admin = update.effective_user
         admin_data = self.db.get_user_by_id(admin.id)
         
-        if not self.has_permission(admin_data, 4):  # Только старшие админы
+        if not self.has_permission(admin_data, 4):
             await update.message.reply_text(f.error("Недостаточно прав"))
             return
         
-        # Получаем всех забаненных
         bans, _ = self.db.get_banlist(1, 1000)
         
         for ban in bans:
             self.db.unban_user(ban['user_id'])
         
         await update.message.reply_text(
-            f.success(f"Амнистия проведена! Разбанено {len(bans)} пользователей."),
+            f.success(f"Амнистия проведена! Разблокировано {len(bans)} пользователей."),
             parse_mode='Markdown'
         )
-
-     async def cmd_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    
+    # ========== НАСТРОЙКИ ЧАТА (IRIS) ==========
+    
+    async def cmd_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Показать правила чата"""
         chat_id = update.effective_chat.id
         rules = self.db.get_rules(chat_id)
-        text = (f.header("ПРАВИЛА ЧАТА", "📜") + "\n\n" + rules)
+        
+        text = f.header("ПРАВИЛА ЧАТА", "📜") + "\n" + rules
+        
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2624,6 +2206,7 @@ class SpectrumBot:
         if not context.args:
             await update.message.reply_text(f.error("Укажите правила: /setrules Текст правил"))
             return
+        
         rules = " ".join(context.args)
         chat_id = update.effective_chat.id
         self.db.set_rules(chat_id, rules)
@@ -2633,10 +2216,12 @@ class SpectrumBot:
         """Показать приветствие чата"""
         chat_id = update.effective_chat.id
         welcome = self.db.get_welcome(chat_id)
+        
         if welcome:
-            text = f.header("ПРИВЕТСТВИЕ", "👋") + "\n\n" + welcome
+            text = f.header("ПРИВЕТСТВИЕ", "👋") + "\n" + welcome
         else:
             text = f.info("Приветствие не установлено")
+        
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2644,6 +2229,7 @@ class SpectrumBot:
         if not context.args:
             await update.message.reply_text(f.error("Укажите текст приветствия"))
             return
+        
         welcome = " ".join(context.args)
         chat_id = update.effective_chat.id
         self.db.set_welcome(chat_id, welcome)
@@ -2653,10 +2239,12 @@ class SpectrumBot:
         """Показать прощание чата"""
         chat_id = update.effective_chat.id
         goodbye = self.db.get_goodbye(chat_id)
+        
         if goodbye:
-            text = f.header("ПРОЩАНИЕ", "👋") + "\n\n" + goodbye
+            text = f.header("ПРОЩАНИЕ", "👋") + "\n" + goodbye
         else:
             text = f.info("Прощание не установлено")
+        
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_set_goodbye(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2664,16 +2252,97 @@ class SpectrumBot:
         if not context.args:
             await update.message.reply_text(f.error("Укажите текст прощания"))
             return
+        
         goodbye = " ".join(context.args)
         chat_id = update.effective_chat.id
         self.db.set_goodbye(chat_id, goodbye)
         await update.message.reply_text(f.success("Прощание установлено!"), parse_mode='Markdown')
     
+    async def cmd_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Управление триггерами"""
+        await update.message.reply_text(
+            f.info("Используйте /addtrigger [слово] [ответ] для создания триггера"),
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить триггер"""
+        admin = update.effective_user
+        admin_data = self.db.get_user_by_id(admin.id)
+        
+        if not self.has_permission(admin_data, 2):
+            await update.message.reply_text(f.error("Недостаточно прав"))
+            return
+        
+        if len(context.args) < 2:
+            await update.message.reply_text(f.error("Использование: /addtrigger [слово] [ответ]"))
+            return
+        
+        trigger_word = context.args[0].lower()
+        response = " ".join(context.args[1:])
+        chat_id = update.effective_chat.id
+        
+        self.db.add_trigger(chat_id, trigger_word, response, admin.id)
+        
+        await update.message.reply_text(
+            f.success(f"Триггер '{trigger_word}' добавлен!"),
+            parse_mode='Markdown'
+        )
+    
+    async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список триггеров чата"""
+        chat_id = update.effective_chat.id
+        triggers = self.db.get_triggers(chat_id)
+        
+        if not triggers:
+            await update.message.reply_text(f.info("В этом чате нет триггеров"))
+            return
+        
+        text = f.header("ТРИГГЕРЫ ЧАТА", "⚡") + "\n"
+        
+        for trigger in triggers:
+            trigger_id, _, word, response, creator_id, created = trigger
+            creator = self.db.get_user_by_id(creator_id)
+            creator_name = creator.get('first_name', 'Неизвестно') if creator else 'Неизвестно'
+            
+            text += (f"**ID: {trigger_id}**\n"
+                     f"{f.param('Слово', word)}\n"
+                     f"{f.param('Ответ', response[:50] + '...' if len(response) > 50 else response)}\n"
+                     f"{f.param('Создатель', creator_name)}\n\n")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_del_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить триггер"""
+        admin = update.effective_user
+        admin_data = self.db.get_user_by_id(admin.id)
+        
+        if not self.has_permission(admin_data, 2):
+            await update.message.reply_text(f.error("Недостаточно прав"))
+            return
+        
+        if not context.args:
+            await update.message.reply_text(f.error("Укажите ID триггера: /deltrigger [ID]"))
+            return
+        
+        try:
+            trigger_id = int(context.args[0])
+        except:
+            await update.message.reply_text(f.error("Неверный ID"))
+            return
+        
+        self.db.remove_trigger(trigger_id)
+        
+        await update.message.reply_text(
+            f.success(f"Триггер {trigger_id} удалён!"),
+            parse_mode='Markdown'
+        )
+    
     # ========== МОДУЛЬ МАФИИ (TRUEMAFIA) ==========
     
     async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о мафии"""
-        text = (f.header("МАФИЯ", "🔪") + "\n\n"
+        text = (f.header("МАФИЯ", "🔪") + "\n"
                 f"{f.section('ПРАВИЛА ИГРЫ')}\n"
                 f"{f.list_item('Игроки делятся на мафию и мирных жителей')}\n"
                 f"{f.list_item('Ночью мафия убивает, мирные спят')}\n"
@@ -2688,12 +2357,11 @@ class SpectrumBot:
                 f"{f.list_item('👤 Мирный - ищет мафию днём')}\n\n"
                 
                 f"{f.section('КОМАНДЫ')}\n"
-                f"{f.command('mafiacreate', 'создать новую игру')}\n"
-                f"{f.command('mafiajoin [ID]', 'присоединиться к игре')}\n"
-                f"{f.command('mafialist', 'список активных игр')}\n"
+                f"{f.command('mafiacreate', 'создать игру')}\n"
+                f"{f.command('mafiajoin [ID]', 'присоединиться')}\n"
+                f"{f.command('mafialist', 'список игр')}\n"
                 f"{f.command('mafiastart', 'начать игру')}\n"
-                f"{f.command('mafiavote @user', 'проголосовать днём')}\n"
-                f"{f.command('mafianight [убить] [спасти] [проверить]', 'ночные действия')}")
+                f"{f.command('mafiavote @user', 'проголосовать днём')}")
         
         await update.message.reply_text(
             text,
@@ -2705,20 +2373,18 @@ class SpectrumBot:
         """Создать игру в мафию"""
         user_id = update.effective_user.id
         
-        # Проверяем, не участвует ли уже в игре
         active_games = self.db.get_active_mafia_games()
         for game in active_games:
-            players = json.loads(game[4]) if isinstance(game[4], str) else []
+            players = json.loads(game[4])
             if user_id in players:
                 await update.message.reply_text(f.error("Вы уже участвуете в игре!"))
                 return
         
         game_id = self.db.create_mafia_game(user_id)
         
-        text = (f.header("ИГРА СОЗДАНА", "🔪") + "\n\n"
+        text = (f.header("ИГРА СОЗДАНА", "🔪") + "\n"
                 f"{f.list_item('ID игры: ' + str(game_id))}\n"
                 f"{f.list_item('Создатель: ' + update.effective_user.first_name)}\n"
-                f"{f.list_item('Игроков: 1/10')}\n"
                 f"{f.list_item('Статус: ожидание игроков')}\n\n"
                 f"Присоединиться: /mafiajoin {game_id}")
         
@@ -2763,13 +2429,12 @@ class SpectrumBot:
                 parse_mode='Markdown'
             )
         else:
-            await update.message.reply_text(f.error("Не удалось присоединиться к игре"))
+            await update.message.reply_text(f.error("Не удалось присоединиться"))
     
     async def cmd_mafia_leave(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Покинуть игру"""
         user_id = update.effective_user.id
         
-        # Ищем игру, где участвует пользователь
         active_games = self.db.get_active_mafia_games()
         game_id = None
         
@@ -2796,18 +2461,18 @@ class SpectrumBot:
             await update.message.reply_text(f.info("Нет активных игр"))
             return
         
-        text = f.header("АКТИВНЫЕ ИГРЫ", "📋") + "\n\n"
+        text = f.header("АКТИВНЫЕ ИГРЫ", "📋") + "\n"
         
         for game in games:
             game_id, creator_id, status, players_str = game[0], game[1], game[2], game[4]
-            players = json.loads(players_str) if isinstance(players_str, str) else []
+            players = json.loads(players_str)
             creator = self.db.get_user_by_id(creator_id)
             creator_name = creator.get('first_name', 'Неизвестно') if creator else 'Неизвестно'
             
             text += (f"**ID: {game_id}**\n"
-                     f"└ Создатель: {creator_name}\n"
-                     f"└ Статус: {'⏳ ожидание' if status == 'waiting' else '🔴 игра'}\n"
-                     f"└ Игроков: {len(players)}/10\n\n")
+                     f"{f.param('Создатель', creator_name)}\n"
+                     f"{f.param('Статус', '⏳ ожидание' if status == 'waiting' else '🔴 игра')}\n"
+                     f"{f.param('Игроков', str(len(players)) + '/10')}\n\n")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -2815,7 +2480,6 @@ class SpectrumBot:
         """Начать игру"""
         user_id = update.effective_user.id
         
-        # Ищем игру, созданную пользователем
         games = self.db.get_active_mafia_games()
         game_id = None
         
@@ -2833,7 +2497,6 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Не удалось начать игру (нужно минимум 5 игроков)"))
             return
         
-        # Отправляем роли игрокам в личку
         game = self.db.get_mafia_game(game_id)
         players = json.loads(game['players'])
         roles = json.loads(game['roles'])
@@ -2857,17 +2520,16 @@ class SpectrumBot:
             try:
                 await context.bot.send_message(
                     chat_id=player_id,
-                    text=(f.header("МАФИЯ: ТВОЯ РОЛЬ", role_emoji.split()[0]) + "\n\n"
+                    text=(f.header("МАФИЯ: ВАША РОЛЬ", role_emoji.split()[0]) + "\n"
                           f"{f.list_item('Роль: ' + role_emoji)}\n"
                           f"{f.list_item(role_desc)}\n\n"
-                          f"Ночь наступает! Мафия может убить.")
+                          f"Ночь наступает!")
                 )
             except:
                 pass
         
-        # Объявляем в чате
         mafia_count = result['mafia_count']
-        text = (f.header("ИГРА НАЧАЛАСЬ", "🔪") + "\n\n"
+        text = (f.header("ИГРА НАЧАЛАСЬ", "🔪") + "\n"
                 f"{f.list_item(f'Всего игроков: {len(players)}')}\n"
                 f"{f.list_item(f'Мафия: {mafia_count}')}\n"
                 f"{f.list_item('Шериф: есть' if result['sheriff_count'] > 0 else 'Шериф: нет')}\n"
@@ -2892,7 +2554,6 @@ class SpectrumBot:
         
         target_id = target_user['user_id']
         
-        # Ищем активную игру, где участвует пользователь
         games = self.db.get_active_mafia_games()
         game_id = None
         
@@ -2926,7 +2587,6 @@ class SpectrumBot:
         """Ночные действия (для мафии, шерифа, доктора)"""
         user_id = update.effective_user.id
         
-        # Ищем активную игру
         games = self.db.get_active_mafia_games()
         game_id = None
         user_role = None
@@ -2936,7 +2596,7 @@ class SpectrumBot:
                 players = json.loads(game[4])
                 if user_id in players:
                     game_id = game[0]
-                    roles = json.loads(game[5]) if isinstance(game[5], str) else {}
+                    roles = json.loads(game[5])
                     user_role = roles.get(str(user_id))
                     break
         
@@ -2949,7 +2609,6 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Сейчас дневная фаза. Действия ночью невозможны."))
             return
         
-        # Парсим аргументы в зависимости от роли
         mafia_kill = None
         doctor_save = None
         sheriff_check = None
@@ -2987,9 +2646,7 @@ class SpectrumBot:
                     parse_mode='Markdown'
                 )
             
-            # Если все действия совершены, завершаем ночь
             if result.get('day'):
-                # Завершаем день и переходим к голосованию
                 day_result = self.db.mafia_end_day(game_id)
                 
                 if day_result['success']:
@@ -2999,7 +2656,7 @@ class SpectrumBot:
                         if u:
                             killed_names.append(u.get('first_name', 'Неизвестно'))
                     
-                    text = (f.header("НАСТУПИЛ ДЕНЬ", "☀️") + "\n\n")
+                    text = (f.header("НАСТУПИЛ ДЕНЬ", "☀️") + "\n")
                     
                     if killed_names:
                         text += f"{f.list_item('Убитые: ' + ', '.join(killed_names))}\n"
@@ -3015,8 +2672,7 @@ class SpectrumBot:
                         winner = "Мафия" if day_result['winner'] == 'mafia' else "Мирные"
                         text += f"\n{f.success(f'ИГРА ОКОНЧЕНА! Победила {winner}!')}"
                         
-                        # Обновляем статистику
-                        for player_id in json.loads(game['players']):
+                        for player_id in players:
                             if day_result['winner'] == 'mafia' and roles.get(str(player_id)) == 'mafia':
                                 self.db.add_stat(player_id, "mafia_wins", 1)
                             elif day_result['winner'] == 'civilians' and roles.get(str(player_id)) != 'mafia':
@@ -3029,6 +2685,25 @@ class SpectrumBot:
                     )
         else:
             await update.message.reply_text(f.error(result.get('reason', 'Не удалось выполнить действие')))
+    
+    async def cmd_mafia_day_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Алиас для mafia_vote"""
+        await self.cmd_mafia_vote(update, context)
+    
+    async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика игр в мафию"""
+        user_id = update.effective_user.id
+        user_data = self.db.get_user_by_id(user_id)
+        
+        wins = user_data.get('mafia_wins', 0)
+        games = user_data.get('mafia_games', 0)
+        
+        text = (f.header("СТАТИСТИКА МАФИИ", "🔪") + "\n"
+                f"{f.stat('Побед', str(wins))}\n"
+                f"{f.stat('Сыграно игр', str(games))}\n"
+                f"{f.stat('Винрейт', str(round(wins/games*100 if games > 0 else 0, 1)) + '%')}")
+        
+        await update.message.reply_text(text, parse_mode='Markdown')
 
     # ========== МОДУЛЬ ЭКОНОМИКИ (TREANFER) ==========
     
@@ -3036,7 +2711,7 @@ class SpectrumBot:
         """Магазин предметов"""
         items = self.db.get_shop_items()
         
-        text = f.header("МАГАЗИН", "🛍") + "\n\n"
+        text = f.header("МАГАЗИН", "🛍") + "\n"
         
         for item in items:
             item_id, name, desc, price_coins, price_diamonds, item_type, value, stock = item[:8]
@@ -3044,54 +2719,39 @@ class SpectrumBot:
             stock_str = f" (осталось: {stock})" if stock > 0 else " (∞)" if stock == -1 else " (0)"
             
             text += (f"**{item_id}. {name}** {price_str}{stock_str}\n"
-                     f"└ {desc}\n\n")
+                     f"{f.param('Описание', desc)}\n\n")
         
-        text += f"{f.command('buy [название или ID]', 'купить предмет')}\n"
-        text += f"{f.command('inventory', 'твой инвентарь')}"
+        text += f"{f.command('buy [ID]', 'купить предмет')}\n"
+        text += f"{f.command('inventory', 'ваш инвентарь')}"
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Купить предмет"""
         if not context.args:
-            await update.message.reply_text(f.error("Укажите предмет: /buy [название или ID]"))
+            await update.message.reply_text(f.error("Укажите ID предмета: /buy 1"))
             return
         
-        query = " ".join(context.args).lower()
+        try:
+            item_id = int(context.args[0])
+        except:
+            await update.message.reply_text(f.error("Неверный ID предмета"))
+            return
+        
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        # Ищем предмет по ID или названию
-        items = self.db.get_shop_items()
-        selected_item = None
-        
-        # Сначала по ID
-        if query.isdigit():
-            item_id = int(query)
-            for item in items:
-                if item[0] == item_id:
-                    selected_item = item
-                    break
-        
-        # Потом по названию
-        if not selected_item:
-            for item in items:
-                if query in item[1].lower():
-                    selected_item = item
-                    break
-        
-        if not selected_item:
+        item = self.db.get_shop_item(item_id)
+        if not item:
             await update.message.reply_text(f.error("Предмет не найден"))
             return
         
-        item_id, name, desc, price_coins, price_diamonds, item_type, value, stock = selected_item[:8]
+        item_id, name, desc, price_coins, price_diamonds, item_type, value, stock = item[:8]
         
-        # Проверка наличия
         if stock == 0:
             await update.message.reply_text(f.error("Этот предмет закончился"))
             return
         
-        # Проверка денег
         if price_coins > 0 and user_data['coins'] < price_coins:
             await update.message.reply_text(f.error(f"Недостаточно монет. Нужно {price_coins} 💰"))
             return
@@ -3100,13 +2760,11 @@ class SpectrumBot:
             await update.message.reply_text(f.error(f"Недостаточно алмазов. Нужно {price_diamonds} 💎"))
             return
         
-        # Покупка
         if price_coins > 0:
             self.db.add_coins(user_id, -price_coins)
         if price_diamonds > 0:
             self.db.add_diamonds(user_id, -price_diamonds)
         
-        # Применение эффекта
         effect_text = ""
         if item_type == "heal":
             self.db.heal(user_id, int(value))
@@ -3123,10 +2781,13 @@ class SpectrumBot:
             self.db.add_energy(user_id, int(value))
             effect_text = f"⚡ Энергия +{value}"
         elif item_type in ["vip", "premium"]:
-            # Привилегии обрабатываются отдельно
-            pass
+            days = int(value)
+            if item_type == "vip":
+                self.db.set_vip(user_id, days)
+            else:
+                self.db.set_premium(user_id, days)
+            effect_text = f"✨ Статус {item_type.upper()} на {days} дней"
         else:
-            # Добавляем в инвентарь
             self.db.cursor.execute('''
                 INSERT INTO inventory (user_id, item_id, quantity, acquired_at)
                 VALUES (?, ?, ?, ?)
@@ -3134,7 +2795,7 @@ class SpectrumBot:
             self.db.conn.commit()
             effect_text = f"📦 Предмет добавлен в инвентарь"
         
-        text = (f.header("ПОКУПКА СОВЕРШЕНА", "✅") + "\n\n"
+        text = (f.header("ПОКУПКА СОВЕРШЕНА", "✅") + "\n"
                 f"{f.list_item('Предмет: ' + name)}\n"
                 f"{f.list_item('Цена: ' + (str(price_coins) + ' 💰' if price_coins > 0 else str(price_diamonds) + ' 💎'))}\n")
         
@@ -3149,18 +2810,18 @@ class SpectrumBot:
         items = self.db.get_inventory(user_id)
         
         if not items:
-            await update.message.reply_text(f.info("Твой инвентарь пуст"))
+            await update.message.reply_text(f.info("Ваш инвентарь пуст"))
             return
         
-        text = f.header("ТВОЙ ИНВЕНТАРЬ", "📦") + "\n\n"
+        text = f.header("ВАШ ИНВЕНТАРЬ", "📦") + "\n"
         
         for item in items:
-            inv_id, user_id, item_id, quantity, acquired_at, name, desc, item_type, value = item
+            inv_id, _, _, quantity, acquired_at, name, desc, item_type, value = item
             date = datetime.datetime.fromisoformat(acquired_at).strftime("%d.%m.%Y") if acquired_at else "неизвестно"
             
             text += (f"**ID: {inv_id}** — {name} x{quantity}\n"
-                     f"└ {desc}\n"
-                     f"└ Получено: {date}\n\n")
+                     f"{f.param('Описание', desc)}\n"
+                     f"{f.param('Получено', date)}\n\n")
         
         text += f"{f.command('use [ID]', 'использовать предмет')}"
         
@@ -3180,7 +2841,6 @@ class SpectrumBot:
         
         user_id = update.effective_user.id
         
-        # Получаем предмет из инвентаря
         self.db.cursor.execute('''
             SELECT i.*, s.name, s.description, s.type, s.value
             FROM inventory i
@@ -3193,9 +2853,8 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Предмет не найден в инвентаре"))
             return
         
-        inv_id, user_id, item_id, quantity, acquired_at, name, desc, item_type, value = item[:9]
+        inv_id, _, _, quantity, _, name, desc, item_type, value = item[:9]
         
-        # Применяем эффект
         effect_text = ""
         if item_type == "heal":
             self.db.heal(user_id, int(value))
@@ -3215,14 +2874,13 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Этот предмет нельзя использовать"))
             return
         
-        # Уменьшаем количество
         if quantity > 1:
             self.db.cursor.execute("UPDATE inventory SET quantity = quantity - 1 WHERE id = ?", (inv_id,))
         else:
             self.db.cursor.execute("DELETE FROM inventory WHERE id = ?", (inv_id,))
         self.db.conn.commit()
         
-        text = (f.header("ПРЕДМЕТ ИСПОЛЬЗОВАН", "✅") + "\n\n"
+        text = (f.header("ПРЕДМЕТ ИСПОЛЬЗОВАН", "✅") + "\n"
                 f"{f.list_item('Предмет: ' + name)}\n"
                 f"{f.list_item('Эффект: ' + effect_text)}")
         
@@ -3254,13 +2912,13 @@ class SpectrumBot:
             return
         
         if user_data['coins'] < amount:
-            await update.message.reply_text(f.error(f"Недостаточно монет. У тебя {user_data['coins']} 💰"))
+            await update.message.reply_text(f.error(f"Недостаточно монет. У вас {user_data['coins']} 💰"))
             return
         
         self.db.add_coins(user_id, -amount)
         self.db.add_coins(target_user['user_id'], amount)
         
-        text = (f.header("ПЕРЕВОД ВЫПОЛНЕН", "💰") + "\n\n"
+        text = (f.header("ПЕРЕВОД ВЫПОЛНЕН", "💰") + "\n"
                 f"{f.list_item('Получатель: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
                 f"{f.list_item('Отправитель: ' + update.effective_user.first_name)}")
@@ -3293,13 +2951,13 @@ class SpectrumBot:
             return
         
         if user_data['diamonds'] < amount:
-            await update.message.reply_text(f.error(f"Недостаточно алмазов. У тебя {user_data['diamonds']} 💎"))
+            await update.message.reply_text(f.error(f"Недостаточно алмазов. У вас {user_data['diamonds']} 💎"))
             return
         
         self.db.add_diamonds(user_id, -amount)
         self.db.add_diamonds(target_user['user_id'], amount)
         
-        text = (f.header("ПЕРЕВОД АЛМАЗОВ", "💎") + "\n\n"
+        text = (f.header("ПЕРЕВОД АЛМАЗОВ", "💎") + "\n"
                 f"{f.list_item('Получатель: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Сумма: ' + str(amount) + ' 💎')}\n"
                 f"{f.list_item('Отправитель: ' + update.effective_user.first_name)}")
@@ -3332,13 +2990,13 @@ class SpectrumBot:
             return
         
         if user_data['crystals'] < amount:
-            await update.message.reply_text(f.error(f"Недостаточно кристаллов. У тебя {user_data['crystals']} 🔮"))
+            await update.message.reply_text(f.error(f"Недостаточно кристаллов. У вас {user_data['crystals']} 🔮"))
             return
         
         self.db.add_crystals(user_id, -amount)
         self.db.add_crystals(target_user['user_id'], amount)
         
-        text = (f.header("ПЕРЕВОД КРИСТАЛЛОВ", "🔮") + "\n\n"
+        text = (f.header("ПЕРЕВОД КРИСТАЛЛОВ", "🔮") + "\n"
                 f"{f.list_item('Получатель: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Сумма: ' + str(amount) + ' 🔮')}\n"
                 f"{f.list_item('Отправитель: ' + update.effective_user.first_name)}")
@@ -3379,12 +3037,12 @@ class SpectrumBot:
         self.db.add_exp(user_id, exp)
         self.db.add_energy(user_id, energy)
         
-        text = (f.header("ЕЖЕДНЕВНЫЙ БОНУС", "🎁") + "\n\n"
+        text = (f.header("ЕЖЕДНЕВНЫЙ БОНУС", "🎁") + "\n"
                 f"{f.list_item('Стрик: ' + str(streak) + ' дней 🔥')}\n"
                 f"{f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
                 f"{f.list_item('Опыт: +' + str(exp) + ' ✨')}\n"
                 f"{f.list_item('Энергия: +' + str(energy) + ' ⚡')}\n\n"
-                f"{f.info('Заходи завтра за новым бонусом!')}")
+                f"{f.info('Заходите завтра за новым бонусом!')}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -3415,11 +3073,11 @@ class SpectrumBot:
         self.db.add_crystals(user_id, crystals)
         self.db.claim_weekly(user_id)
         
-        text = (f.header("НЕДЕЛЬНЫЙ БОНУС", "📅") + "\n\n"
+        text = (f.header("НЕДЕЛЬНЫЙ БОНУС", "📅") + "\n"
                 f"{f.list_item('Монеты: +' + str(coins) + ' 💰')}\n"
                 f"{f.list_item('Алмазы: +' + str(diamonds) + ' 💎')}\n"
                 f"{f.list_item('Кристаллы: +' + str(crystals) + ' 🔮')}\n\n"
-                f"{f.info('Возвращайся через неделю!')}")
+                f"{f.info('Возвращайтесь через неделю!')}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -3437,7 +3095,7 @@ class SpectrumBot:
         else:
             days_missed = 0
         
-        text = (f.header("ТЕКУЩИЙ СТРИК", "🔥") + "\n\n"
+        text = (f.header("ТЕКУЩИЙ СТРИК", "🔥") + "\n"
                 f"{f.list_item('Дней подряд: ' + str(streak))}\n"
                 f"{f.list_item('Последний вход: ' + (last_daily[:10] if last_daily != 'никогда' else 'никогда'))}\n"
                 f"{f.list_item('Пропущено дней: ' + str(days_missed))}")
@@ -3448,7 +3106,7 @@ class SpectrumBot:
     
     async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о привилегиях"""
-        text = (f.header("ПРИВИЛЕГИИ", "💎") + "\n\n"
+        text = (f.header("ПРИВИЛЕГИИ", "💎") + "\n"
                 
                 f"{f.section('VIP СТАТУС', '🌟')}\n"
                 f"Цена: {PRIVILEGE_PRICES['vip']} 💰 / {PRIVILEGE_DAYS['vip']} дней\n"
@@ -3462,19 +3120,17 @@ class SpectrumBot:
                 f"{f.list_item('Все бонусы VIP')}\n"
                 f"{f.list_item('Урон в битвах +50%')}\n"
                 f"{f.list_item('Награда с боссов +100%')}\n"
-                f"{f.list_item('Ежедневный бонус +100%')}\n"
-                f"{f.list_item('Доступ к алмазам')}\n\n"
+                f"{f.list_item('Ежедневный бонус +100%')}\n\n"
                 
                 f"{f.section('LORD СТАТУС', '👑')}\n"
                 f"Цена: {PRIVILEGE_PRICES['lord']} 💰 / {PRIVILEGE_DAYS['lord']} дней\n"
                 f"{f.list_item('Все бонусы PREMIUM')}\n"
-                f"{f.list_item('Личные комнаты')}\n"
-                f"{f.list_item('Кастомные цвета в профиле')}\n\n"
+                f"{f.list_item('Эксклюзивные команды')}\n\n"
                 
                 f"{f.section('ULTRA СТАТУС', '🦅')}\n"
                 f"Цена: {PRIVILEGE_PRICES['ultra']} 💰 / {PRIVILEGE_DAYS['ultra']} дней\n"
                 f"{f.list_item('Все бонусы LORD')}\n"
-                f"{f.list_item('Эксклюзивные скины')}\n\n"
+                f"{f.list_item('Личный цвет в профиле')}\n\n"
                 
                 f"Купить: /vip, /premium, /lord, /ultra")
         
@@ -3504,7 +3160,6 @@ class SpectrumBot:
         price = PRIVILEGE_PRICES.get(priv_type, 0)
         days = PRIVILEGE_DAYS.get(priv_type, 30)
         
-        # Проверка на уже активную привилегию
         if priv_type == "vip" and self.db.is_vip(user_id):
             await update.message.reply_text(f.error("VIP статус уже активен"))
             return
@@ -3518,7 +3173,6 @@ class SpectrumBot:
         
         self.db.add_coins(user_id, -price)
         
-        # Устанавливаем привилегию
         until = datetime.datetime.now() + datetime.timedelta(days=days)
         
         if priv_type == "vip":
@@ -3532,7 +3186,7 @@ class SpectrumBot:
         
         self.db.conn.commit()
         
-        text = (f.header("ПРИВИЛЕГИЯ АКТИВИРОВАНА", "✅") + "\n\n"
+        text = (f.header("ПРИВИЛЕГИЯ АКТИВИРОВАНА", "✅") + "\n"
                 f"{f.list_item('Статус: ' + priv_type.upper())}\n"
                 f"{f.list_item('Срок: ' + str(days) + ' дней')}\n"
                 f"{f.list_item('Действует до: ' + until.strftime('%d.%m.%Y'))}\n\n"
@@ -3541,7 +3195,7 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_buy_moderator(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Купить статус модератора (для доната)"""
+        """Купить статус модератора"""
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
@@ -3556,10 +3210,10 @@ class SpectrumBot:
             return
         
         self.db.add_coins(user_id, -price)
-        self.db.set_user_rank(user_id, 1, user_id)  # Ранг 1 - младший модератор
+        self.db.set_user_rank(user_id, 1, user_id)
         
         await update.message.reply_text(
-            f.success("Поздравляем! Теперь у вас статус младшего модератора!"),
+            f.success("Поздравляем! Теперь вы младший модератор!"),
             parse_mode='Markdown'
         )
     
@@ -3571,8 +3225,8 @@ class SpectrumBot:
         clan = self.db.get_user_clan(user_id)
         
         if not clan:
-            text = (f.header("КЛАНЫ", "👥") + "\n\n"
-                    f"{f.info('Ты не состоишь в клане')}\n\n"
+            text = (f.header("КЛАНЫ", "👥") + "\n"
+                    f"{f.info('Вы не состоите в клане')}\n\n"
                     f"{f.command('clancreate [название]', 'создать клан')}\n"
                     f"{f.command('clanjoin [ID]', 'вступить в клан')}\n"
                     f"{f.command('clantop', 'топ кланов')}")
@@ -3586,7 +3240,7 @@ class SpectrumBot:
         owner = self.db.get_user_by_id(owner_id)
         owner_name = owner.get('first_name', 'Неизвестно') if owner else 'Неизвестно'
         
-        text = (f.header(f"КЛАН: {name}", "👥") + "\n\n"
+        text = (f.header(f"КЛАН: {name}", "👥") + "\n"
                 f"{f.section('ИНФОРМАЦИЯ', '📊')}\n"
                 f"{f.stat('Уровень', str(level))}\n"
                 f"{f.stat('Опыт', str(exp) + '/' + str(level * 500))}\n"
@@ -3696,7 +3350,7 @@ class SpectrumBot:
             await update.message.reply_text(f.info("Нет созданных кланов"))
             return
         
-        text = f.header("ТОП КЛАНОВ", "🏆") + "\n\n"
+        text = f.header("ТОП КЛАНОВ", "🏆") + "\n"
         
         for i, (name, level, members, rating) in enumerate(clans, 1):
             medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "▫️"
@@ -3706,18 +3360,11 @@ class SpectrumBot:
     
     async def cmd_clan_war(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Клановая война"""
-        user_id = update.effective_user.id
-        clan = self.db.get_user_clan(user_id)
-        
-        if not clan:
-            await update.message.reply_text(f.error("Вы не в клане"))
-            return
-        
         await update.message.reply_text(
-            f.info("Клановые войны скоро будут доступны!"),
+            f.info("Клановые войны будут доступны в следующем обновлении!"),
             parse_mode='Markdown'
         )
-
+    
     # ========== МОДУЛЬ БОССОВ ==========
     
     async def cmd_boss_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -3730,33 +3377,34 @@ class SpectrumBot:
             self.db.respawn_bosses()
             bosses = self.db.get_bosses(alive_only=True)
         
-        text = f.header("АРЕНА БОССОВ", "👾") + "\n\n"
+        text = f.header("АРЕНА БОССОВ", "👾") + "\n"
         
         if bosses:
             boss = bosses[0]
             health_bar = f.progress(boss[3], boss[4], 20)
             
             text += (f"**ТЕКУЩИЙ БОСС**\n"
-                     f"└ {boss[1]} (ур. {boss[2]})\n"
-                     f"└ ❤️ Здоровье: {health_bar}\n"
-                     f"└ ⚔️ Урон: {boss[5]}\n"
-                     f"└ Награда: {boss[6]} 💰\n\n")
+                     f"{f.param('Имя', boss[1])}\n"
+                     f"{f.param('Уровень', str(boss[2]))}\n"
+                     f"{f.param('❤️ Здоровье', health_bar)}\n"
+                     f"{f.param('⚔️ Урон', str(boss[5]))}\n"
+                     f"{f.param('💰 Награда', str(boss[6]) + ' 💰')}\n\n")
             
             if len(bosses) > 1:
                 text += f.section("ОЧЕРЕДЬ", "📋") + "\n"
                 for i, b in enumerate(bosses[1:], 2):
                     text += f"{i}. {b[1]} — ❤️ {b[3]}/{b[4]}\n"
         
-        text += (f"\n{f.section('ТВОИ ПОКАЗАТЕЛИ', '⚔️')}\n"
+        text += (f"\n{f.section('ВАШИ ПОКАЗАТЕЛИ', '⚔️')}\n"
                  f"{f.stat('❤️ Здоровье', str(user_data.get('health', 100)) + '/100')}\n"
                  f"{f.stat('⚡ Энергия', str(user_data.get('energy', 100)) + '/100')}\n"
                  f"{f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
                  f"{f.stat('👾 Убито боссов', str(user_data.get('boss_kills', 0)))}\n\n"
                  f"{f.section('КОМАНДЫ', '⌨️')}\n"
-                 f"{f.command('bossfight [ID]', 'атаковать босса', '1')}\n"
+                 f"{f.command('bossfight [ID]', 'атаковать босса')}\n"
                  f"{f.command('regen', 'восстановить ❤️ и ⚡')}\n"
-                 f"{f.command('boss [ID]', 'информация о боссе', '1')}\n"
-                 f"{f.command('bossstats', 'статистика битв')}")
+                 f"{f.command('boss [ID]', 'информация о боссе')}\n"
+                 f"{f.command('bossstats', 'статистика')}")
         
         keyboard = []
         for i, boss in enumerate(bosses[:3], 1):
@@ -3794,11 +3442,11 @@ class SpectrumBot:
         status = "ЖИВ" if boss[8] else "ПОВЕРЖЕН"
         health_bar = f.progress(boss[3], boss[4], 20)
         
-        text = (f.header(f"БОСС: {boss[1]}", "👾") + "\n\n"
+        text = (f.header(f"БОСС: {boss[1]}", "👾") + "\n"
                 f"{f.stat('Уровень', str(boss[2]))}\n"
                 f"{f.stat('❤️ Здоровье', health_bar)}\n"
                 f"{f.stat('⚔️ Урон', str(boss[5]))}\n"
-                f"{f.stat('Награда', str(boss[6]) + ' 💰')}\n"
+                f"{f.stat('💰 Награда', str(boss[6]) + ' 💰')}\n"
                 f"{f.stat('📊 Статус', status)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
@@ -3829,12 +3477,11 @@ class SpectrumBot:
             return
         
         if user_data['energy'] < 10:
-            await update.message.reply_text(f.error("Недостаточно энергии. Используй /regen"))
+            await update.message.reply_text(f.error("Недостаточно энергии. Используйте /regen"))
             return
         
         self.db.add_energy(user.id, -10)
         
-        # Расчёт урона
         damage_bonus = 1.0
         if self.db.is_vip(user.id):
             damage_bonus += 0.2
@@ -3850,7 +3497,7 @@ class SpectrumBot:
         boss_killed = self.db.damage_boss(boss_id, player_damage)
         self.db.damage(user.id, player_taken)
         
-        text = f.header("БИТВА С БОССОМ", "⚔️") + "\n\n"
+        text = f.header("БИТВА С БОССОМ", "⚔️") + "\n"
         text += f"{f.list_item('Ваш урон: ' + str(player_damage))}\n"
         text += f"{f.list_item('Урон босса: ' + str(player_taken))}\n\n"
         
@@ -3865,7 +3512,6 @@ class SpectrumBot:
             self.db.add_boss_kill(user.id)
             self.db.add_exp(user.id, boss[2] * 10)
             
-            # Проверка достижений
             boss_kills = user_data.get('boss_kills', 0) + 1
             if boss_kills == 10:
                 self.db.add_achievement(user.id, "👾 Охотник на боссов", "Убито 10 боссов", 500)
@@ -3878,7 +3524,7 @@ class SpectrumBot:
         else:
             boss_info = self.db.get_boss(boss_id)
             text += f.warning("Босс еще жив!") + "\n"
-            text += f"❤️ Осталось: {boss_info[3]} здоровья\n\n"
+            text += f"{f.param('Осталось здоровья', str(boss_info[3]))}\n\n"
         
         if user_data['health'] <= player_taken:
             self.db.heal(user.id, 50)
@@ -3891,7 +3537,7 @@ class SpectrumBot:
         user_id = update.effective_user.id
         user_data = self.db.get_user_by_id(user_id)
         
-        text = (f.header("СТАТИСТИКА БОССОВ", "👾") + "\n\n"
+        text = (f.header("СТАТИСТИКА БОССОВ", "👾") + "\n"
                 f"{f.stat('Боссов убито', str(user_data.get('boss_kills', 0)))}\n"
                 f"{f.stat('⚔️ Урон', str(user_data.get('damage', 10)))}\n"
                 f"{f.stat('🛡 Броня', str(user_data.get('armor', 0)))}\n"
@@ -3919,12 +3565,12 @@ class SpectrumBot:
             f"{f.list_item('⚡ Энергия +20')}",
             parse_mode='Markdown'
         )
-    
+
     # ========== МОДУЛЬ КАЗИНО ==========
     
     async def cmd_casino(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Главное меню казино"""
-        text = (f.header("КАЗИНО", "🎰") + "\n\n"
+        text = (f.header("КАЗИНО", "🎰") + "\n"
                 f"{f.section('ИГРЫ', '🎲')}\n"
                 f"{f.command('roulette [ставка] [цвет]', 'рулетка')}\n"
                 f"{f.command('dice [ставка]', 'кости')}\n"
@@ -3993,7 +3639,7 @@ class SpectrumBot:
             self.db.add_stat(user_id, "casino_losses", 1)
             result_text = f.error(f"Вы проиграли {bet} 💰")
         
-        text = (f.header("РУЛЕТКА", "🎰") + "\n\n"
+        text = (f.header("РУЛЕТКА", "🎰") + "\n"
                 f"{f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
                 f"{f.list_item('Выбрано: ' + choice)}\n"
                 f"{f.list_item('Выпало: ' + str(result_num) + ' ' + result_color)}\n\n"
@@ -4038,7 +3684,7 @@ class SpectrumBot:
             self.db.add_coins(user_id, -bet)
             self.db.add_stat(user_id, "casino_losses", 1)
         
-        text = (f.header("КОСТИ", "🎲") + "\n\n"
+        text = (f.header("КОСТИ", "🎲") + "\n"
                 f"{f.list_item('Ставка: ' + str(bet) + ' 💰')}\n"
                 f"{f.list_item('Кубики: ' + str(dice1) + ' + ' + str(dice2))}\n"
                 f"{f.list_item('Сумма: ' + str(total))}\n\n"
@@ -4068,7 +3714,6 @@ class SpectrumBot:
         dealer_cards = [random.randint(1, 11), random.randint(1, 11)]
         dealer_total = sum(dealer_cards)
         
-        # Простая логика блэкджека
         if player_total == 21:
             result = "win"
             win = int(bet * 2.5)
@@ -4098,7 +3743,7 @@ class SpectrumBot:
             self.db.add_coins(user_id, -bet)
             self.db.add_stat(user_id, "casino_losses", 1)
         
-        text = (f.header("БЛЭКДЖЕК", "🃏") + "\n\n"
+        text = (f.header("БЛЭКДЖЕК", "🃏") + "\n"
                 f"{f.list_item('Ваши карты: ' + ' + '.join(str(c) for c in player_cards) + ' = ' + str(player_total))}\n"
                 f"{f.list_item('Карты дилера: ' + ' + '.join(str(c) for c in dealer_cards) + ' = ' + str(dealer_total))}\n\n"
                 f"{result_text}")
@@ -4148,19 +3793,17 @@ class SpectrumBot:
             self.db.add_coins(user_id, -bet)
             self.db.add_stat(user_id, "casino_losses", 1)
         
-        text = (f.header("СЛОТЫ", "🎰") + "\n\n"
+        text = (f.header("СЛОТЫ", "🎰") + "\n"
                 f"{' '.join(spin)}\n\n"
                 f"{result_text}\n"
                 f"{'💰 +' + str(win) + ' 💰' if win > 0 else '💸 -' + str(bet) + ' 💰'}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
-    # ========== МОДУЛЬ ИГР ==========
-    
     async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Камень-ножницы-бумага"""
         await update.message.reply_text(
-            f.header("КАМЕНЬ-НОЖНИЦЫ-БУМАГА", "✊") + "\n\nВыбери свой ход:",
+            f.header("КАМЕНЬ-НОЖНИЦЫ-БУМАГА", "✊") + "\nВыберите свой ход:",
             reply_markup=IrisKeyboard.rps_game(),
             parse_mode='Markdown'
         )
@@ -4169,7 +3812,6 @@ class SpectrumBot:
         """Крестики-нолики"""
         user_id = update.effective_user.id
         
-        # Создаём новую игру
         game_id = f"ttt_{user_id}_{int(time.time())}"
         self.active_games[game_id] = {
             'type': 'ttt',
@@ -4180,10 +3822,10 @@ class SpectrumBot:
             'moves': 0
         }
         
-        text = (f.header("КРЕСТИКИ-НОЛИКИ", "⭕") + "\n\n"
+        text = (f.header("КРЕСТИКИ-НОЛИКИ", "⭕") + "\n"
                 f"{f.info('Ожидание соперника...')}\n"
                 f"{f.list_item('ID игры: ' + game_id)}\n\n"
-                f"Соперник должен написать: /tttmove {game_id}")
+                f"Соперник должен написать: /tttmove {game_id} [1-9]")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -4215,7 +3857,6 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Неверный тип игры"))
             return
         
-        # Если второй игрок ещё не присоединился
         if game['player_o'] is None:
             if user_id == game['player_x']:
                 await update.message.reply_text(f.error("Ожидание соперника"))
@@ -4232,12 +3873,10 @@ class SpectrumBot:
             await update.message.reply_text(f.error("Эта клетка уже занята"))
             return
         
-        # Ставим символ
         symbol = '❌' if game['turn'] == game['player_x'] else '⭕'
         game['board'][cell] = symbol
         game['moves'] += 1
         
-        # Проверяем победу
         win_combinations = [
             [0,1,2], [3,4,5], [6,7,8],
             [0,3,6], [1,4,7], [2,5,8],
@@ -4250,7 +3889,6 @@ class SpectrumBot:
                 winner = user_id
                 break
         
-        # Отображаем доску
         board_display = ""
         for i in range(0, 9, 3):
             board_display += f"{game['board'][i]} | {game['board'][i+1]} | {game['board'][i+2]}\n"
@@ -4258,7 +3896,6 @@ class SpectrumBot:
                 board_display += "---------\n"
         
         if winner:
-            # Обновляем статистику
             if winner == game['player_x']:
                 self.db.add_stat(game['player_x'], "ttt_wins", 1)
                 self.db.add_stat(game['player_o'], "ttt_losses", 1)
@@ -4268,29 +3905,27 @@ class SpectrumBot:
             
             del self.active_games[game_id]
             
-            text = (f.header("ИГРА ОКОНЧЕНА", "🏆") + "\n\n"
+            text = (f.header("ИГРА ОКОНЧЕНА", "🏆") + "\n"
                     f"{board_display}\n\n"
                     f"{f.success('Победил ' + ('❌' if winner == game['player_x'] else '⭕'))}")
             
             await update.message.reply_text(text, parse_mode='Markdown')
         
         elif game['moves'] == 9:
-            # Ничья
             self.db.add_stat(game['player_x'], "ttt_draws", 1)
             self.db.add_stat(game['player_o'], "ttt_draws", 1)
             del self.active_games[game_id]
             
-            text = (f.header("ИГРА ОКОНЧЕНА", "🤝") + "\n\n"
+            text = (f.header("ИГРА ОКОНЧЕНА", "🤝") + "\n"
                     f"{board_display}\n\n"
                     f"{f.info('Ничья!')}")
             
             await update.message.reply_text(text, parse_mode='Markdown')
         
         else:
-            # Меняем игрока
             game['turn'] = game['player_o'] if game['turn'] == game['player_x'] else game['player_x']
             
-            text = (f.header("ХОД СДЕЛАН", "✅") + "\n\n"
+            text = (f.header("ХОД СДЕЛАН", "✅") + "\n"
                     f"{board_display}\n\n"
                     f"{f.info('Ход ' + ('❌' if game['turn'] == game['player_x'] else '⭕'))}")
             
@@ -4313,8 +3948,8 @@ class SpectrumBot:
             'moves': 0
         }
         
-        text = (f.header("МЕМОРИ", "🧠") + "\n\n"
-                f"Найди все пары!\n\n"
+        text = (f.header("МЕМОРИ", "🧠") + "\n"
+                f"Найдите все пары!\n\n"
                 f"1  2  3  4\n"
                 f"5  6  7  8\n"
                 f"9 10 11 12\n"
@@ -4326,7 +3961,7 @@ class SpectrumBot:
     async def cmd_memory_play(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Открыть карту в Мемори"""
         if not context.args or not context.args[0].isdigit():
-            await update.message.reply_text(f.error("Укажи номер карты: /memoryplay 1"))
+            await update.message.reply_text(f.error("Укажите номер карты: /memoryplay 1"))
             return
         
         card = int(context.args[0]) - 1
@@ -4336,7 +3971,6 @@ class SpectrumBot:
         
         user_id = update.effective_user.id
         
-        # Ищем игру
         for game_id, game in list(self.active_games.items()):
             if game['type'] == 'memory' and game_id.startswith(f"memory_{user_id}"):
                 if game['revealed'][card]:
@@ -4349,19 +3983,17 @@ class SpectrumBot:
                 if game['first_pick'] is None:
                     game['first_pick'] = card
                     await update.message.reply_text(
-                        f"{f.info('Выбрана карта ' + context.args[0] + ': ' + game['cards'][card])}\n"
-                        f"Выбери вторую карту: /memoryplay [номер]",
+                        f.info('Выбрана карта ' + context.args[0] + ': ' + game['cards'][card]) + "\n"
+                        f"Выберите вторую карту: /memoryplay [номер]",
                         parse_mode='Markdown'
                     )
                 else:
                     first = game['first_pick']
                     if game['cards'][first] == game['cards'][card]:
-                        # Пара найдена
                         game['pairs'] += 1
                         game['first_pick'] = None
                         
                         if game['pairs'] == 8:
-                            # Победа
                             self.db.add_stat(user_id, "memory_wins", 1)
                             self.db.add_stat(user_id, "memory_games", 1)
                             
@@ -4371,7 +4003,7 @@ class SpectrumBot:
                             del self.active_games[game_id]
                             
                             await update.message.reply_text(
-                                f.header("ПОБЕДА!", "🎉") + "\n\n"
+                                f.header("ПОБЕДА!", "🎉") + "\n"
                                 f"{f.list_item('Пар найдено: 8/8')}\n"
                                 f"{f.list_item('Ходов: ' + str(game['moves']))}\n"
                                 f"{f.list_item('Награда: +' + str(reward) + ' 💰')}",
@@ -4379,12 +4011,11 @@ class SpectrumBot:
                             )
                         else:
                             await update.message.reply_text(
-                                f.success(f"Пара найдена! ({game['cards'][first]})") + "\n",
-                                f.success('Пара найдена! (' + game['cards'][first] + ')'),
+                                f.success('Пара найдена! (' + game['cards'][first] + ')') + "\n"
+                                + f.info('Осталось пар: ' + str(8 - game['pairs'])),
                                 parse_mode='Markdown'
                             )
                     else:
-                        # Не пара - закрываем
                         game['revealed'][first] = False
                         game['revealed'][card] = False
                         game['first_pick'] = None
@@ -4395,7 +4026,7 @@ class SpectrumBot:
                         )
                 return
         
-        await update.message.reply_text(f.error("У тебя нет активной игры"), parse_mode='Markdown')
+        await update.message.reply_text(f.error("У вас нет активной игры"), parse_mode='Markdown')
     
     async def cmd_minesweeper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Сапёр"""
@@ -4404,7 +4035,6 @@ class SpectrumBot:
         size = 5
         mines = 5
         
-        # Генерируем поле
         field = [[0] * size for _ in range(size)]
         mine_positions = random.sample(range(size * size), mines)
         
@@ -4430,8 +4060,8 @@ class SpectrumBot:
             'size': size
         }
         
-        text = (f.header("САПЁР", "💣") + "\n\n"
-                f"Найди все мины!\n\n"
+        text = (f.header("САПЁР", "💣") + "\n"
+                f"Найдите все мины!\n\n"
                 f"  1 2 3 4 5\n")
         
         for i in range(size):
@@ -4448,7 +4078,7 @@ class SpectrumBot:
     async def cmd_mine_open(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Открыть клетку в сапёре"""
         if len(context.args) < 2 or not context.args[0].isdigit() or not context.args[1].isdigit():
-            await update.message.reply_text(f.error("Укажи ряд и колонку: /mineopen 3 3"))
+            await update.message.reply_text(f.error("Укажите ряд и колонку: /mineopen 3 3"))
             return
         
         x = int(context.args[0]) - 1
@@ -4456,7 +4086,6 @@ class SpectrumBot:
         
         user_id = update.effective_user.id
         
-        # Ищем игру
         for game_id, game in list(self.active_games.items()):
             if game['type'] == 'minesweeper' and game_id.startswith(f"mine_{user_id}"):
                 if x < 0 or x >= game['size'] or y < 0 or y >= game['size']:
@@ -4468,10 +4097,8 @@ class SpectrumBot:
                     return
                 
                 if game['field'][x][y] == '💣':
-                    # Проигрыш
                     self.db.add_stat(user_id, "mine_games", 1)
                     
-                    # Показываем все мины
                     display = f.header("БАБАХ!", "💥") + "\n\n"
                     for i in range(game['size']):
                         for j in range(game['size']):
@@ -4484,16 +4111,13 @@ class SpectrumBot:
                         display += "\n"
                     
                     del self.active_games[game_id]
-                    await update.message.reply_text(display + "\n😢 Ты подорвался!", parse_mode='Markdown')
+                    await update.message.reply_text(display + "\n😢 Вы подорвались!", parse_mode='Markdown')
                     return
                 
-                # Открываем клетку
                 game['revealed'][x][y] = True
                 
-                # Проверяем победу
                 revealed_count = sum(sum(row) for row in game['revealed'])
                 if revealed_count == game['size'] * game['size'] - len(game['mines']):
-                    # Победа
                     self.db.add_stat(user_id, "mine_wins", 1)
                     self.db.add_stat(user_id, "mine_games", 1)
                     
@@ -4504,13 +4128,12 @@ class SpectrumBot:
                     
                     await update.message.reply_text(
                         f.header("ПОБЕДА!", "🎉") + "\n\n"
-                        f"Ты нашёл все мины!\n"
+                        f"Вы нашли все мины!\n"
                         f"+{reward} 💰",
                         parse_mode='Markdown'
                     )
                     return
                 
-                # Отображаем поле
                 display = f.header("САПЁР", "💣") + "\n\n"
                 display += "  1 2 3 4 5\n"
                 for i in range(game['size']):
@@ -4527,7 +4150,7 @@ class SpectrumBot:
                 await update.message.reply_text(display, parse_mode='Markdown')
                 return
         
-        await update.message.reply_text(f.error("У тебя нет активной игры"), parse_mode='Markdown')
+        await update.message.reply_text(f.error("У вас нет активной игры"), parse_mode='Markdown')
     
     # ========== МОДУЛЬ ДОЛГОВ ==========
     
@@ -4558,13 +4181,13 @@ class SpectrumBot:
             return
         
         if user_data['coins'] < amount:
-            await update.message.reply_text(f.error(f"Недостаточно монет. У тебя {user_data['coins']} 💰"))
+            await update.message.reply_text(f.error(f"Недостаточно монет. У вас {user_data['coins']} 💰"))
             return
         
         self.db.add_coins(user_id, -amount)
         debt_id = self.db.create_debt(target_user['user_id'], user_id, amount, reason)
         
-        text = (f.header("ДОЛГ ОФОРМЛЕН", "💰") + "\n\n"
+        text = (f.header("ДОЛГ ОФОРМЛЕН", "💰") + "\n"
                 f"{f.list_item('Должник: ' + target_user.get('first_name', 'Пользователь'))}\n"
                 f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
                 f"{f.list_item('Причина: ' + reason)}\n"
@@ -4572,11 +4195,10 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode='Markdown')
         
-        # Уведомление должнику
         try:
             await context.bot.send_message(
                 chat_id=target_user['user_id'],
-                text=(f.header("ВЫ ДОЛЖНЫ", "💰") + "\n\n"
+                text=(f.header("ВЫ ДОЛЖНЫ", "💰") + "\n"
                       f"{f.list_item('Кредитор: ' + update.effective_user.first_name)}\n"
                       f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
                       f"{f.list_item('Причина: ' + reason)}\n"
@@ -4591,19 +4213,19 @@ class SpectrumBot:
         debts = self.db.get_debts(user_id)
         
         if not debts:
-            await update.message.reply_text(f.info("У тебя нет активных долгов"))
+            await update.message.reply_text(f.info("У вас нет активных долгов"))
             return
         
-        text = f.header("ТВОИ ДОЛГИ", "💰") + "\n\n"
+        text = f.header("ВАШИ ДОЛГИ", "💰") + "\n"
         
         for debt in debts:
             debt_id, debtor_id, creditor_id, amount, reason, created, deadline, is_paid = debt
             
             if debtor_id == user_id:
-                role = "Ты должен"
+                role = "Вы должны"
                 other_id = creditor_id
             else:
-                role = "Должны тебе"
+                role = "Должны вам"
                 other_id = debtor_id
             
             other = self.db.get_user_by_id(other_id)
@@ -4613,11 +4235,11 @@ class SpectrumBot:
             deadline_str = datetime.datetime.fromisoformat(deadline).strftime("%d.%m.%Y")
             
             text += (f"**ID: {debt_id}**\n"
-                     f"{f.list_item(role + ': ' + other_name)}\n"
-                     f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
-                     f"{f.list_item(f'Причина: {reason}')}\n"
-                     f"{f.list_item(f'Создан: {created_str}')}\n"
-                     f"{f.list_item(f'Срок: {deadline_str}')}\n\n")
+                     f"{f.param('Статус', role + ': ' + other_name)}\n"
+                     f"{f.param('Сумма', str(amount) + ' 💰')}\n"
+                     f"{f.param('Причина', reason)}\n"
+                     f"{f.param('Создан', created_str)}\n"
+                     f"{f.param('Срок', deadline_str)}\n\n")
         
         text += f"{f.command('paydebt [ID]', 'оплатить долг')}"
         
@@ -4626,7 +4248,7 @@ class SpectrumBot:
     async def cmd_pay_debt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Оплатить долг"""
         if not context.args:
-            await update.message.reply_text(f.error("Укажи ID долга: /paydebt 1"))
+            await update.message.reply_text(f.error("Укажите ID долга: /paydebt 1"))
             return
         
         try:
@@ -4652,7 +4274,7 @@ class SpectrumBot:
             return
         
         if debtor_id != user_id:
-            await update.message.reply_text(f.error("Это не твой долг"))
+            await update.message.reply_text(f.error("Это не ваш долг"))
             return
         
         if user_data['coins'] < amount:
@@ -4666,17 +4288,16 @@ class SpectrumBot:
         creditor = self.db.get_user_by_id(creditor_id)
         creditor_name = creditor.get('first_name', 'Кредитор') if creditor else 'Кредитор'
         
-        text = (f.header("ДОЛГ ОПЛАЧЕН", "✅") + "\n\n"
+        text = (f.header("ДОЛГ ОПЛАЧЕН", "✅") + "\n"
                 f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}\n"
                 f"{f.list_item('Получатель: ' + creditor_name)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
         
-        # Уведомление кредитору
         try:
             await context.bot.send_message(
                 chat_id=creditor_id,
-                text=(f.header("ДОЛГ ОПЛАЧЕН", "💰") + "\n\n"
+                text=(f.header("ДОЛГ ОПЛАЧЕН", "💰") + "\n"
                       f"{f.list_item('Должник: ' + update.effective_user.first_name)}\n"
                       f"{f.list_item('Сумма: ' + str(amount) + ' 💰')}")
             )
@@ -4691,8 +4312,8 @@ class SpectrumBot:
         achievements = self.db.get_achievements(user_id)
         
         if not achievements:
-            text = (f.header("ДОСТИЖЕНИЯ", "🏆") + "\n\n"
-                    f"{f.info('У тебя пока нет достижений')}\n\n"
+            text = (f.header("ДОСТИЖЕНИЯ", "🏆") + "\n"
+                    f"{f.info('У вас пока нет достижений')}\n\n"
                     f"{f.section('ДОСТУПНЫЕ ДОСТИЖЕНИЯ')}\n"
                     f"{f.list_item('👾 Охотник на боссов — убить 10 боссов (+500 💰)')}\n"
                     f"{f.list_item('👾 Легендарный охотник — убить 50 боссов (+2000 💰)')}\n"
@@ -4706,12 +4327,12 @@ class SpectrumBot:
             await update.message.reply_text(text, parse_mode='Markdown')
             return
         
-        text = f.header("ТВОИ ДОСТИЖЕНИЯ", "🏆") + "\n\n"
+        text = f.header("ВАШИ ДОСТИЖЕНИЯ", "🏆") + "\n"
         
         for name, desc, date, reward in achievements:
             date_obj = datetime.datetime.fromisoformat(date)
             date_str = date_obj.strftime("%d.%m.%Y")
-            text += f"**{name}**\n└ {desc}\n└ 📅 {date_str}"
+            text += f"**{name}**\n{desc}\n📅 {date_str}"
             if reward > 0:
                 text += f" (+{reward} 💰)"
             text += "\n\n"
@@ -4721,7 +4342,7 @@ class SpectrumBot:
     # ========== ПРОЧИЕ КОМАНДЫ ==========
     
     async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Погода (имитация)"""
+        """Погода"""
         city = " ".join(context.args) if context.args else "Москва"
         
         weathers = ["☀️ солнечно", "⛅ облачно", "☁️ пасмурно", "🌧 дождь", "⛈ гроза", "❄️ снег", "🌫 туман"]
@@ -4730,7 +4351,7 @@ class SpectrumBot:
         humidity = random.randint(30, 95)
         weather = random.choice(weathers)
         
-        text = (f.header(f"ПОГОДА: {city.upper()}", "🌍") + "\n\n"
+        text = (f.header(f"ПОГОДА: {city.upper()}", "🌍") + "\n"
                 f"{weather}, {temp}°C\n"
                 f"💨 Ветер: {wind} м/с\n"
                 f"💧 Влажность: {humidity}%\n"
@@ -4742,16 +4363,16 @@ class SpectrumBot:
         """Новости бота"""
         news_list = [
             "🎉 Мега-обновление! Бот объединил Iris, TrueMafia, TReanfer и Anya!",
-            "👾 Новые боссы уже на арене! Проверь /bosses",
-            "🔪 Мафия теперь с полными ролями! Играй в /mafia",
+            "👾 Новые боссы уже на арене! Проверьте /bosses",
+            "🔪 Мафия теперь с полными ролями! Играйте в /mafia",
             "💰 Введены кристаллы — новая валюта для донатеров!",
-            "🏆 Система достижений запущена! Собирай /achievements",
-            "👥 Кланы теперь с рейтингами! Создай свой /clancreate",
+            "🏆 Система достижений запущена! Собирайте /achievements",
+            "👥 Кланы теперь с рейтингами! Создайте свой /clancreate",
             "🎰 Казино обновлено: добавлен блэкджек!",
-            "📊 Топ игроков теперь показывает лидеров по разным категориям"
+            "📊 Топ игроков показывает лидеров по разным категориям"
         ]
         
-        text = (f.header("НОВОСТИ", "📰") + "\n\n"
+        text = (f.header("НОВОСТИ", "📰") + "\n"
                 f"{random.choice(news_list)}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
@@ -4763,22 +4384,20 @@ class SpectrumBot:
             "Сложнее всего начать действовать, все остальное зависит только от упорства.",
             "Лучший способ предсказать будущее — создать его.",
             "Не бойтесь, что у вас не получится. Бойтесь, что вы не попробуете.",
-            "Будь собой, остальные роли уже заняты.",
-            "Падать — часть жизни, подниматься — ее смысл.",
-            "Сегодня ты там, куда тебя привели твои вчерашние мысли.",
-            "Жизнь — как коробка шоколадных конфет: никогда не знаешь, какая начинка тебе попадётся."
+            "Будьте собой, остальные роли уже заняты.",
+            "Каждый день — это новая возможность изменить свою жизнь."
         ]
         
-        text = (f.header("ЦИТАТА ДНЯ", "📝") + "\n\n"
+        text = (f.header("ЦИТАТА ДНЯ", "📝") + "\n"
                 f"«{random.choice(quotes)}»")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
     async def cmd_players(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Количество игроков"""
-        count = self.db.get_players_count()  # Нужно добавить этот метод в Database
+        count = self.db.get_players_count()
         
-        text = (f.header("СТАТИСТИКА", "👥") + "\n\n"
+        text = (f.header("СТАТИСТИКА", "👥") + "\n"
                 f"Всего игроков: {count}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
@@ -4807,8 +4426,8 @@ class SpectrumBot:
         user = update.effective_user
         
         text = (f"🤷‍♂️ Сегодня {today} {f.user_link(user.id, user.first_name)} "
-            f"приговаривается к статье {article_num}. {article_name}\n"
-            f" ⏱ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}")
+                f"приговаривается к статье {article_num}. {article_name}\n"
+                f"⌛ Срок: {sentence} {'год' if sentence == 1 else 'года' if sentence < 5 else 'лет'}")
         
         await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -4856,7 +4475,7 @@ class SpectrumBot:
         try:
             await context.bot.send_message(
                 chat_id=target_user['user_id'],
-                text=(f.header("ЛИЧНОЕ СООБЩЕНИЕ", "💬") + "\n\n"
+                text=(f.header("ЛИЧНОЕ СООБЩЕНИЕ", "💬") + "\n"
                       f"{f.list_item('От: ' + f.user_link(sender.id, sender.first_name))}\n"
                       f"{f.list_item('Сообщение: ' + message)}")
             )
@@ -4888,14 +4507,12 @@ class SpectrumBot:
         if await self.check_spam(update):
             return
         
-        # Проверка триггеров (Iris feature)
         chat_id = update.effective_chat.id
         trigger_response = self.db.check_trigger(chat_id, message_text)
         if trigger_response:
             await update.message.reply_text(trigger_response, parse_mode='Markdown')
             return
         
-        # AI-ответ
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
         response = await self.ai.get_response(user.id, message_text)
         await update.message.reply_text(f"🤖 {response}", parse_mode='Markdown')
@@ -4912,7 +4529,7 @@ class SpectrumBot:
             if welcome:
                 text = welcome.replace('{user}', f.user_link(member.id, member.first_name))
             else:
-                text = f"👋 Добро пожаловать, {f.user_link(member.id, member.first_name)}!\nИспользуй /help для списка команд."
+                text = f"👋 Добро пожаловать, {f.user_link(member.id, member.first_name)}!\nИспользуйте /help для списка команд."
             
             await update.message.reply_text(text, parse_mode='Markdown')
     
@@ -4941,7 +4558,7 @@ class SpectrumBot:
         
         elif data == "menu_back":
             await query.edit_message_text(
-                f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\n\nВыбери раздел:",
+                f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\nВыберите раздел:",
                 reply_markup=IrisKeyboard.main_menu(),
                 parse_mode='Markdown'
             )
@@ -4950,7 +4567,7 @@ class SpectrumBot:
             await self.cmd_profile(update, context)
         
         elif data == "menu_moderation":
-            text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n\n"
+            text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n"
                     f"{f.section('ОСНОВНЫЕ КОМАНДЫ')}\n"
                     f"{f.command('warn @user [причина]', 'предупреждение')}\n"
                     f"{f.command('mute @user минут [причина]', 'заглушить')}\n"
@@ -4974,7 +4591,7 @@ class SpectrumBot:
             await self.cmd_mafia(update, context)
         
         elif data == "menu_economy":
-            text = (f.header("ЭКОНОМИКА", "💰") + "\n\n"
+            text = (f.header("ЭКОНОМИКА", "💰") + "\n"
                     f"{f.section('МАГАЗИН')}\n"
                     f"{f.command('shop', 'магазин')}\n"
                     f"{f.command('buy [ID]', 'купить предмет')}\n"
@@ -4994,7 +4611,7 @@ class SpectrumBot:
             )
         
         elif data == "menu_games":
-            text = (f.header("ИГРЫ", "🎮") + "\n\n"
+            text = (f.header("ИГРЫ", "🎮") + "\n"
                     f"{f.section('БОССЫ')}\n"
                     f"{f.command('bosses', 'список боссов')}\n"
                     f"{f.command('bossfight [ID]', 'атаковать босса')}\n\n"
@@ -5003,7 +4620,7 @@ class SpectrumBot:
                     f"{f.command('roulette [ставка] [цвет]', 'рулетка')}\n"
                     f"{f.command('dice [ставка]', 'кости')}\n\n"
                     f"{f.section('МИНИ-ИГРЫ')}\n"
-                    f"{f.command('rps', 'камень-ножницы-бумага')}\n"
+                    f"{f.command('rps', 'КНБ')}\n"
                     f"{f.command('ttt', 'крестики-нолики')}\n"
                     f"{f.command('memory', 'мемори')}\n"
                     f"{f.command('minesweeper', 'сапёр')}")
@@ -5015,15 +4632,11 @@ class SpectrumBot:
             )
         
         elif data == "menu_ai":
-            text = (f.header("AI-ЧАТ", "🤖") + "\n\n"
-                    f"{f.info('Просто напиши мне что-нибудь!')}\n"
+            text = (f.header("AI-ЧАТ", "🤖") + "\n"
+                    f"{f.info('Просто напишите мне что-нибудь!')}\n"
                     f"{f.list_item('Я отвечу с помощью Gemini AI')}\n"
                     f"{f.list_item('Понимаю контекст разговора')}\n"
-                    f"{f.list_item('Могу помочь с любыми вопросами')}\n\n"
-                    f"{f.section('ПРИМЕРЫ')}\n"
-                    f"{f.list_item('Привет!')}\n"
-                    f"{f.list_item('Расскажи анекдот')}\n"
-                    f"{f.list_item('Что нового в боте?')}")
+                    f"{f.list_item('Могу помочь с любыми вопросами')}")
             
             await query.edit_message_text(
                 text,
@@ -5066,7 +4679,7 @@ class SpectrumBot:
             emoji = {"rock": "🪨", "scissors": "✂️", "paper": "📄"}
             names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
             
-            text = f.header("КНБ", "✊") + "\n\n"
+            text = f.header("КНБ", "✊") + "\n"
             text += f"{emoji[choice]} **Вы:** {names[choice]}\n"
             text += f"{emoji[bot_choice]} **Бот:** {names[bot_choice]}\n\n"
             
@@ -5077,7 +4690,7 @@ class SpectrumBot:
                 self.db.add_stat(user.id, "rps_wins", 1)
                 reward = random.randint(10, 30)
                 self.db.add_coins(user.id, reward)
-                text += f.success('🎉 **ПОБЕДА!** +' + str(reward) + ' 💰')
+                text += f.success(f"🎉 **ПОБЕДА!** +{reward} 💰")
             else:
                 self.db.add_stat(user.id, "rps_losses", 1)
                 text += f.error("😢 **ПОРАЖЕНИЕ!**")
@@ -5110,7 +4723,7 @@ class SpectrumBot:
         print("  ✅ TrueMafia (классическая мафия)")
         print("  ✅ TReanfer (экономика и донат)")
         print("  ✅ Anya (AI-чат с Gemini)")
-        print("  ✅ Твои игры (боссы, казино, КНБ, ТТТ, мемори, сапёр)")
+        print("  ✅ Ваши игры (боссы, казино, КНБ, ТТТ, мемори, сапёр)")
         print("=" * 60)
         print("👑 Владелец:", OWNER_USERNAME)
         print("=" * 60)
