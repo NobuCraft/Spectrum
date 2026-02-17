@@ -4,7 +4,7 @@
 """
 СПЕКТР - SPECTRUM BOT
 Официальный игровой бот с классическим оформлением
-Версия 2.0
+Версия 3.0
 """
 
 import asyncio
@@ -149,104 +149,92 @@ class Config:
     WEEKLY_COOLDOWN = 604800  # 7 дней
     FREE_ENERGY_COOLDOWN = 3600  # 1 час
 
-# ========== ФОРМАТТЕР В СТИЛЕ IRIS ==========
+# ========== НОВЫЙ ФОРМАТТЕР В КЛАССИЧЕСКОМ СТИЛЕ ==========
 class SpectrumFormatter:
-    """Классическое оформление в стиле iris_cm_bot"""
+    """Классическое оформление, объединяющее стили 4 ботов"""
     
-    # Символы для рамок
-    BOX_TOP = "╔════════════════════════════════════════╗"
-    BOX_MID = "╟────────────────────────────────────────╢"
-    BOX_BOT = "╚════════════════════════════════════════╝"
-    BOX_VERT = "║"
-    
-    # Разделители
-    SEPARATOR = "━" * 40
-    SEPARATOR_LIGHT = "┄" * 40
+    # Элегантные разделители (как у iris_cm_bot)
+    SEPARATOR = "─" * 30
+    SEPARATOR_LIGHT = "╌" * 30
+    SEPARATOR_DOUBLE = "═" * 30
     
     @classmethod
     def header(cls, title: str, emoji: str = "⚜️") -> str:
-        """Создает заголовок с рамкой"""
-        padding = 38 - len(title) - 2
-        left_pad = padding // 2
-        right_pad = padding - left_pad
-        return (
-            f"{cls.BOX_TOP}\n"
-            f"{cls.BOX_VERT}{' ' * left_pad}{emoji} {title.upper()} {emoji}{' ' * right_pad}{cls.BOX_VERT}\n"
-            f"{cls.BOX_BOT}"
-        )
+        """Заголовок раздела (как у iris_cm_bot)"""
+        return f"\n{emoji} **{title.upper()}** {emoji}\n{cls.SEPARATOR_DOUBLE}\n"
     
     @classmethod
-    def section(cls, title: str, emoji: str = "▫️") -> str:
-        """Создает раздел"""
-        return f"\n{emoji} **{title.upper()}**\n{cls.SEPARATOR}\n"
+    def section(cls, title: str, emoji: str = "📌") -> str:
+        """Раздел с эмодзи (как у TrueMafiaBot)"""
+        return f"\n{emoji} **{title}**\n{cls.SEPARATOR}\n"
     
     @classmethod
     def subsection(cls, title: str) -> str:
-        """Создает подраздел"""
-        return f"\n┏━━ {title} ━━┓\n"
+        """Подраздел с отступом (как у Treanfer Servers)"""
+        return f"\n  ▸ **{title}**\n"
     
     @classmethod
-    def command(cls, cmd: str, desc: str, usage: str = "", emoji: str = "・") -> str:
-        """Форматирует команду"""
+    def command(cls, cmd: str, desc: str, usage: str = "", emoji: str = "•") -> str:
+        """Форматирование команды (как у iris_cm_bot)"""
         if usage:
             return f"{emoji} `/{cmd} {usage}` — {desc}"
         return f"{emoji} `/{cmd}` — {desc}"
     
     @classmethod
     def param(cls, name: str, desc: str) -> str:
-        """Форматирует параметр"""
-        return f"  └ {name} — {desc}"
+        """Параметр команды с отступом (как у Treanfer Servers)"""
+        return f"    └ {name} — {desc}"
     
     @classmethod
     def example(cls, text: str) -> str:
-        """Форматирует пример"""
-        return f"  └ Пример: `{text}`"
+        """Пример использования (как у Treanfer Servers)"""
+        return f"    └ Пример: `{text}`"
     
     @classmethod
     def item(cls, text: str, emoji: str = "•") -> str:
-        """Создает элемент списка"""
+        """Элемент списка"""
         return f"{emoji} {text}"
     
     @classmethod
     def numbered_item(cls, number: int, text: str) -> str:
-        """Создает нумерованный элемент"""
+        """Нумерованный элемент списка"""
         return f"{number}. {text}"
     
     @classmethod
-    def stat(cls, name: str, value: Union[str, int], emoji: str = "📊") -> str:
-        """Форматирует статистику"""
+    def stat(cls, name: str, value: str, emoji: str = "📊") -> str:
+        """Статистика (как у TrueMafiaBot)"""
         return f"{emoji} **{name}:** {value}"
     
     @classmethod
     def progress(cls, current: int, total: int, length: int = 15) -> str:
-        """Создает прогресс-бар"""
+        """Прогресс-бар (как у Treanfer Servers)"""
         filled = int((current / total) * length)
         bar = "█" * filled + "░" * (length - filled)
         return f"`{bar}` {current}/{total}"
     
     @classmethod
     def success(cls, text: str) -> str:
-        """Сообщение об успехе"""
-        return f"✅ **УСПЕХ:** {text}"
+        """Сообщение об успехе (как у AnyaAi)"""
+        return f"✅ **Успех:** {text}"
     
     @classmethod
     def error(cls, text: str) -> str:
-        """Сообщение об ошибке"""
-        return f"❌ **ОШИБКА:** {text}"
+        """Сообщение об ошибке (как у AnyaAi)"""
+        return f"❌ **Ошибка:** {text}"
     
     @classmethod
     def warning(cls, text: str) -> str:
-        """Предупреждение"""
-        return f"⚠️ **ВНИМАНИЕ:** {text}"
+        """Предупреждение (как у AnyaAi)"""
+        return f"⚠️ **Внимание:** {text}"
     
     @classmethod
     def info(cls, text: str) -> str:
-        """Информационное сообщение"""
-        return f"ℹ️ **ИНФО:** {text}"
+        """Информационное сообщение (как у AnyaAi)"""
+        return f"ℹ️ **Инфо:** {text}"
     
     @classmethod
     def user_link(cls, user_id: int, name: str) -> str:
-        """Создает ссылку на пользователя"""
+        """Ссылка на пользователя"""
         return f"[{name}](tg://user?id={user_id})"
     
     @classmethod
@@ -263,11 +251,6 @@ class SpectrumFormatter:
     def italic(cls, text: str) -> str:
         """Курсив"""
         return f"_{text}_"
-    
-    @classmethod
-    def spoiler(cls, text: str) -> str:
-        """Спойлер"""
-        return f"||{text}||"
 
 f = SpectrumFormatter()
 
