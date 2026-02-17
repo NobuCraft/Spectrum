@@ -4900,7 +4900,9 @@ class SpectrumBot:
     
             # ========== ИСПРАВЛЕННЫЙ ЗАПУСК (100% РАБОЧИЙ) ==========
     
-        def run(self):
+            # ========== ИСПРАВЛЕННЫЙ МЕТОД RUN ==========
+    
+    def run(self):
         """Запуск бота с защитой от конфликтов"""
         print("=" * 60)
         print("🚀 ЗАПУСК БОТА «SPECTRUM»")
@@ -4923,20 +4925,20 @@ class SpectrumBot:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         
-        # Принудительно удаляем вебхук несколько раз для гарантии
-        for i in range(3):
-            try:
-                loop.run_until_complete(
-                    self.application.bot.delete_webhook(drop_pending_updates=True)
-                )
-                print(f"✅ Вебхук удален (попытка {i+1})")
-            except Exception as e:
-                print(f"⚠️ Ошибка при удалении вебхука: {e}")
+        # Принудительно удаляем вебхук
+        try:
+            loop.run_until_complete(
+                self.application.bot.delete_webhook(drop_pending_updates=True)
+            )
+            print("✅ Вебхук удален, старые подключения сброшены")
+        except Exception as e:
+            print(f"⚠️ Ошибка при удалении вебхука: {e}")
+            traceback.print_exc()
         
         print("🚀 Запуск polling...")
         
+        # Запускаем polling
         try:
-            # Запускаем polling в этом же цикле
             self.application.run_polling(drop_pending_updates=True)
         except Exception as e:
             print(f"❌ Ошибка при запуске polling: {e}")
