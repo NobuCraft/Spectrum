@@ -807,12 +807,11 @@ class GameBot:
         return False
     
     # ========== ОСНОВНЫЕ КОМАНДЫ ==========
-    
-    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
         
-                text = (
+        text = (
             self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n"
             f"🌟 **Привет, {user.first_name}!**\n"
             f"Я — **«СПЕКТР»**, твой игровой помощник\n\n"
@@ -838,49 +837,6 @@ class GameBot:
             parse_mode='Markdown'
         )
         self.db.add_stat(user.id, "commands_used")
-    
-    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            self.f.header("ГЛАВНОЕ МЕНЮ", "🎮") + "\n\nВыбери раздел:",
-            reply_markup=IrisKeyboard.main_menu(),
-            parse_mode='Markdown'
-        )
-    
-    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        text = (
-            self.f.header("СПРАВКА", "📚") + "\n\n"
-            self.f.section("ОСНОВНЫЕ КОМАНДЫ", "🔹") + "\n"
-            f"{self.f.command('start', 'начать работу')}\n"
-            f"{self.f.command('menu', 'главное меню')}\n"
-            f"{self.f.command('profile', 'твой профиль')}\n"
-            f"{self.f.command('mystats', 'твоя статистика')}\n\n"
-            
-            self.f.section("ИГРЫ", "🎮") + "\n"
-            f"{self.f.command('bosses', 'битва с боссами')}\n"
-            f"{self.f.command('casino', 'казино')}\n"
-            f"{self.f.command('rps', 'камень-ножницы-бумага')}\n\n"
-            
-            self.f.section("ЭКОНОМИКА", "💰") + "\n"
-            f"{self.f.command('daily', 'ежедневный бонус')}\n"
-            f"{self.f.command('weekly', 'недельный бонус')}\n"
-            f"{self.f.command('shop', 'магазин')}\n"
-            f"{self.f.command('pay @ник сумма', 'перевести монеты')}\n"
-            f"{self.f.command('donate', 'привилегии')}\n\n"
-            
-            self.f.section("МОДЕРАЦИЯ", "⚙️") + "\n"
-            f"{self.f.command('warn @ник [причина]', 'предупреждение')}\n"
-            f"{self.f.command('mute @ник минут [причина]', 'заглушить')}\n"
-            f"{self.f.command('ban @ник [причина]', 'заблокировать')}\n"
-            f"{self.f.command('banlist', 'список забаненных')}\n\n"
-            
-            f"👑 **Владелец:** {OWNER_USERNAME}"
-        )
-        
-        await update.message.reply_text(
-            text,
-            reply_markup=IrisKeyboard.back_button(),
-            parse_mode='Markdown'
-        )
     
     # ========== ПРОФИЛЬ ==========
     
