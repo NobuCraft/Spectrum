@@ -3,8 +3,8 @@ import aiohttp
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 
-# ========== НАСТРОЙКИ ==========
-TOKEN = "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ"
+# ========== ТВОИ КЛЮЧИ ==========
+TOKEN = "8326390250:AAG1nTYdy07AuKsYXS3yvDehfU2JuR0RqGo"
 GEMINI_KEY = "AIzaSyBPT4JUIevH0UiwXVY9eQjrY_pTPLeLbNE"
 
 # ========== GEMINI ==========
@@ -18,16 +18,16 @@ async def ask_gemini(text):
 
 # ========== TELEGRAM ==========
 async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = update.message.text
     await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-    reply = await ask_gemini(msg)
+    reply = await ask_gemini(update.message.text)
     await update.message.reply_text(f"🤖 {reply}")
 
 # ========== ЗАПУСК ==========
 async def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle))
-    print("✅ Бот запущен! Пиши ему в Telegram...")
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    print("✅ Бот запущен!")
     await app.run_polling()
 
 if __name__ == "__main__":
