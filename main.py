@@ -773,26 +773,24 @@ class GameBot:
 
     # ========== ОСНОВНЫЕ КОМАНДЫ ==========
 
-    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
-
-        text = (
-            self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n"
-            f"🌟 **Привет, {user.first_name}!**\n"
-            f"Я — **«СПЕКТР»**, твой игровой помощник\n\n"
-            self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n"
-            f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n"
-            f"{self.f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n"
-            f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n"
-            f"{self.f.list_item('Энергия: ' + str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
-            self.f.section("БЫСТРЫЙ СТАРТ", "🚀") + "\n"
-            f"{self.f.command('profile', 'твой профиль')}\n"
-            f"{self.f.command('bosses', 'битва с боссами')}\n"
-            f"{self.f.command('daily', 'ежедневный бонус')}\n"
-            f"{self.f.command('help', 'все команды')}\n\n"
-            f"👑 **Владелец:** {OWNER_USERNAME}"
-        )
+        
+        text = self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n" + \
+               f"🌟 **Привет, {user.first_name}!**\n" + \
+               f"Я — **«СПЕКТР»**, твой игровой помощник\n\n" + \
+               self.f.section("ТВОЙ ПРОФИЛЬ", "👤") + "\n" + \
+               f"{self.f.list_item('Роль: ' + self.get_role_emoji(user_data.get('role', 'user')) + ' ' + user_data.get('role', 'user'))}\n" + \
+               f"{self.f.list_item('Монеты: ' + str(user_data.get('coins', 1000)) + ' 💰')}\n" + \
+               f"{self.f.list_item('Уровень: ' + str(user_data.get('level', 1)))}\n" + \
+               f"{self.f.list_item('Энергия: ' + str(user_data.get('energy', 100)) + ' ⚡')}\n\n" + \
+               self.f.section("БЫСТРЫЙ СТАРТ", "🚀") + "\n" + \
+               f"{self.f.command('profile', 'твой профиль')}\n" + \
+               f"{self.f.command('bosses', 'битва с боссами')}\n" + \
+               f"{self.f.command('daily', 'ежедневный бонус')}\n" + \
+               f"{self.f.command('help', 'все команды')}\n\n" + \
+               f"👑 **Владелец:** {OWNER_USERNAME}"
 
         await update.message.reply_text(
             text,
