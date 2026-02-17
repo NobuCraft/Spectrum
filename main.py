@@ -1,3 +1,277 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+SPECTRUM BOT - Официальная версия
+Telegram бот с красивым оформлением
+"""
+
+import asyncio
+import logging
+import random
+import sqlite3
+import datetime
+from typing import Optional, Dict, Any, List, Tuple
+import aiohttp
+import json
+import os
+import re
+from collections import defaultdict
+import time
+import hashlib
+import base64
+import math
+from enum import Enum
+
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes
+)
+from telegram.error import TelegramError, InvalidToken
+
+# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# ========== КОНФИГУРАЦИЯ ==========
+TELEGRAM_TOKEN = "8326390250:AAG1nTYdy07AuKsYXS3yvDehfU2JuR0RqGo"
+DEEPSEEK_API_KEY = "sk-4c18a0f28fce421482cbcedcc33cb18d"
+OWNER_ID = 1732658530
+OWNER_USERNAME = "@NobuCraft"
+
+# Настройки антиспама
+SPAM_LIMIT = 5
+SPAM_WINDOW = 3
+SPAM_MUTE_TIME = 120
+
+# Цены на привилегии
+VIP_PRICE = 5000
+PREMIUM_PRICE = 15000
+LORD_PRICE = 30000
+ULTRA_PRICE = 50000
+
+VIP_DAYS = 30
+PREMIUM_DAYS = 30
+LORD_DAYS = 30
+ULTRA_DAYS = 30
+
+# ========== СИСТЕМА РАНГОВ ==========
+class Rank(Enum):
+    USER = 0
+    JUNIOR_MODER = 1
+    SENIOR_MODER = 2
+    JUNIOR_ADMIN = 3
+    SENIOR_ADMIN = 4
+    CREATOR = 5
+
+RANK_NAMES = {
+    0: "👤 Участник",
+    1: "🛡️ Младший модератор",
+    2: "🛡️ Старший модератор",
+    3: "⚜️ Младший администратор",
+    4: "⚜️ Старший администратор",
+    5: "👑 Создатель"
+}
+
+# ========== СТИЛЬ IRIS (КЛАСС ДЛЯ ФОРМАТИРОВАНИЯ) ==========
+class IrisFormatter:
+    """Класс для форматирования текста в стиле Iris (минималистичный, официальный)"""
+    
+    @staticmethod
+    def header(title: str, emoji: str = "📌") -> str:
+        """Заголовок раздела с линией"""
+        return f"\n{emoji} **{title}**\n" + "━" * 25 + "\n"
+    
+    @staticmethod
+    def section(title: str, emoji: str = "▫️") -> str:
+        """Подраздел"""
+        return f"\n{emoji} **{title}**"
+    
+    @staticmethod
+    def command(name: str, desc: str, usage: str = "", emoji: str = "•") -> str:
+        """Форматирование команды"""
+        if usage:
+            return f"{emoji} `/{name} {usage}` — {desc}"
+        return f"{emoji} `/{name}` — {desc}"
+    
+    @staticmethod
+    def param(name: str, desc: str) -> str:
+        """Параметр команды"""
+        return f"  └ {name} — {desc}"
+    
+    @staticmethod
+    def example(text: str) -> str:
+        """Пример использования"""
+        return f"  └ Пример: `{text}`"
+    
+    @staticmethod
+    def success(text: str) -> str:
+        return f"✅ {text}"
+    
+    @staticmethod
+    def error(text: str) -> str:
+        return f"❌ {text}"
+    
+    @staticmethod
+    def warning(text: str) -> str:
+        return f"⚠️ {text}"
+    
+    @staticmethod
+    def info(text: str) -> str:
+        return f"ℹ️ {text}"
+    
+    @staticmethod
+    def list_item(text: str, emoji: str = "•") -> str:
+        return f"{emoji} {text}"
+    
+    @staticmethod
+    def progress(current: int, total: int, length: int = 10) -> str:
+        filled = int((current / total) * length)
+        bar = "█" * filled + "░" * (length - filled)
+        return f"`{bar}` {current}/{total}"
+    
+    @staticmethod
+    def stat(name: str, value: str, emoji: str = "📊") -> str:
+        return f"{emoji} **{name}:** {value}"
+    
+    @staticmethod
+    def user_link(user_id: int, name: str) -> str:
+        return f"[{name}](tg://user?id={user_id})"
+    
+    @staticmethod
+    def bold(text: str) -> str:
+        return f"**{text}**"
+    
+    @staticmethod
+    def code(text: str) -> str:
+        return f"`{text}`"
+    
+    @staticmethod
+    def spoiler(text: str) -> str:
+        return f"||{text}||"
+    
+    @staticmethod
+    def quote(text: str) -> str:
+        return f"> {text}"
+
+f = IrisFormatter()
+
+# ========== КЛАВИАТУРЫ В СТИЛЕ IRIS ==========
+class IrisKeyboard:
+    """Все клавиатуры бота"""
+    
+    @staticmethod
+    def main_menu():
+        """Главное меню"""
+        keyboard = [
+            [InlineKeyboardButton("👤 ПРОФИЛЬ", callback_data="menu_profile"),
+             InlineKeyboardButton("📊 СТАТИСТИКА", callback_data="menu_stats")],
+            [InlineKeyboardButton("⚙️ МОДЕРАЦИЯ", callback_data="menu_moderation"),
+             InlineKeyboardButton("👥 КЛАНЫ", callback_data="menu_clan")],
+            [InlineKeyboardButton("🎮 ИГРЫ", callback_data="menu_games"),
+             InlineKeyboardButton("💰 ЭКОНОМИКА", callback_data="menu_economy")],
+            [InlineKeyboardButton("💎 ПРИВИЛЕГИИ", callback_data="menu_donate"),
+             InlineKeyboardButton("📚 ПОМОЩЬ", callback_data="menu_help")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def back_button(callback: str = "menu_back"):
+        keyboard = [[InlineKeyboardButton("🔙 НАЗАД", callback_data=callback)]]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def confirm_cancel():
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data="confirm"),
+                InlineKeyboardButton("❌ ОТМЕНА", callback_data="cancel")
+            ]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def pagination(current: int, total: int, prefix: str):
+        buttons = []
+        row = []
+        
+        if current > 1:
+            row.append(InlineKeyboardButton("◀️", callback_data=f"{prefix}_page_{current-1}"))
+        
+        row.append(InlineKeyboardButton(f"📄 {current}/{total}", callback_data="noop"))
+        
+        if current < total:
+            row.append(InlineKeyboardButton("▶️", callback_data=f"{prefix}_page_{current+1}"))
+        
+        buttons.append(row)
+        return InlineKeyboardMarkup(buttons)
+    
+    @staticmethod
+    def moderation_menu():
+        keyboard = [
+            [InlineKeyboardButton("⚠️ ВАРНЫ", callback_data="mod_warns"),
+             InlineKeyboardButton("🔇 МУТЫ", callback_data="mod_mutes")],
+            [InlineKeyboardButton("🔴 БАНЫ", callback_data="mod_bans"),
+             InlineKeyboardButton("📋 СПИСКИ", callback_data="mod_lists")],
+            [InlineKeyboardButton("⚙️ НАСТРОЙКИ", callback_data="mod_settings"),
+             InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def games_menu():
+        keyboard = [
+            [InlineKeyboardButton("👾 БОССЫ", callback_data="bosses"),
+             InlineKeyboardButton("🎰 КАЗИНО", callback_data="casino")],
+            [InlineKeyboardButton("✊ КНБ", callback_data="rps"),
+             InlineKeyboardButton("⭕ КРЕСТИКИ-НОЛИКИ", callback_data="ttt")],
+            [InlineKeyboardButton("💣 САПЁР", callback_data="minesweeper"),
+             InlineKeyboardButton("🧠 МЕМОРИ", callback_data="memory")],
+            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def economy_menu():
+        keyboard = [
+            [InlineKeyboardButton("🛍 МАГАЗИН", callback_data="shop"),
+             InlineKeyboardButton("💎 ПРИВИЛЕГИИ", callback_data="donate")],
+            [InlineKeyboardButton("📦 ИНВЕНТАРЬ", callback_data="inventory"),
+             InlineKeyboardButton("🏆 ТОП", callback_data="top")],
+            [InlineKeyboardButton("💰 ПЕРЕВОД", callback_data="pay"),
+             InlineKeyboardButton("🎁 БОНУСЫ", callback_data="bonuses")],
+            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def rps_game():
+        keyboard = [
+            [
+                InlineKeyboardButton("🪨 КАМЕНЬ", callback_data="rps_rock"),
+                InlineKeyboardButton("✂️ НОЖНИЦЫ", callback_data="rps_scissors"),
+                InlineKeyboardButton("📄 БУМАГА", callback_data="rps_paper")
+            ],
+            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+    
+    @staticmethod
+    def mafia_game_menu():
+        keyboard = [
+            [InlineKeyboardButton("🔪 СОЗДАТЬ ИГРУ", callback_data="mafia_create")],
+            [InlineKeyboardButton("🎮 ПРИСОЕДИНИТЬСЯ", callback_data="mafia_join")],
+            [InlineKeyboardButton("▶️ НАЧАТЬ ИГРУ", callback_data="mafia_start")],
+            [InlineKeyboardButton("🗳️ ПРОГОЛОСОВАТЬ", callback_data="mafia_vote")],
+            [InlineKeyboardButton("📊 СТАТИСТИКА", callback_data="mafia_stats")],
+            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
+        ]
+        return InlineKeyboardMarkup(keyboard)
+
 # ========== БАЗА ДАННЫХ (ПОЛНАЯ, ИСПРАВЛЕННАЯ) ==========
 class Database:
     def __init__(self, db_name="spectrum_mega.db"):
@@ -687,291 +961,7 @@ class Database:
         
         columns = [description[0] for description in self.cursor.description]
         return dict(zip(columns, settings))
-  #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
-"""
-СПЕКТР МЕГА-БОТ - ПОЛНАЯ ВЕРСИЯ
-Стиль: Iris (минималистичный, официальный)
-Объединение: Iris (модерация) + TrueMafia (игра) + TReanfer (экономика) + Anya (AI)
-"""
-
-import asyncio
-import logging
-import random
-import sqlite3
-import datetime
-from typing import Optional, Dict, Any, List, Tuple
-import aiohttp
-import json
-import os
-import re
-from collections import defaultdict
-import time
-import hashlib
-import base64
-import math
-from enum import Enum
-
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler,
-    MessageHandler, filters, ContextTypes
-)
-from telegram.error import TelegramError, InvalidToken
-
-# ========== НАСТРОЙКА ЛОГИРОВАНИЯ ==========
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-logger = logging.getLogger(__name__)
-
-# ========== КОНФИГУРАЦИЯ ==========
-TELEGRAM_TOKEN = "8326390250:AAG1nTYdy07AuKsYXS3yvDehfU2JuR0RqGo"
-GEMINI_API_KEY = "AIzaSyBPT4JUIevH0UiwXVY9eQjrY_pTPLeLbNE"
-OWNER_ID = 1732658530
-OWNER_USERNAME = "@NobuCraft"
-
-# Настройки антиспама
-SPAM_LIMIT = 5
-SPAM_WINDOW = 3
-SPAM_MUTE_TIME = 120
-
-# ========== СИСТЕМА РАНГОВ (IRIS) ==========
-class Rank(Enum):
-    USER = 0
-    JUNIOR_MODER = 1
-    SENIOR_MODER = 2
-    JUNIOR_ADMIN = 3
-    SENIOR_ADMIN = 4
-    CREATOR = 5
-
-RANK_NAMES = {
-    0: "👤 Участник",
-    1: "🛡️ Младший модератор",
-    2: "🛡️ Старший модератор",
-    3: "⚜️ Младший администратор",
-    4: "⚜️ Старший администратор",
-    5: "👑 Создатель"
-}
-
-# ========== ЦЕНЫ НА ПРИВИЛЕГИИ (TREANFER) ==========
-PRIVILEGE_PRICES = {
-    "vip": 5000,
-    "premium": 15000,
-    "lord": 30000,
-    "ultra": 50000,
-    "moderator": 100000,
-    "admin": 200000,
-    "creator": 500000
-}
-
-PRIVILEGE_DAYS = {
-    "vip": 30,
-    "premium": 30,
-    "lord": 30,
-    "ultra": 30,
-    "moderator": 30,
-    "admin": 30,
-    "creator": 365
-}
-
-# ========== НОВЫЙ СТИЛЬ IRIS (МИНИМАЛИЗМ, БЕЗ ПАЛОК) ==========
-class IrisFormatter:
-    """Класс для форматирования текста в стиле Iris (минималистичный, официальный)"""
     
-    @staticmethod
-    def header(title: str, emoji: str = "📌") -> str:
-        """Заголовок раздела с линией (как в Iris)"""
-        return f"\n{emoji} **{title}**\n" + "━" * 25 + "\n"
-    
-    @staticmethod
-    def section(title: str, emoji: str = "▫️") -> str:
-        """Подраздел"""
-        return f"\n{emoji} **{title}**"
-    
-    @staticmethod
-    def command(name: str, desc: str, usage: str = "", emoji: str = "•") -> str:
-        """Форматирование команды"""
-        if usage:
-            return f"{emoji} `/{name} {usage}` — {desc}"
-        return f"{emoji} `/{name}` — {desc}"
-    
-    @staticmethod
-    def param(name: str, desc: str) -> str:
-        """Параметр команды"""
-        return f"  └ {name} — {desc}"
-    
-    @staticmethod
-    def example(text: str) -> str:
-        """Пример использования"""
-        return f"  └ Пример: `{text}`"
-    
-    @staticmethod
-    def success(text: str) -> str:
-        return f"✅ {text}"
-    
-    @staticmethod
-    def error(text: str) -> str:
-        return f"❌ {text}"
-    
-    @staticmethod
-    def warning(text: str) -> str:
-        return f"⚠️ {text}"
-    
-    @staticmethod
-    def info(text: str) -> str:
-        return f"ℹ️ {text}"
-    
-    @staticmethod
-    def list_item(text: str, emoji: str = "•") -> str:
-        return f"{emoji} {text}"
-    
-    @staticmethod
-    def progress(current: int, total: int, length: int = 10) -> str:
-        filled = int((current / total) * length)
-        bar = "█" * filled + "░" * (length - filled)
-        return f"`{bar}` {current}/{total}"
-    
-    @staticmethod
-    def stat(name: str, value: str, emoji: str = "📊") -> str:
-        return f"{emoji} **{name}:** {value}"
-    
-    @staticmethod
-    def user_link(user_id: int, name: str) -> str:
-        return f"[{name}](tg://user?id={user_id})"
-    
-    @staticmethod
-    def bold(text: str) -> str:
-        return f"**{text}**"
-    
-    @staticmethod
-    def code(text: str) -> str:
-        return f"`{text}`"
-    
-    @staticmethod
-    def spoiler(text: str) -> str:
-        return f"||{text}||"
-    
-    @staticmethod
-    def quote(text: str) -> str:
-        return f"> {text}"
-
-f = IrisFormatter()
-
-# ========== КЛАВИАТУРЫ В СТИЛЕ IRIS ==========
-class IrisKeyboard:
-    """Все клавиатуры бота"""
-    
-    @staticmethod
-    def main_menu():
-        """Главное меню"""
-        keyboard = [
-            [InlineKeyboardButton("👤 ПРОФИЛЬ", callback_data="menu_profile"),
-             InlineKeyboardButton("⚙️ МОДЕРАЦИЯ", callback_data="menu_moderation")],
-            [InlineKeyboardButton("🔪 МАФИЯ", callback_data="menu_mafia"),
-             InlineKeyboardButton("💰 ЭКОНОМИКА", callback_data="menu_economy")],
-            [InlineKeyboardButton("🎮 ИГРЫ", callback_data="menu_games"),
-             InlineKeyboardButton("🤖 ИИ-ЧАТ", callback_data="menu_ai")],
-            [InlineKeyboardButton("👑 ПРИВИЛЕГИИ", callback_data="menu_donate"),
-             InlineKeyboardButton("📚 ПОМОЩЬ", callback_data="menu_help")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def back_button(callback: str = "menu_back"):
-        keyboard = [[InlineKeyboardButton("🔙 НАЗАД", callback_data=callback)]]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def confirm_cancel():
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data="confirm"),
-                InlineKeyboardButton("❌ ОТМЕНА", callback_data="cancel")
-            ]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def pagination(current: int, total: int, prefix: str):
-        buttons = []
-        row = []
-        
-        if current > 1:
-            row.append(InlineKeyboardButton("◀️", callback_data=f"{prefix}_page_{current-1}"))
-        
-        row.append(InlineKeyboardButton(f"📄 {current}/{total}", callback_data="noop"))
-        
-        if current < total:
-            row.append(InlineKeyboardButton("▶️", callback_data=f"{prefix}_page_{current+1}"))
-        
-        buttons.append(row)
-        return InlineKeyboardMarkup(buttons)
-    
-    @staticmethod
-    def moderation_menu():
-        keyboard = [
-            [InlineKeyboardButton("⚠️ ВАРНЫ", callback_data="mod_warns"),
-             InlineKeyboardButton("🔇 МУТЫ", callback_data="mod_mutes")],
-            [InlineKeyboardButton("🔴 БАНЫ", callback_data="mod_bans"),
-             InlineKeyboardButton("📋 СПИСКИ", callback_data="mod_lists")],
-            [InlineKeyboardButton("⚙️ НАСТРОЙКИ", callback_data="mod_settings"),
-             InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def mafia_game_menu():
-        keyboard = [
-            [InlineKeyboardButton("🔪 СОЗДАТЬ ИГРУ", callback_data="mafia_create")],
-            [InlineKeyboardButton("🎮 ПРИСОЕДИНИТЬСЯ", callback_data="mafia_join")],
-            [InlineKeyboardButton("▶️ НАЧАТЬ ИГРУ", callback_data="mafia_start")],
-            [InlineKeyboardButton("🗳️ ПРОГОЛОСОВАТЬ", callback_data="mafia_vote")],
-            [InlineKeyboardButton("📊 СТАТИСТИКА", callback_data="mafia_stats")],
-            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def economy_menu():
-        keyboard = [
-            [InlineKeyboardButton("🛍 МАГАЗИН", callback_data="shop"),
-             InlineKeyboardButton("💎 ПРИВИЛЕГИИ", callback_data="donate")],
-            [InlineKeyboardButton("📦 ИНВЕНТАРЬ", callback_data="inventory"),
-             InlineKeyboardButton("🏆 ТОП", callback_data="top")],
-            [InlineKeyboardButton("💰 ПЕРЕВОД", callback_data="pay"),
-             InlineKeyboardButton("🎁 БОНУСЫ", callback_data="bonuses")],
-            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def games_menu():
-        keyboard = [
-            [InlineKeyboardButton("👾 БОССЫ", callback_data="bosses"),
-             InlineKeyboardButton("🎰 КАЗИНО", callback_data="casino")],
-            [InlineKeyboardButton("✊ КНБ", callback_data="rps"),
-             InlineKeyboardButton("⭕ КРЕСТИКИ-НОЛИКИ", callback_data="ttt")],
-            [InlineKeyboardButton("💣 САПЁР", callback_data="minesweeper"),
-             InlineKeyboardButton("🧠 МЕМОРИ", callback_data="memory")],
-            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-    
-    @staticmethod
-    def rps_game():
-        keyboard = [
-            [
-                InlineKeyboardButton("🪨 КАМЕНЬ", callback_data="rps_rock"),
-                InlineKeyboardButton("✂️ НОЖНИЦЫ", callback_data="rps_scissors"),
-                InlineKeyboardButton("📄 БУМАГА", callback_data="rps_paper")
-            ],
-            [InlineKeyboardButton("🔙 НАЗАД", callback_data="menu_back")]
-        ]
-        return InlineKeyboardMarkup(keyboard)
-  
     def set_rules(self, chat_id: int, rules: str):
         self.cursor.execute(
             "INSERT OR REPLACE INTO chat_settings (chat_id, rules) VALUES (?, ?)",
@@ -1006,6 +996,9 @@ class IrisKeyboard:
         """Получить прощание чата"""
         settings = self.get_chat_settings(chat_id)
         return settings.get('goodbye_message')
+
+# ========== СОЗДАНИЕ ЭКЗЕМПЛЯРА БАЗЫ ДАННЫХ ==========
+db = Database()
 
 # ========== DEEPSEEK AI (В СТИЛЕ ANYA) ==========
 class DeepSeekAI:
@@ -4300,17 +4293,12 @@ class DeepSeekAI:
     
     # ========== CALLBACK КНОПКИ ==========
     
-        # ========== CALLBACK КНОПКИ (ИСПРАВЛЕНО) ==========
-    
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка нажатий на инлайн-кнопки"""
         query = update.callback_query
         await query.answer()
         data = query.data
         user = query.from_user
-        
-        # Отладочная информация
-        print(f"🔘 Нажата кнопка: {data} от пользователя {user.first_name}")
         
         if data == "noop":
             return
@@ -4321,12 +4309,9 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.main_menu(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data == "menu_profile":
-            # Создаём контекст для команды profile
             await self.cmd_profile(update, context)
-            return
         
         elif data == "menu_moderation":
             text = (f.header("МОДЕРАЦИЯ", "🛡️") + "\n"
@@ -4348,11 +4333,9 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data == "menu_mafia":
             await self.cmd_mafia(update, context)
-            return
         
         elif data == "menu_economy":
             text = (f.header("ЭКОНОМИКА", "💰") + "\n"
@@ -4373,7 +4356,6 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data == "menu_games":
             text = (f.header("ИГРЫ", "🎮") + "\n"
@@ -4395,46 +4377,38 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data == "menu_ai":
             text = (f.header("AI-ЧАТ", "🤖") + "\n"
-                    f"{f.info('Просто напиши мне что-нибудь!')}\n"
-                    f"{f.list_item('Я отвечу с помощью DeepSeek AI')}\n"
+                    f"{f.info('Просто напишите мне что-нибудь!')}\n"
+                    f"{f.list_item('Я отвечу с помощью Gemini AI')}\n"
                     f"{f.list_item('Понимаю контекст разговора')}\n"
-                    f"{f.list_item('Всегда рад поболтать!')}")
+                    f"{f.list_item('Могу помочь с любыми вопросами')}")
             
             await query.edit_message_text(
                 text,
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data == "menu_donate":
             await self.cmd_donate(update, context)
-            return
         
         elif data == "menu_help":
             await self.cmd_help(update, context)
-            return
         
         elif data == "edit_profile":
             await self.cmd_edit_profile(update, context)
-            return
         
         elif data.startswith("boss_fight_"):
             boss_id = int(data.split('_')[2])
-            # Создаём новый список args и передаём в команду
             context.args = [str(boss_id)]
             await self.cmd_boss_fight(update, context)
-            return
         
         elif data.startswith("banlist_page_"):
             page = int(data.split('_')[2])
             context.args = [str(page)]
             await self.cmd_banlist(update, context)
-            return
         
         elif data.startswith("rps_"):
             choice = data.split('_')[1]
@@ -4473,7 +4447,6 @@ class DeepSeekAI:
                 reply_markup=IrisKeyboard.back_button(),
                 parse_mode='Markdown'
             )
-            return
         
         elif data in ["mafia_create", "mafia_join", "mafia_start", "mafia_vote"]:
             if data == "mafia_create":
@@ -4484,10 +4457,6 @@ class DeepSeekAI:
                 await self.cmd_mafia_start(update, context)
             elif data == "mafia_vote":
                 await self.cmd_mafia_vote(update, context)
-            return
-        
-        # Если неизвестная кнопка
-        print(f"⚠️ Неизвестная кнопка: {data}")
     
     # ========== ЗАПУСК ==========
     
