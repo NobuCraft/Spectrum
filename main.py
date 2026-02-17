@@ -912,7 +912,7 @@ class GameBot:
             self.f.section("ХАРАКТЕРИСТИКИ", "📊") + "\n"
             f"{self.f.stat('Уровень', str(current_level))}\n"
             f"{self.f.stat('Опыт', exp_progress)}\n"
-            f"{self.f.stat('Монеты', f"{user_data.get('coins', 0):,}".replace(',', ' ') + ' 💰')}\n"
+            f"{self.f.stat('Монеты', f"{user_data.get('coins', 0):,} 💰".replace(',', ' '))}\n"
             f"{self.f.stat('Алмазы', str(user_data.get('diamonds', 0)) + ' 💎')}\n"
             f"{self.f.stat('Энергия', str(user_data.get('energy', 100)) + ' ⚡')}\n\n"
             
@@ -1227,7 +1227,7 @@ class GameBot:
                 f"└ {boss[1]} (ур. {boss[2]})\n"
                 f"└ ❤️ Здоровье: {health_bar}\n"
                 f"└ ⚔️ Урон: {boss[5]}\n"
-                f"└ 💰 Награда: {boss[6]:,} 💰\n\n".replace(',', ' ')
+                f"└ Награда: {boss[6]:,} 💰\n\n".replace(',', ' ')
             )
             
             # Другие боссы
@@ -1358,7 +1358,7 @@ class GameBot:
             f"{self.f.stat('Уровень', str(boss[2]))}\n"
             f"{self.f.stat('❤️ Здоровье', health_bar)}\n"
             f"{self.f.stat('⚔️ Урон', str(boss[5]))}\n"
-            f"{self.f.stat('💰 Награда', f"{boss[6]:,} 💰".replace(',', ' '))}\n"
+            f"{self.f.stat('Награда', f"{boss[6]:,} 💰".replace(',', ' '))}\n"
             f"{self.f.stat('📊 Статус', status)}"
         )
         
