@@ -4309,7 +4309,7 @@ class SpectrumBot:
                             )
                         else:
                             await update.message.reply_text(
-                                f.success(f"Пара найдена! ({game['cards'][first]})") + "\n"
+                                f.success(f"Пара найдена! ({game['cards'][first]})") + "\n",
                                 f.success('Пара найдена! (' + game['cards'][first] + ')'),
                                 parse_mode='Markdown'
                             )
