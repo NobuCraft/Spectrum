@@ -812,7 +812,7 @@ class GameBot:
         user = update.effective_user
         user_data = self.db.get_or_create_user("tg", str(user.id), user.first_name)
         
-        text = (
+                text = (
             self.f.header("ДОБРО ПОЖАЛОВАТЬ", "⚔️") + "\n\n"
             f"🌟 **Привет, {user.first_name}!**\n"
             f"Я — **«СПЕКТР»**, твой игровой помощник\n\n"
@@ -902,7 +902,7 @@ class GameBot:
         warns = user_data.get('warns', 0)
         warns_display = "🔴" * warns + "⚪" * (3 - warns)
         
-        text = (
+                text = (
             self.f.header("ПРОФИЛЬ ИГРОКА", "👤") + "\n\n"
             
             f"**{user_data.get('nickname') or user.first_name}** "
@@ -1222,6 +1222,12 @@ class GameBot:
             health_percent = (boss[3] / boss[4]) * 100
             health_bar = self.f.progress(boss[3], boss[4], 20)
             
+                    text = self.f.header("АРЕНА БОССОВ", "👾") + "\n\n"
+        
+        if bosses:
+            boss = bosses[0]
+            health_bar = self.f.progress(boss[3], boss[4], 20)
+            
             text += (
                 f"**ТЕКУЩИЙ БОСС**\n"
                 f"└ {boss[1]} (ур. {boss[2]})\n"
@@ -1230,7 +1236,6 @@ class GameBot:
                 f"└ Награда: {boss[6]} 💰\n\n"
             )
             
-            # Другие боссы
             if len(bosses) > 1:
                 text += self.f.section("ОЧЕРЕДЬ", "📋") + "\n"
                 for i, b in enumerate(bosses[1:], 2):
@@ -1353,7 +1358,7 @@ class GameBot:
         health_percent = (boss[3] / boss[4]) * 100
         health_bar = self.f.progress(boss[3], boss[4], 20)
         
-        text = (
+         text = (
             self.f.header(f"БОСС: {boss[1]}", "👾") + "\n\n"
             f"{self.f.stat('Уровень', str(boss[2]))}\n"
             f"{self.f.stat('❤️ Здоровье', health_bar)}\n"
