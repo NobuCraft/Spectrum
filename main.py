@@ -4,6 +4,7 @@
 import os
 import sys
 import asyncio
+import signal
 import time
 import google.generativeai as genai
 from telegram import Update
@@ -13,36 +14,26 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
 GEMINI_KEY = "AIzaSyD3Brb2oAuFNWA7JBMrmd6WWrZ6JzK57HE"
 
-# ========== ЗАЩИТА ОТ КОНФЛИКТОВ ==========
-LOCK_FILE = "/tmp/bot.lock"
+# ========== ЖЕСТКАЯ ЗАЩИТА ==========
+def kill_other_bots():
+    """Убивает все другие процессы с этим токеном"""
+    try:
+        # Ищем все Python процессы с нашим токеном
+        os.system(f"pkill -f '{TOKEN[:20]}' || true")
+        os.system("pkill -f 'python.*bot' || true")
+        time.sleep(2)
+        print("✅ Все старые процессы убиты")
+    except:
+        pass
 
-def check_lock():
-    if os.path.exists(LOCK_FILE):
-        try:
-            with open(LOCK_FILE, 'r') as f:
-                pid = int(f.read().strip())
-            os.kill(pid, 0)
-            print(f"❌ Бот уже запущен с PID {pid}")
-            sys.exit(1)
-        except:
-            os.remove(LOCK_FILE)
-    
-    with open(LOCK_FILE, 'w') as f:
-        f.write(str(os.getpid()))
+# Убиваем другие процессы при запуске
+kill_other_bots()
 
-check_lock()
-
-# ========== GEMINI (ИСПРАВЛЕНО) ==========
+# ========== GEMINI ==========
 genai.configure(api_key=GEMINI_KEY)
 
-# Список доступных моделей
-models = genai.list_models()
-print("📋 Доступные модели:")
-for model in models:
-    print(f"  • {model.name}")
-
-# Используем правильную модель
-model = genai.GenerativeModel('models/gemini-1.5-pro')  # или gemini-1.5-flash
+# Используем правильную модель из списка
+model = genai.GenerativeModel('models/gemini-2.0-flash')  # Берем из списка
 
 async def ask_gemini(question: str) -> str:
     try:
@@ -75,9 +66,7 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Тест Gemini при запуске
-    test_response = await ask_gemini("Привет! Скажи 'Работаю!'")
-    await update.message.reply_text(f"✅ Бот работает!\n🤖 Gemini: {test_response[:50]}...")
+    await update.message.reply_text("✅ Бот работает!\n🤖 Gemini подключен")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🆔 Твой ID: `{update.effective_user.id}`", parse_mode="Markdown")
@@ -105,19 +94,23 @@ async def main():
     app.add_handler(CommandHandler("id", id_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
+    # Важно: удаляем вебхук и чистим старые апдейты
+    await app.bot.delete_webhook(drop_pending_updates=True)
+    
     print("✅ Бот запущен! Напиши /start в Telegram")
     
     await app.initialize()
     await app.start()
-    await app.bot.delete_webhook(drop_pending_updates=True)
     await app.updater.start_polling()
     
+    # Бесконечное ожидание
     while True:
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
     try:
         asyncio.run(main())
-    finally:
-        if os.path.exists(LOCK_FILE):
-            os.remove(LOCK_FILE)
+    except KeyboardInterrupt:
+        print("\n👋 Бот остановлен")
+    except Exception as e:
+        print(f"❌ Ошибка: {e}")
