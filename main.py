@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-СПЕКТР - Официальный бот 
+СПЕКТР - Официальный бот с полным функционалом Iris + Мафия + Groq AI
 Версия 2.0 ULTIMATE
 """
 
@@ -41,7 +41,7 @@ if not TOKEN:
     sys.exit(1)
 
 # AI настройки
-AI_CHANCE = 40  # 40% шанс ответа AI на сообщения
+AI_CHANCE = 40
 
 # Настройки модерации
 SPAM_LIMIT = 5
@@ -72,10 +72,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ (КАК У IRIS) ==========
+# ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ ==========
 class Style:
-    """Классическое оформление как у Iris"""
-    
     SEPARATOR = "─" * 28
     SEPARATOR_BOLD = "━" * 28
     SEPARATOR_DOTS = "•" * 28
@@ -249,7 +247,7 @@ MAFIA_GIFS = {
     "revolver": "https://files.catbox.moe/pj64wq.gif"
 }
 
-# ========== БАЗА ДАННЫХ (ПОЛНАЯ) ==========
+# ========== БАЗА ДАННЫХ ==========
 class Database:
     def __init__(self):
         self.conn = sqlite3.connect("spectrum.db", check_same_thread=False)
@@ -258,7 +256,6 @@ class Database:
         logger.info("✅ База данных инициализирована")
     
     def create_tables(self):
-        # Пользователи (полная таблица)
         self.c.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -267,29 +264,19 @@ class Database:
                 first_name TEXT,
                 last_name TEXT,
                 language TEXT DEFAULT 'ru',
-                
-                -- Ресурсы
                 coins INTEGER DEFAULT 1000,
                 diamonds INTEGER DEFAULT 0,
                 energy INTEGER DEFAULT 100,
-                
-                -- Прогресс
                 level INTEGER DEFAULT 1,
                 exp INTEGER DEFAULT 0,
-                
-                -- Боевые
                 health INTEGER DEFAULT 100,
                 max_health INTEGER DEFAULT 100,
                 damage INTEGER DEFAULT 10,
                 armor INTEGER DEFAULT 0,
                 crit_chance INTEGER DEFAULT 5,
                 crit_multiplier INTEGER DEFAULT 150,
-                
-                -- Статистика
                 messages_count INTEGER DEFAULT 0,
                 commands_used INTEGER DEFAULT 0,
-                
-                -- Игры
                 rps_wins INTEGER DEFAULT 0,
                 rps_losses INTEGER DEFAULT 0,
                 rps_draws INTEGER DEFAULT 0,
@@ -301,14 +288,10 @@ class Database:
                 rr_losses INTEGER DEFAULT 0,
                 slots_wins INTEGER DEFAULT 0,
                 slots_losses INTEGER DEFAULT 0,
-                
-                -- Мафия
                 mafia_games INTEGER DEFAULT 0,
                 mafia_wins INTEGER DEFAULT 0,
                 mafia_losses INTEGER DEFAULT 0,
                 mafia_role TEXT,
-                
-                -- Профиль
                 nickname TEXT,
                 title TEXT DEFAULT '',
                 motto TEXT DEFAULT 'Нет девиза',
@@ -319,8 +302,6 @@ class Database:
                 birth_date TEXT,
                 age INTEGER DEFAULT 0,
                 reputation INTEGER DEFAULT 0,
-                
-                -- Модерация
                 role TEXT DEFAULT 'user',
                 rank INTEGER DEFAULT 0,
                 rank_name TEXT DEFAULT 'Участник',
@@ -331,35 +312,25 @@ class Database:
                 ban_reason TEXT,
                 ban_date TEXT,
                 ban_admin INTEGER,
-                
-                -- Привилегии
                 vip_until TEXT,
                 premium_until TEXT,
-                
-                -- Бонусы
                 daily_streak INTEGER DEFAULT 0,
                 last_daily TEXT,
                 last_weekly TEXT,
                 last_monthly TEXT,
                 last_work TEXT,
                 last_seen TEXT,
-                
-                -- Настройки
                 notifications INTEGER DEFAULT 1,
                 theme TEXT DEFAULT 'light',
-                
-                -- Метаданные
                 registered TEXT DEFAULT CURRENT_TIMESTAMP,
                 referrer_id INTEGER
             )
         ''')
         
-        # Индексы
         self.c.execute('CREATE INDEX IF NOT EXISTS idx_telegram_id ON users(telegram_id)')
         self.c.execute('CREATE INDEX IF NOT EXISTS idx_username ON users(username)')
         self.c.execute('CREATE INDEX IF NOT EXISTS idx_rank ON users(rank)')
         
-        # Логи
         self.c.execute('''
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -371,7 +342,6 @@ class Database:
             )
         ''')
         
-        # Черный список слов
         self.c.execute('''
             CREATE TABLE IF NOT EXISTS blacklist (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -381,7 +351,6 @@ class Database:
             )
         ''')
         
-        # Настройки чатов
         self.c.execute('''
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
@@ -396,7 +365,6 @@ class Database:
             )
         ''')
         
-        # Игры
         self.c.execute('''
             CREATE TABLE IF NOT EXISTS games (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -525,7 +493,7 @@ class Database:
                       (until.isoformat(), user_id))
         self.conn.commit()
         return until
-
+    
     def set_rank(self, user_id: int, rank: int, admin_id: int) -> bool:
         if rank not in RANKS:
             return False
@@ -658,7 +626,7 @@ class Database:
 
 db = Database()
 
-# ========== GROQ AI (ДЕРЗКИЙ, СО СЛЕНГОМ) ==========
+# ========== GROQ AI ==========
 class GroqAI:
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -668,7 +636,6 @@ class GroqAI:
         self.user_last_ai = defaultdict(float)
         self.ai_cooldown = 3
         
-        # Дерзкий системный промпт со сленгом
         self.system_prompt = """Ты — Спектр, дерзкий и умный ИИ-бот, который тусуется в Telegram чатах.
 
 Твой характер:
@@ -744,11 +711,10 @@ class GroqAI:
 
 if GROQ_KEY:
     ai = GroqAI(GROQ_KEY)
-    print("✅ Groq AI инициализирован (дерзкий режим)")
+    print("✅ Groq AI инициализирован")
 else:
     ai = None
-    print("⚠️ Groq AI не подключен (ключ не найден)")
-
+    print("⚠️ Groq AI не подключен")
 
 # ========== ОСНОВНОЙ КЛАСС БОТА ==========
 class SpectrumBot:
@@ -818,17 +784,17 @@ class SpectrumBot:
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^!снять всех|^снять_всех'), self.cmd_remove_all_ranks))
-        self.app.add_handler(CommandHandler("кто_админ", self.cmd_who_admins))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кто админ'), self.cmd_who_admins))
         
         # ===== БАНЫ И ПРЕДУПРЕЖДЕНИЯ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
-        self.app.add_handler(CommandHandler("варны", self.cmd_warns))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^снять_варн|^-варн'), self.cmd_unwarn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варны'), self.cmd_warns))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн|^-варн'), self.cmd_unwarn))
         self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
-        self.app.add_handler(CommandHandler("мутлист", self.cmd_mutelist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мутлист'), self.cmd_mutelist))
         self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
         self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
-        self.app.add_handler(CommandHandler("банлист", self.cmd_banlist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^банлист'), self.cmd_banlist))
         self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
         self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
         
@@ -838,14 +804,14 @@ class SpectrumBot:
         # ===== НАСТРОЙКИ ЧАТА =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
-        self.app.add_handler(CommandHandler("правила", self.cmd_show_rules))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^правила'), self.cmd_show_rules))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-приветствие'), self.cmd_remove_welcome))
         self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
         
         # ===== ЧЕРНЫЙ СПИСОК =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+блэклист|^\+чс'), self.cmd_add_blacklist))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-блэклист|^-чс'), self.cmd_remove_blacklist))
-        self.app.add_handler(CommandHandler("блэклист", self.cmd_show_blacklist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^блэклист'), self.cmd_show_blacklist))
         
         # ===== ЭКОНОМИКА =====
         self.app.add_handler(CommandHandler("daily", self.cmd_daily))
@@ -926,7 +892,7 @@ class SpectrumBot:
             f"{s.stat('Ранг', self.get_role_emoji(user_data['rank']) + ' ' + user_data['rank_name'])}\n\n"
             f"{s.section('ЧТО Я УМЕЮ')}"
             f"{s.item('🎮 Игры: мафия, рулетка, кости, КНБ, сапёр')}\n"
-            f"{s.item('🤖 AI общение (дерзкий, со сленгом)')}\n"
+            f"{s.item('🤖 AI общение')}\n"
             f"{s.item('💰 Экономика, донат, VIP')}\n"
             f"{s.item('⚙️ Модерация (5 рангов)')}\n\n"
             f"{s.section('БЫСТРЫЙ СТАРТ')}"
@@ -987,8 +953,7 @@ class SpectrumBot:
             f"{s.cmd('+правила Текст', 'установить правила')}\n"
             f"{s.cmd('правила', 'показать правила')}\n"
             f"{s.cmd('-приветствие', 'удалить приветствие')}\n"
-            f"{s.cmd('капча on/off', 'включить капчу')}\n"
-            f"{s.cmd('ссылки on/off', 'запретить ссылки')}\n\n"
+            f"{s.cmd('капча on/off', 'включить капчу')}\n\n"
             
             f"{s.section('ЧЕРНЫЙ СПИСОК')}"
             f"{s.cmd('+блэклист слово', 'добавить слово')}\n"
@@ -1263,7 +1228,7 @@ class SpectrumBot:
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
 
-    # ===== МОДЕРАЦИЯ (5 РАНГОВ) =====
+    # ===== МОДЕРАЦИЯ =====
     
     async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1343,9 +1308,8 @@ class SpectrumBot:
             f"{s.item('Теперь: 👤 Участник')}",
             parse_mode="Markdown"
         )
-
+    
     async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """!Снять всех - снять всех модераторов"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
@@ -1363,7 +1327,7 @@ class SpectrumBot:
             s.success(f"✅ Снято модераторов: {len(mods)}"),
             parse_mode="Markdown"
         )
-
+    
     async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.db.c.execute("SELECT first_name, username, rank, rank_name FROM users WHERE rank > 0 ORDER BY rank DESC")
         admins = self.db.c.fetchall()
@@ -1433,6 +1397,73 @@ class SpectrumBot:
             self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
             await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен за 5 предупреждений"))
     
+    async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        args = context.args
+        if not args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /варны @user"))
+            return
+        
+        username = args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        warns_list = self.db.get_warns(target['id'])
+        target_name = target.get('nickname') or target['first_name']
+        
+        if not warns_list:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        text = s.header(f"ПРЕДУПРЕЖДЕНИЯ: {target_name}") + "\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
+            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            
+            text += (
+                f"**ID: {warn['id']}**\n"
+                f"{s.item(f'Причина: {warn['reason']}')}\n"
+                f"{s.item(f'Админ: {admin_name}')}\n"
+                f"{s.item(f'Дата: {date}')}\n\n"
+            )
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'(?:снять варн|-варн)\s+@?(\S+)', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
+        target_name = target_user.get('nickname') or target_user['first_name']
+        
+        if not removed:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        await update.message.reply_text(s.success(f"✅ Предупреждение снято с {target_name}"))
+    
     async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
@@ -1481,6 +1512,57 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode="Markdown")
     
+    async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.c.execute("SELECT id, first_name, username, mute_until FROM users WHERE mute_until > ?", 
+                         (datetime.datetime.now().isoformat(),))
+        muted = self.db.c.fetchall()
+        
+        if not muted:
+            await update.message.reply_text(s.info("Нет пользователей в муте"))
+            return
+        
+        text = s.header("СПИСОК ЗАМУЧЕННЫХ") + "\n\n"
+        for user in muted[:10]:
+            until = datetime.datetime.fromisoformat(user[3]).strftime("%d.%m.%Y %H:%M")
+            name = user[1]
+            text += f"{s.item(f'{name} — до {until}')}\n"
+        
+        if len(muted) > 10:
+            text += f"\n... и еще {len(muted) - 10}"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('размут', '').replace('@', '').strip()
+        if not username:
+            if update.message.reply_to_message:
+                target_id = update.message.reply_to_message.from_user.id
+                target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+            else:
+                await update.message.reply_text(s.error("❌ Укажите пользователя: размут @user"))
+                return
+        else:
+            target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_muted(target['id']):
+            await update.message.reply_text(s.info("Пользователь не в муте"))
+            return
+        
+        self.db.unmute_user(target['id'], user_data['id'])
+        await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+    
     async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
@@ -1521,6 +1603,298 @@ class SpectrumBot:
             await update.effective_chat.ban_member(target['telegram_id'])
         except:
             pass
+    
+    async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        bans = self.db.get_banlist()
+        
+        if not bans:
+            await update.message.reply_text(s.info("Список забаненных пуст"))
+            return
+        
+        text = s.header("СПИСОК ЗАБАНЕННЫХ") + "\n\n"
+        for ban in bans:
+            name = ban.get('first_name', 'Неизвестно')
+            username = f" (@{ban['username']})" if ban['username'] else ""
+            text += f"{s.item(f'{name}{username}')}\n"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('разбан', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_banned(target['id']):
+            await update.message.reply_text(s.info("Пользователь не забанен"))
+            return
+        
+        self.db.unban_user(target['id'], user_data['id'])
+        await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
+    
+    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('кик', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            if update.message.reply_to_message:
+                target_id = update.message.reply_to_message.from_user.id
+                target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+            else:
+                await update.message.reply_text(s.error("❌ Пользователь не найден"))
+                return
+        
+        try:
+            await update.effective_chat.ban_member(target['telegram_id'])
+            await update.effective_chat.unban_member(target['telegram_id'])
+            await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
+        except Exception as e:
+            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+    
+    # ===== ЭКОНОМИКА =====
+    
+    async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data.get('last_daily'):
+            last = datetime.datetime.fromisoformat(user_data['last_daily'])
+            if (datetime.datetime.now() - last).seconds < DAILY_COOLDOWN:
+                remain = DAILY_COOLDOWN - (datetime.datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(s.warning(f"⏳ Бонус через {hours}ч {minutes}м"))
+                return
+        
+        streak = self.db.add_daily_streak(user_data['id'])
+        
+        coins = random.randint(100, 300)
+        exp = random.randint(20, 60)
+        energy = 20
+        
+        coins = int(coins * (1 + min(streak, 30) * 0.05))
+        exp = int(exp * (1 + min(streak, 30) * 0.05))
+        
+        if self.db.is_vip(user_data['id']):
+            coins = int(coins * 1.5)
+            exp = int(exp * 1.5)
+            energy = int(energy * 1.5)
+        if self.db.is_premium(user_data['id']):
+            coins = int(coins * 2)
+            exp = int(exp * 2)
+            energy = int(energy * 2)
+        
+        self.db.add_coins(user_data['id'], coins)
+        self.db.add_exp(user_data['id'], exp)
+        self.db.add_energy(user_data['id'], energy)
+        
+        text = (
+            s.header("ЕЖЕДНЕВНЫЙ БОНУС") + "\n"
+            f"{s.item(f'🔥 Стрик: {streak} дней')}\n"
+            f"{s.item(f'💰 Монеты: +{coins}')}\n"
+            f"{s.item(f'✨ Опыт: +{exp}')}\n"
+            f"{s.item(f'⚡ Энергия: +{energy}')}\n\n"
+            f"{s.info('Заходи завтра!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+        self.db.log_action(user_data['id'], 'daily', f'+{coins}💰')
+    
+    async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("МАГАЗИН") + "\n"
+            f"{s.section('ЗЕЛЬЯ')}"
+            f"{s.cmd('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
+            f"{s.cmd('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
+            f"{s.section('ЭНЕРГИЯ')}"
+            f"{s.cmd('buy энергетик', '30 💰 (⚡+20)')}\n"
+            f"{s.cmd('buy батарейка', '80 💰 (⚡+50)')}\n\n"
+            f"{s.section('ПРИВИЛЕГИИ')}"
+            f"{s.cmd('vip', f'VIP ({VIP_PRICE} 💰)')}\n"
+            f"{s.cmd('premium', f'PREMIUM ({PREMIUM_PRICE} 💰)')}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
+    
+    async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("Что купить? /buy [предмет]"))
+            return
+        
+        item = " ".join(context.args).lower()
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        items = {
+            "зелье здоровья": {"price": 50, "heal": 30},
+            "большое зелье": {"price": 100, "heal": 70},
+            "энергетик": {"price": 30, "energy": 20},
+            "батарейка": {"price": 80, "energy": 50}
+        }
+        
+        if item not in items:
+            await update.message.reply_text(s.error("❌ Такого товара нет"))
+            return
+        
+        item_data = items[item]
+        
+        if user_data['coins'] < item_data['price']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {item_data['price']} 💰"))
+            return
+        
+        self.db.add_coins(user_data['id'], -item_data['price'])
+        
+        if 'heal' in item_data:
+            new_health = self.db.heal(user_data['id'], item_data['heal'])
+            await update.message.reply_text(s.success(f"✅ Куплено: {item}\n❤️ Здоровье +{item_data['heal']} (теперь {new_health})"))
+        elif 'energy' in item_data:
+            new_energy = self.db.add_energy(user_data['id'], item_data['energy'])
+            await update.message.reply_text(s.success(f"✅ Куплено: {item}\n⚡ Энергия +{item_data['energy']} (теперь {new_energy})"))
+        
+        self.db.log_action(user_data['id'], 'buy', item)
+    
+    async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("Использование: /pay @user сумма"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            amount = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("❌ Сумма должна быть числом"))
+            return
+        
+        if amount <= 0:
+            await update.message.reply_text(s.error("❌ Сумма должна быть больше 0"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < amount:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя перевести самому себе"))
+            return
+        
+        self.db.add_coins(user_data['id'], -amount)
+        self.db.add_coins(target['id'], amount)
+        
+        commission_text = ""
+        if not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+            self.db.add_coins(user_data['id'], -commission)
+            commission_text = f"\n{s.item(f'💸 Комиссия: {commission} (5%)')}"
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        text = (
+            s.header("ПЕРЕВОД") + "\n"
+            f"{s.item(f'Получатель: {target_name}')}\n"
+            f"{s.item(f'Сумма: {amount} 💰')}{commission_text}\n\n"
+            f"{s.success('Перевод выполнен!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+        self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
+    
+    async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        text = (
+            s.header("БАЛАНС") + "\n"
+            f"{s.stat('Монеты', f'{user_data['coins']} 💰')}\n"
+            f"{s.stat('Энергия', f'{user_data['energy']}/100 ⚡')}\n"
+            f"{s.stat('Здоровье', f'{user_data['health']}/100 ❤️')}"
+        )
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("ПРИВИЛЕГИИ") + "\n"
+            f"{s.section('VIP СТАТУС')}"
+            f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n"
+            f"{s.item('⚔️ Урон +20%')}\n"
+            f"{s.item('💰 Награда +50%')}\n"
+            f"{s.item('🎁 Бонус +50%')}\n\n"
+            f"{s.section('PREMIUM СТАТУС')}"
+            f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n"
+            f"{s.item('⚔️ Урон +50%')}\n"
+            f"{s.item('💰 Награда +100%')}\n"
+            f"{s.item('🎁 Бонус +100%')}\n"
+            f"{s.item('🚫 Без комиссии')}\n\n"
+            f"{s.cmd('vip', 'купить VIP')}\n"
+            f"{s.cmd('premium', 'купить PREMIUM')}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
+    
+    async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < VIP_PRICE:
+            await update.message.reply_text(s.error(f"❌ Нужно {VIP_PRICE} 💰"))
+            return
+        
+        if self.db.is_vip(user_data['id']):
+            await update.message.reply_text(s.error("❌ VIP уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -VIP_PRICE)
+        until = self.db.set_vip(user_data['id'], VIP_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        await update.message.reply_text(
+            f"{s.success('VIP АКТИВИРОВАН')}\n\n"
+            f"{s.item('Срок: до ' + date_str)}",
+            parse_mode="Markdown"
+        )
+        self.db.log_action(user_data['id'], 'buy_vip')
+    
+    async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < PREMIUM_PRICE:
+            await update.message.reply_text(s.error(f"❌ Нужно {PREMIUM_PRICE} 💰"))
+            return
+        
+        if self.db.is_premium(user_data['id']):
+            await update.message.reply_text(s.error("❌ PREMIUM уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -PREMIUM_PRICE)
+        until = self.db.set_premium(user_data['id'], PREMIUM_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        await update.message.reply_text(
+            f"{s.success('PREMIUM АКТИВИРОВАН')}\n\n"
+            f"{s.item('Срок: до ' + date_str)}",
+            parse_mode="Markdown"
+        )
+        self.db.log_action(user_data['id'], 'buy_premium')
     
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.error(f"Ошибка: {context.error}")
