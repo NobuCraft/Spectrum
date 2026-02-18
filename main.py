@@ -2,22 +2,49 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import asyncio
+import time
 import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ТВОИ ДАННЫЕ (уже вставил)
+# ТВОИ ДАННЫЕ
 TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
 GEMINI_KEY = "AIzaSyD3Brb2oAuFNWA7JBMrmd6WWrZ6JzK57HE"
 
-# Настройка Gemini
-genai.configure(api_key=GEMINI_KEY)
-model = genai.GenerativeModel('gemini-pro')
+# ========== ЗАЩИТА ОТ КОНФЛИКТОВ ==========
+LOCK_FILE = "/tmp/bot.lock"
 
-# ========== ФУНКЦИЯ ДЛЯ GEMINI ==========
+def check_lock():
+    if os.path.exists(LOCK_FILE):
+        try:
+            with open(LOCK_FILE, 'r') as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            print(f"❌ Бот уже запущен с PID {pid}")
+            sys.exit(1)
+        except:
+            os.remove(LOCK_FILE)
+    
+    with open(LOCK_FILE, 'w') as f:
+        f.write(str(os.getpid()))
+
+check_lock()
+
+# ========== GEMINI (ИСПРАВЛЕНО) ==========
+genai.configure(api_key=GEMINI_KEY)
+
+# Список доступных моделей
+models = genai.list_models()
+print("📋 Доступные модели:")
+for model in models:
+    print(f"  • {model.name}")
+
+# Используем правильную модель
+model = genai.GenerativeModel('models/gemini-1.5-pro')  # или gemini-1.5-flash
+
 async def ask_gemini(question: str) -> str:
-    """Спросить у Gemini"""
     try:
         response = model.generate_content(question)
         return response.text
@@ -48,7 +75,9 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Бот работает!\n🤖 Gemini подключен")
+    # Тест Gemini при запуске
+    test_response = await ask_gemini("Привет! Скажи 'Работаю!'")
+    await update.message.reply_text(f"✅ Бот работает!\n🤖 Gemini: {test_response[:50]}...")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🆔 Твой ID: `{update.effective_user.id}`", parse_mode="Markdown")
@@ -65,7 +94,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def main():
     print("🚀 Запуск Gemini бота...")
     print(f"🤖 Токен: {TOKEN[:10]}...")
-    print(f"🔑 Gemini: {'Подключен' if GEMINI_KEY else 'Нет ключа'}")
+    print(f"🔑 Gemini: Подключен")
+    print(f"📊 Модель: {model.model_name}")
     
     app = Application.builder().token(TOKEN).build()
     
@@ -79,10 +109,15 @@ async def main():
     
     await app.initialize()
     await app.start()
+    await app.bot.delete_webhook(drop_pending_updates=True)
     await app.updater.start_polling()
     
     while True:
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    finally:
+        if os.path.exists(LOCK_FILE):
+            os.remove(LOCK_FILE)
