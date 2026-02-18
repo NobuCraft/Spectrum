@@ -28,7 +28,7 @@ async def ask_groq(question: str) -> str:
                 {"role": "system", "content": "Ты полезный ассистент. Отвечай кратко."},
                 {"role": "user", "content": question}
             ],
-            model="llama3-8b-8192",
+            model="llama-3.3-70b-versatile",
             temperature=0.7,
             max_tokens=500
         )
