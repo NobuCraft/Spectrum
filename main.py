@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 
 # ТВОИ ДАННЫЕ
 TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
-GEMINI_KEY = "AIzaSyCTcr54eVB2QRy3YII7sfI0bdEyKraQ5Wo"
+GEMINI_KEY = "AIzaSyA6rF6kV6muGmizwvvR6DhT975Lv_iSA44"
 
 # ========== УБИВАЕМ СТАРЫЕ ПРОЦЕССЫ ==========
 os.system(f"pkill -f '{TOKEN[:20]}' || true")
