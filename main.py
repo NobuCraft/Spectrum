@@ -3,7 +3,7 @@
 
 """
 СПЕКТР - Официальный бот с полным функционалом Iris + Мафия + Groq AI
-Версия 2.0 ULTIMATE
+Версия 5.0 ULTIMATE
 """
 
 import os
@@ -1228,243 +1228,157 @@ class SpectrumBot:
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
 
-    # ===== МОДЕРАЦИЯ =====
+    # ===== ЧИСТКА ЧАТА =====
     
-    async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистка сообщений"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
-        if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
             return
         
-        match = re.search(r'(?:\+Модер|!модер|повысить)\s*(\d+)?\s*(?:@(\S+)|(\d+))?', text)
+        match = re.search(r'чистка\s*(\d+|всё|все|ботов|файлов|ссылки|мат|спам)?', text, re.IGNORECASE)
         if not match:
-            await update.message.reply_text(s.error("❌ Неверный формат. Пример: +Модер 2 @user"))
+            await update.message.reply_text(s.error("❌ Пример: чистка 50"))
             return
         
-        target_rank = int(match.group(1)) if match.group(1) else 1
-        if target_rank > 5:
-            target_rank = 5
+        param = match.group(1) if match.group(1) else "50"
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        elif match.group(2):
-            target_user = self.db.get_user_by_username(match.group(2))
-        elif match.group(3):
-            target_user = self.db.get_user_by_id(int(match.group(3)))
+        if param == "всё" or param == "все":
+            if user_data['rank'] < 5:
+                await update.message.reply_text(s.error("⛔️ Чистка всех сообщений только для создателя"))
+                return
+            await update.message.reply_text(s.success("🧹 Удаляю все сообщения..."))
         
-        if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
+        elif param == "ботов":
+            await update.message.reply_text(s.success("🧹 Удаляю сообщения ботов..."))
         
-        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
-            return
+        elif param == "файлов":
+            await update.message.reply_text(s.success("🧹 Удаляю файлы..."))
         
-        self.db.set_rank(target_user['id'], target_rank, user_data['id'])
+        elif param == "ссылки":
+            await update.message.reply_text(s.success("🧹 Удаляю сообщения со ссылками..."))
         
-        rank_info = RANKS[target_rank]
-        await update.message.reply_text(
-            f"{s.success('Ранг назначен!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]} ({target_rank})')}",
-            parse_mode="Markdown"
-        )
+        elif param == "мат":
+            await update.message.reply_text(s.success("🧹 Удаляю сообщения с матом..."))
+        
+        elif param == "спам":
+            await update.message.reply_text(s.success("🧹 Удаляю спам..."))
+        
+        else:
+            try:
+                amount = int(param)
+                if amount > 100:
+                    amount = 100
+                await update.message.reply_text(f"🧹 Удаляю {amount} сообщений...")
+            except:
+                await update.message.reply_text(s.error("❌ Неверное количество"))
     
-    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ===== НАСТРОЙКИ ЧАТА =====
+    
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка приветствия"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
-        if user_data['rank'] < 4 and user.id != OWNER_ID:
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
             return
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        else:
-            username = text.replace('снять', '').replace('разжаловать', '').strip().replace('@', '')
-            if username:
-                target_user = self.db.get_user_by_username(username)
-        
-        if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+        welcome_text = text.replace('+приветствие', '').strip()
+        if not welcome_text:
+            await update.message.reply_text(s.error("❌ Укажите текст приветствия"))
             return
         
-        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
-            return
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("INSERT OR REPLACE INTO chat_settings (chat_id, welcome) VALUES (?, ?)",
+                              (chat_id, welcome_text))
+        self.db.conn.commit()
         
-        self.db.set_rank(target_user['id'], 0, user_data['id'])
-        await update.message.reply_text(
-            f"{s.success('Модератор снят!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item('Теперь: 👤 Участник')}",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text(s.success("✅ Приветствие установлено"))
     
-    async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        if user_data['rank'] < 5 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Только для создателя"))
-            return
-        
-        self.db.c.execute("SELECT id FROM users WHERE rank > 0")
-        mods = self.db.c.fetchall()
-        
-        for mod_id in mods:
-            self.db.set_rank(mod_id[0], 0, user_data['id'])
-        
-        await update.message.reply_text(
-            s.success(f"✅ Снято модераторов: {len(mods)}"),
-            parse_mode="Markdown"
-        )
-    
-    async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        self.db.c.execute("SELECT first_name, username, rank, rank_name FROM users WHERE rank > 0 ORDER BY rank DESC")
-        admins = self.db.c.fetchall()
-        
-        if not admins:
-            await update.message.reply_text(s.info("👥 В чате нет администраторов"))
-            return
-        
-        text = s.header("АДМИНИСТРАЦИЯ") + "\n\n"
-        for admin in admins:
-            name = admin[0]
-            username = f" (@{admin[1]})" if admin[1] else ""
-            rank_emoji = RANKS[admin[2]]["emoji"]
-            text += f"{s.item(f'{rank_emoji} {name}{username} — {admin[3]}')}\n"
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
-    
-    async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка правил"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
-        if user_data['rank'] < 1 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 1+"))
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
             return
         
-        target_user = None
-        reason = "Нарушение"
-        
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-            parts = text.split('\n', 1)
-            if len(parts) > 1 and parts[1].strip():
-                reason = parts[1].strip()
-        else:
-            match = re.search(r'(?:варн|пред)\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-            if match:
-                username = match.group(1)
-                target_user = self.db.get_user_by_username(username)
-                if match.group(2):
-                    reason = match.group(2)
-        
-        if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+        rules_text = text.replace('+правила', '').strip()
+        if not rules_text:
+            await update.message.reply_text(s.error("❌ Укажите текст правил"))
             return
         
-        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя выдать предупреждение модератору выше рангом"))
-            return
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("INSERT OR REPLACE INTO chat_settings (chat_id, rules) VALUES (?, ?)",
+                              (chat_id, rules_text))
+        self.db.conn.commit()
         
-        warns = self.db.add_warn(target_user['id'], user_data['id'], reason)
-        
-        text = (
-            s.header("ПРЕДУПРЕЖДЕНИЕ") + "\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item(f'Предупреждений: {warns}/3')}\n"
-            f"{s.item(f'Причина: {reason}')}"
-        )
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
-        
-        if warns >= 3:
-            self.db.mute_user(target_user['id'], 60, user_data['id'], "3 предупреждения")
-            await update.message.reply_text(s.warning(f"⚠️ Достигнут лимит! {target_user['first_name']} замучен на 1 час"))
-        if warns >= 5:
-            self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
-            await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен за 5 предупреждений"))
+        await update.message.reply_text(s.success("✅ Правила установлены"))
     
-    async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        args = context.args
-        if not args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /варны @user"))
-            return
+    async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать правила"""
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
         
-        username = args[0].replace('@', '')
-        target = self.db.get_user_by_username(username)
-        
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        warns_list = self.db.get_warns(target['id'])
-        target_name = target.get('nickname') or target['first_name']
-        
-        if not warns_list:
-            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
-            return
-        
-        text = s.header(f"ПРЕДУПРЕЖДЕНИЯ: {target_name}") + "\n\n"
-        for warn in warns_list:
-            admin = self.db.get_user_by_id(warn['admin_id'])
-            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
-            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
-            
-            text += (
-                f"**ID: {warn['id']}**\n"
-                f"{s.item(f'Причина: {warn['reason']}')}\n"
-                f"{s.item(f'Админ: {admin_name}')}\n"
-                f"{s.item(f'Дата: {date}')}\n\n"
+        if row and row[0]:
+            await update.message.reply_text(
+                f"{s.header('ПРАВИЛА ЧАТА')}\n\n{row[0]}",
+                parse_mode="Markdown"
             )
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
+        else:
+            await update.message.reply_text(s.info("Правила не установлены"))
     
-    async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_remove_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить приветствие"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("UPDATE chat_settings SET welcome = NULL WHERE chat_id = ?", (chat_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Приветствие удалено"))
+    
+    async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Включить/выключить капчу"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
-        if user_data['rank'] < 1 and user.id != OWNER_ID:
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
             return
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        else:
-            match = re.search(r'(?:снять варн|-варн)\s+@?(\S+)', text, re.IGNORECASE)
-            if match:
-                username = match.group(1)
-                target_user = self.db.get_user_by_username(username)
-        
-        if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+        match = re.search(r'капча\s+(on|off)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: капча on/off"))
             return
         
-        removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
-        target_name = target_user.get('nickname') or target_user['first_name']
+        value = 1 if match.group(1).lower() == 'on' else 0
+        chat_id = update.effective_chat.id
         
-        if not removed:
-            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
-            return
+        self.db.cursor.execute("UPDATE chat_settings SET captcha = ? WHERE chat_id = ?", (value, chat_id))
+        self.db.conn.commit()
         
-        await update.message.reply_text(s.success(f"✅ Предупреждение снято с {target_name}"))
+        await update.message.reply_text(s.success(f"✅ Капча: {match.group(1)}"))
     
-    async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # ===== ЧЕРНЫЙ СПИСОК =====
+    
+    async def cmd_add_blacklist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить слово в черный список"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
@@ -1473,66 +1387,18 @@ class SpectrumBot:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
             return
         
-        match = re.search(r'мут\s+@?(\S+)(?:\s+(\d+)([мчд]))?(?:\s+(.+))?', text, re.IGNORECASE)
-        if not match:
-            await update.message.reply_text(s.error("❌ Пример: мут @user 30м спам"))
+        word = re.sub(r'^\+блэклист|\+чс', '', text, flags=re.IGNORECASE).strip()
+        if not word:
+            await update.message.reply_text(s.error("❌ Укажите слово: +блэклист слово"))
             return
         
-        username = match.group(1)
-        amount = int(match.group(2)) if match.group(2) else 60
-        unit = match.group(3) if match.group(3) else 'м'
-        reason = match.group(4) if match.group(4) else "Нарушение"
-        
-        if unit == 'ч':
-            minutes = amount * 60
-        elif unit == 'д':
-            minutes = amount * 1440
+        if self.db.add_to_blacklist(word, user_data['id']):
+            await update.message.reply_text(s.success(f"✅ Слово '{word}' добавлено в черный список"))
         else:
-            minutes = amount
-        
-        target = self.db.get_user_by_username(username)
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя замутить модератора выше рангом"))
-            return
-        
-        until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
-        until_str = until.strftime("%d.%m.%Y %H:%M")
-        
-        text = (
-            s.header("МУТ") + "\n"
-            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
-            f"{s.item(f'Срок: {amount}{unit} ({minutes} мин)')}\n"
-            f"{s.item(f'До: {until_str}')}\n"
-            f"{s.item(f'Причина: {reason}')}"
-        )
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
+            await update.message.reply_text(s.error(f"❌ Слово '{word}' уже в списке"))
     
-    async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        self.db.c.execute("SELECT id, first_name, username, mute_until FROM users WHERE mute_until > ?", 
-                         (datetime.datetime.now().isoformat(),))
-        muted = self.db.c.fetchall()
-        
-        if not muted:
-            await update.message.reply_text(s.info("Нет пользователей в муте"))
-            return
-        
-        text = s.header("СПИСОК ЗАМУЧЕННЫХ") + "\n\n"
-        for user in muted[:10]:
-            until = datetime.datetime.fromisoformat(user[3]).strftime("%d.%m.%Y %H:%M")
-            name = user[1]
-            text += f"{s.item(f'{name} — до {until}')}\n"
-        
-        if len(muted) > 10:
-            text += f"\n... и еще {len(muted) - 10}"
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
-    
-    async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_remove_blacklist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить слово из черного списка"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
@@ -1541,137 +1407,37 @@ class SpectrumBot:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
             return
         
-        username = text.replace('размут', '').replace('@', '').strip()
-        if not username:
-            if update.message.reply_to_message:
-                target_id = update.message.reply_to_message.from_user.id
-                target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-            else:
-                await update.message.reply_text(s.error("❌ Укажите пользователя: размут @user"))
-                return
+        word = re.sub(r'^-блэклист|-чс', '', text, flags=re.IGNORECASE).strip()
+        if not word:
+            await update.message.reply_text(s.error("❌ Укажите слово: -блэклист слово"))
+            return
+        
+        if self.db.remove_from_blacklist(word, user_data['id']):
+            await update.message.reply_text(s.success(f"✅ Слово '{word}' удалено из черного списка"))
         else:
-            target = self.db.get_user_by_username(username)
-        
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if not self.db.is_muted(target['id']):
-            await update.message.reply_text(s.info("Пользователь не в муте"))
-            return
-        
-        self.db.unmute_user(target['id'], user_data['id'])
-        await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+            await update.message.reply_text(s.error(f"❌ Слово '{word}' не найдено"))
     
-    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
+    async def cmd_show_blacklist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать черный список"""
+        blacklist = self.db.get_blacklist()
         
-        if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+        if not blacklist:
+            await update.message.reply_text(s.info("Черный список пуст"))
             return
         
-        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-        if not match:
-            await update.message.reply_text(s.error("❌ Пример: бан @user спам"))
-            return
+        text = s.header("ЧЕРНЫЙ СПИСОК") + "\n\n"
+        for word in blacklist[:20]:
+            text += f"{s.item(word)}\n"
         
-        username = match.group(1)
-        reason = match.group(2) if match.group(2) else "Нарушение"
-        
-        target = self.db.get_user_by_username(username)
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя забанить модератора выше рангом"))
-            return
-        
-        self.db.ban_user(target['id'], user_data['id'], reason)
-        
-        text = (
-            s.header("БЛОКИРОВКА") + "\n"
-            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
-            f"{s.item(f'Причина: {reason}')}"
-        )
+        if len(blacklist) > 20:
+            text += f"\n... и еще {len(blacklist) - 20}"
         
         await update.message.reply_text(text, parse_mode="Markdown")
-        
-        try:
-            await update.effective_chat.ban_member(target['telegram_id'])
-        except:
-            pass
-    
-    async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        bans = self.db.get_banlist()
-        
-        if not bans:
-            await update.message.reply_text(s.info("Список забаненных пуст"))
-            return
-        
-        text = s.header("СПИСОК ЗАБАНЕННЫХ") + "\n\n"
-        for ban in bans:
-            name = ban.get('first_name', 'Неизвестно')
-            username = f" (@{ban['username']})" if ban['username'] else ""
-            text += f"{s.item(f'{name}{username}')}\n"
-        
-        await update.message.reply_text(text, parse_mode="Markdown")
-    
-    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        
-        if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
-            return
-        
-        username = text.replace('разбан', '').replace('@', '').strip()
-        target = self.db.get_user_by_username(username)
-        
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if not self.db.is_banned(target['id']):
-            await update.message.reply_text(s.info("Пользователь не забанен"))
-            return
-        
-        self.db.unban_user(target['id'], user_data['id'])
-        await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
-    
-    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        
-        if user_data['rank'] < 1 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
-            return
-        
-        username = text.replace('кик', '').replace('@', '').strip()
-        target = self.db.get_user_by_username(username)
-        
-        if not target:
-            if update.message.reply_to_message:
-                target_id = update.message.reply_to_message.from_user.id
-                target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-            else:
-                await update.message.reply_text(s.error("❌ Пользователь не найден"))
-                return
-        
-        try:
-            await update.effective_chat.ban_member(target['telegram_id'])
-            await update.effective_chat.unban_member(target['telegram_id'])
-            await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
-        except Exception as e:
-            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
     
     # ===== ЭКОНОМИКА =====
     
     async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Ежедневный бонус"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
@@ -1719,6 +1485,7 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'daily', f'+{coins}💰')
     
     async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Магазин"""
         text = (
             s.header("МАГАЗИН") + "\n"
             f"{s.section('ЗЕЛЬЯ')}"
@@ -1735,6 +1502,7 @@ class SpectrumBot:
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
     
     async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить предмет"""
         if not context.args:
             await update.message.reply_text(s.error("Что купить? /buy [предмет]"))
             return
@@ -1771,6 +1539,7 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'buy', item)
     
     async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Перевести монеты"""
         if len(context.args) < 2:
             await update.message.reply_text(s.error("Использование: /pay @user сумма"))
             return
@@ -1823,6 +1592,7 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
     
     async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Баланс"""
         user_data = self.db.get_user(update.effective_user.id)
         text = (
             s.header("БАЛАНС") + "\n"
@@ -1833,6 +1603,7 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode="Markdown")
     
     async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о привилегиях"""
         text = (
             s.header("ПРИВИЛЕГИИ") + "\n"
             f"{s.section('VIP СТАТУС')}"
@@ -1853,6 +1624,7 @@ class SpectrumBot:
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
     
     async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить VIP"""
         user_data = self.db.get_user(update.effective_user.id)
         
         if user_data['coins'] < VIP_PRICE:
@@ -1875,6 +1647,7 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'buy_vip')
     
     async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить PREMIUM"""
         user_data = self.db.get_user(update.effective_user.id)
         
         if user_data['coins'] < PREMIUM_PRICE:
