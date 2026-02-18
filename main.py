@@ -2,55 +2,33 @@
 # -*- coding: utf-8 -*-
 
 import os
-import logging
 import asyncio
-import aiohttp
+import google.generativeai as genai
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# Настройки
-TOKEN = os.environ.get("TELEGRAM_TOKEN", "8326390250:AAEpXRnhLLLi5zUeFC39nfkHDlxR5ZFQ_yQ")
-DEEPSEEK_KEY = os.environ.get("DEEPSEEK_KEY", "sk-4c18a0f28fce421482cbcedcc33cb18d")
+# ТВОИ ДАННЫЕ (уже вставил)
+TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
+GEMINI_KEY = "AIzaSyD3Brb2oAuFNWA7JBMrmd6WWrZ6JzK57HE"
 
-# Логирование
-logging.basicConfig(format='%(asctime)s - %(message)s', level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Настройка Gemini
+genai.configure(api_key=GEMINI_KEY)
+model = genai.GenerativeModel('gemini-pro')
 
-# ========== DEEPSEEK AI ==========
-async def ask_deepseek(question: str) -> str:
-    """Спросить у DeepSeek"""
+# ========== ФУНКЦИЯ ДЛЯ GEMINI ==========
+async def ask_gemini(question: str) -> str:
+    """Спросить у Gemini"""
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.deepseek.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {DEEPSEEK_KEY}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [
-                        {"role": "system", "content": "Ты — полезный ассистент. Отвечай кратко и по делу."},
-                        {"role": "user", "content": question}
-                    ],
-                    "temperature": 0.7
-                }
-            ) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    return data["choices"][0]["message"]["content"]
-                else:
-                    return f"❌ Ошибка API: {resp.status}"
+        response = model.generate_content(question)
+        return response.text
     except Exception as e:
-        logger.error(f"DeepSeek error: {e}")
-        return "😵 Ошибка связи с AI. Попробуй позже."
+        return f"❌ Ошибка: {str(e)}"
 
 # ========== КОМАНДЫ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start"""
     await update.message.reply_text(
-        "🤖 *DeepSeek Bot*\n\n"
-        "Привет! Я тестовый бот с DeepSeek AI.\n\n"
+        "🤖 *Gemini Test Bot*\n\n"
+        "Привет! Я тестовый бот с Google Gemini AI.\n\n"
         "📝 *Команды:*\n"
         "• /ask [вопрос] — спросить AI\n"
         "• /test — проверить работу\n"
@@ -59,61 +37,50 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /ask - спросить AI"""
     if not context.args:
-        await update.message.reply_text(
-            "❓ Напиши вопрос после /ask\n"
-            "Пример: `/ask как дела?`",
-            parse_mode="Markdown"
-        )
+        await update.message.reply_text("❓ Напиши вопрос после /ask\nПример: `/ask как дела?`", parse_mode="Markdown")
         return
     
     question = " ".join(context.args)
     await update.message.chat.send_action(action="typing")
     
-    answer = await ask_deepseek(question)
-    await update.message.reply_text(f"🤖 *DeepSeek:*\n{answer}", parse_mode="Markdown")
+    answer = await ask_gemini(question)
+    await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /test"""
-    await update.message.reply_text("✅ Бот работает!\n🤖 DeepSeek подключен")
+    await update.message.reply_text("✅ Бот работает!\n🤖 Gemini подключен")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /id"""
-    user_id = update.effective_user.id
-    await update.message.reply_text(f"🆔 Твой ID: `{user_id}`", parse_mode="Markdown")
+    await update.message.reply_text(f"🆔 Твой ID: `{update.effective_user.id}`", parse_mode="Markdown")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Ответ на любое сообщение"""
     if update.message.text.startswith('/'):
         return
     
     await update.message.chat.send_action(action="typing")
-    answer = await ask_deepseek(update.message.text)
-    await update.message.reply_text(f"🤖 *DeepSeek:*\n{answer}", parse_mode="Markdown")
+    answer = await ask_gemini(update.message.text)
+    await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 # ========== ЗАПУСК ==========
 async def main():
-    """Запуск бота"""
-    print("🚀 Запуск DeepSeek бота...")
+    print("🚀 Запуск Gemini бота...")
+    print(f"🤖 Токен: {TOKEN[:10]}...")
+    print(f"🔑 Gemini: {'Подключен' if GEMINI_KEY else 'Нет ключа'}")
     
     app = Application.builder().token(TOKEN).build()
     
-    # Регистрируем команды
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ask", ask))
     app.add_handler(CommandHandler("test", test))
     app.add_handler(CommandHandler("id", id_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print(f"✅ Бот запущен!")
-    print(f"🤖 DeepSeek: {'Подключен' if DEEPSEEK_KEY else 'Нет ключа'}")
+    print("✅ Бот запущен! Напиши /start в Telegram")
     
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
     
-    # Держим бот запущенным
     while True:
         await asyncio.sleep(1)
 
