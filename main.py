@@ -4,7 +4,6 @@
 import os
 import sys
 import asyncio
-import signal
 import time
 import google.generativeai as genai
 from telegram import Update
@@ -14,26 +13,16 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
 GEMINI_KEY = "AIzaSyD3Brb2oAuFNWA7JBMrmd6WWrZ6JzK57HE"
 
-# ========== ЖЕСТКАЯ ЗАЩИТА ==========
-def kill_other_bots():
-    """Убивает все другие процессы с этим токеном"""
-    try:
-        # Ищем все Python процессы с нашим токеном
-        os.system(f"pkill -f '{TOKEN[:20]}' || true")
-        os.system("pkill -f 'python.*bot' || true")
-        time.sleep(2)
-        print("✅ Все старые процессы убиты")
-    except:
-        pass
+# ========== УБИВАЕМ СТАРЫЕ ПРОЦЕССЫ ==========
+os.system(f"pkill -f '{TOKEN[:20]}' || true")
+os.system("pkill -f 'python.*bot' || true")
+time.sleep(2)
 
-# Убиваем другие процессы при запуске
-kill_other_bots()
-
-# ========== GEMINI ==========
+# ========== GEMINI (ИСПРАВЛЕНО) ==========
 genai.configure(api_key=GEMINI_KEY)
 
-# Используем правильную модель из списка
-model = genai.GenerativeModel('models/gemini-2.0-flash')  # Берем из списка
+# Используем модель из твоего списка которая точно работает
+model = genai.GenerativeModel('models/gemini-2.0-flash')  # Эта модель есть в списке
 
 async def ask_gemini(question: str) -> str:
     try:
@@ -66,7 +55,9 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("✅ Бот работает!\n🤖 Gemini подключен")
+    # Тестовый запрос к Gemini
+    test_response = await ask_gemini("Привет! Ответь одним словом: 'Работаю'")
+    await update.message.reply_text(f"✅ Бот работает!\n🤖 Gemini тест: {test_response}")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🆔 Твой ID: `{update.effective_user.id}`", parse_mode="Markdown")
@@ -94,7 +85,7 @@ async def main():
     app.add_handler(CommandHandler("id", id_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Важно: удаляем вебхук и чистим старые апдейты
+    # Удаляем вебхук
     await app.bot.delete_webhook(drop_pending_updates=True)
     
     print("✅ Бот запущен! Напиши /start в Telegram")
@@ -103,7 +94,6 @@ async def main():
     await app.start()
     await app.updater.start_polling()
     
-    # Бесконечное ожидание
     while True:
         await asyncio.sleep(1)
 
