@@ -746,20 +746,20 @@ class SpectrumBot:
         self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
         self.spam_tracker[user_id].append(now)
         
-        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+         if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
             self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
             await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
             self.spam_tracker[user_id] = []
             return True
         return False
-    
-            def setup_handlers(self):
+
+    def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
-        self.app.add_handler(CommandHandler("menu", self.cmd_menu))
+        self.app.add_handler(CommandHandler("menu", self.cmd_menu))      
         
         # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
