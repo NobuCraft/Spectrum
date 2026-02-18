@@ -1937,6 +1937,238 @@ class SpectrumBot:
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode="Markdown")
 
+        # ===== МЕТОДЫ ПРОФИЛЯ =====
+    
+    async def cmd_set_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка ника"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи ник: /nick [ник]"))
+            return
+        
+        nick = " ".join(context.args)
+        if len(nick) > MAX_NICK_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимум {MAX_NICK_LENGTH} символов"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], nickname=nick)
+        await update.message.reply_text(s.success(f"✅ Ник установлен: {nick}"))
+    
+    async def cmd_set_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка титула"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи титул: /title [титул]"))
+            return
+        
+        title = " ".join(context.args)
+        if len(title) > MAX_TITLE_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимум {MAX_TITLE_LENGTH} символов"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], title=title)
+        await update.message.reply_text(s.success(f"✅ Титул установлен: {title}"))
+    
+    async def cmd_set_motto(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка девиза"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи девиз: /motto [девиз]"))
+            return
+        
+        motto = " ".join(context.args)
+        if len(motto) > MAX_MOTTO_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимум {MAX_MOTTO_LENGTH} символов"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], motto=motto)
+        await update.message.reply_text(s.success(f"✅ Девиз установлен: _{motto}_"))
+    
+    async def cmd_set_bio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка био"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи био: /bio [текст]"))
+            return
+        
+        bio = " ".join(context.args)
+        if len(bio) > MAX_BIO_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимум {MAX_BIO_LENGTH} символов"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], bio=bio)
+        await update.message.reply_text(s.success("✅ Био установлено"))
+    
+    async def cmd_set_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка пола"""
+        if not context.args or context.args[0].lower() not in ['м', 'ж']:
+            await update.message.reply_text(s.error("❌ Укажи /gender м или /gender ж"))
+            return
+        
+        gender = "мужской" if context.args[0].lower() == 'м' else "женский"
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], gender=gender)
+        await update.message.reply_text(s.success(f"✅ Пол установлен: {gender}"))
+    
+    async def cmd_set_city(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка города"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи город: /city [город]"))
+            return
+        
+        city = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], city=city)
+        await update.message.reply_text(s.success(f"✅ Город установлен: {city}"))
+    
+    async def cmd_set_country(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка страны"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи страну: /country [страна]"))
+            return
+        
+        country = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], country=country)
+        await update.message.reply_text(s.success(f"✅ Страна установлена: {country}"))
+    
+    async def cmd_set_birth(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка даты рождения"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи дату: /birth ДД.ММ.ГГГГ"))
+            return
+        
+        date_str = context.args[0]
+        try:
+            birth_date = datetime.datetime.strptime(date_str, "%d.%m.%Y")
+            today = datetime.datetime.now()
+            age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
+            
+            user_data = self.db.get_user(update.effective_user.id)
+            self.db.update_user(user_data['id'], birth_date=date_str, age=age)
+            await update.message.reply_text(s.success(f"✅ Дата рождения установлена: {date_str} (возраст: {age})"))
+        except:
+            await update.message.reply_text(s.error("❌ Неверный формат. Используй: ДД.ММ.ГГГГ"))
+    
+    async def cmd_set_age(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка возраста"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи возраст: /age [число]"))
+            return
+        
+        try:
+            age = int(context.args[0])
+            if age < 0 or age > 150:
+                await update.message.reply_text(s.error("❌ Возраст должен быть от 0 до 150"))
+                return
+            
+            user_data = self.db.get_user(update.effective_user.id)
+            self.db.update_user(user_data['id'], age=age)
+            await update.message.reply_text(s.success(f"✅ Возраст установлен: {age}"))
+        except:
+            await update.message.reply_text(s.error("❌ Возраст должен быть числом"))
+    
+    async def cmd_set_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка имени (псевдоним)"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи имя: /name [имя]"))
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], first_name=name)
+        await update.message.reply_text(s.success(f"✅ Имя установлено: {name}"))
+    
+    async def cmd_set_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка фото профиля"""
+        await update.message.reply_text(s.info("📸 Функция установки фото в разработке"))
+    
+    async def cmd_profile_by_link(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Просмотр анкеты по ссылке"""
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи пользователя: /анкета @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        # Создаем временный update для вызова cmd_profile
+        class TempUser:
+            def __init__(self, user_data):
+                self.id = user_data['telegram_id']
+                self.first_name = user_data['first_name']
+                self.username = user_data['username']
+        
+        class TempMessage:
+            def __init__(self, user):
+                self.from_user = user
+        
+        class TempUpdate:
+            def __init__(self, user):
+                self.effective_user = user
+                self.message = TempMessage(user)
+        
+        temp_user = TempUser(target)
+        temp_update = TempUpdate(temp_user)
+        await self.cmd_profile(temp_update, context)
+    
+    async def cmd_all_profiles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список всех анкет"""
+        self.db.c.execute("SELECT first_name, nickname, username, level FROM users ORDER BY level DESC LIMIT 20")
+        users = self.db.c.fetchall()
+        
+        text = s.header("📋 АНКЕТЫ") + "\n\n"
+        for user in users:
+            name = user[1] or user[0]
+            username = f" (@{user[2]})" if user[2] else ""
+            text += f"{s.item(f'{name}{username} — ур.{user[3]}')}\n"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_my_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Моя статистика"""
+        await self.cmd_stats(update, context)
+    
+    async def cmd_top_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по монетам"""
+        top_coins = self.db.get_top("coins", 10)
+        
+        text = s.header("💰 ТОП ПО МОНЕТАМ") + "\n\n"
+        for i, row in enumerate(top_coins, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} 💰\n"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_top_level(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по уровню"""
+        top_level = self.db.get_top("level", 10)
+        
+        text = s.header("📊 ТОП ПО УРОВНЮ") + "\n\n"
+        for i, row in enumerate(top_level, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} ур.\n"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+    
+    async def cmd_top_rep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по репутации"""
+        top_rep = self.db.get_top("reputation", 10)
+        
+        text = s.header("⭐ ТОП ПО РЕПУТАЦИИ") + "\n\n"
+        for i, row in enumerate(top_rep, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} ⭐\n"
+        
+        await update.message.reply_text(text, parse_mode="Markdown")
+
     # ===== КОМАНДЫ МОДЕРАЦИИ (5 РАНГОВ) =====
     
     async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
