@@ -753,7 +753,7 @@ class SpectrumBot:
             return True
         return False
     
-    def setup_handlers(self):
+        def setup_handlers(self):
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
