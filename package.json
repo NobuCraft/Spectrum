@@ -1,12 +1,13 @@
 {
-  "name": "spectrum-bot",
+  "name": "deepseek-test-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "type": "module",
+  "main": "bot.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node bot.js"
   },
   "dependencies": {
     "telegraf": "^4.15.3",
-    "openai": "^4.24.0"
+    "axios": "^1.6.0"
   }
 }
