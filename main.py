@@ -746,20 +746,20 @@ class SpectrumBot:
         self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
         self.spam_tracker[user_id].append(now)
         
-         if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
             self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
             await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
             self.spam_tracker[user_id] = []
             return True
         return False
-
+    
     def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
-        self.app.add_handler(CommandHandler("menu", self.cmd_menu))      
+        self.app.add_handler(CommandHandler("menu", self.cmd_menu))
         
         # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
@@ -873,9 +873,6 @@ class SpectrumBot:
         
         logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
     
-    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        logger.error(f"Ошибка: {context.error}")
-
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -894,8 +891,7 @@ class SpectrumBot:
             f"{s.item('🎮 Игры: мафия, рулетка, кости, КНБ, сапёр')}\n"
             f"{s.item('🤖 AI общение (дерзкий, со сленгом)')}\n"
             f"{s.item('💰 Экономика, донат, VIP')}\n"
-            f"{s.item('⚙️ Модерация (5 рангов)')}\n"
-            f"{s.item('👥 Кланы, отношения, браки')}\n\n"
+            f"{s.item('⚙️ Модерация (5 рангов)')}\n\n"
             f"{s.section('БЫСТРЫЙ СТАРТ')}"
             f"{s.cmd('profile', 'профиль')}\n"
             f"{s.cmd('games', 'все игры')}\n"
