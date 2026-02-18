@@ -2,40 +2,45 @@
 # -*- coding: utf-8 -*-
 
 import os
-import sys
 import asyncio
-import time
-import google.generativeai as genai
+from groq import Groq
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-# ТВОИ ДАННЫЕ
-TOKEN = "8353336074:AAEg6F4BGcTRZXd7r0FN77uAMLZj7YPWGaE"
-GEMINI_KEY = "AIzaSyA6rF6kV6muGmizwvvR6DhT975Lv_iSA44"
+# ТОКЕНЫ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ
+TOKEN = os.environ.get("TELEGRAM_TOKEN")  # Берем из Railway переменных
+GROQ_KEY = os.environ.get("GROQ_API_KEY") # Берем из Railway переменных
 
-# ========== УБИВАЕМ СТАРЫЕ ПРОЦЕССЫ ==========
-os.system(f"pkill -f '{TOKEN[:20]}' || true")
-os.system("pkill -f 'python.*bot' || true")
-time.sleep(2)
+if not TOKEN or not GROQ_KEY:
+    print("❌ Ошибка: Не найдены переменные окружения!")
+    print("Добавь в Railway:")
+    print("  TELEGRAM_TOKEN = твой_токен")
+    print("  GROQ_API_KEY = твой_groq_ключ")
+    exit(1)
 
-# ========== GEMINI (ТОЧНАЯ РАБОЧАЯ МОДЕЛЬ) ==========
-genai.configure(api_key=GEMINI_KEY)
+# ========== GROQ ==========
+client = Groq(api_key=GROQ_KEY)
 
-# ЭТА МОДЕЛЬ ТОЧНО РАБОТАЕТ - БЕРИ!
-model = genai.GenerativeModel('models/gemini-2.0-flash')
-
-async def ask_gemini(question: str) -> str:
+async def ask_groq(question: str) -> str:
     try:
-        response = model.generate_content(question)
-        return response.text
+        chat_completion = client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": "Ты полезный ассистент. Отвечай кратко."},
+                {"role": "user", "content": question}
+            ],
+            model="llama3-8b-8192",
+            temperature=0.7,
+            max_tokens=500
+        )
+        return chat_completion.choices[0].message.content
     except Exception as e:
         return f"❌ Ошибка: {str(e)}"
 
 # ========== КОМАНДЫ ==========
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🤖 *Gemini Test Bot*\n\n"
-        "Привет! Я тестовый бот с Google Gemini AI.\n\n"
+        "🤖 *Groq AI Bot*\n\n"
+        "Привет! Я использую Groq Cloud.\n\n"
         "📝 *Команды:*\n"
         "• /ask [вопрос] — спросить AI\n"
         "• /test — проверить работу\n"
@@ -45,19 +50,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
-        await update.message.reply_text("❓ Напиши вопрос после /ask\nПример: `/ask как дела?`", parse_mode="Markdown")
+        await update.message.reply_text("❓ Напиши вопрос после /ask")
         return
     
     question = " ".join(context.args)
     await update.message.chat.send_action(action="typing")
     
-    answer = await ask_gemini(question)
-    await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
+    answer = await ask_groq(question)
+    await update.message.reply_text(f"🤖 *Groq:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Тест Gemini
-    test_response = await ask_gemini("Ответь одним словом: ОК")
-    await update.message.reply_text(f"✅ Бот работает!\n🤖 Gemini тест: {test_response}")
+    test = await ask_groq("Ответь одним словом: ОК")
+    await update.message.reply_text(f"✅ Бот работает!\n🤖 Тест: {test}")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🆔 Твой ID: `{update.effective_user.id}`", parse_mode="Markdown")
@@ -67,15 +71,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     await update.message.chat.send_action(action="typing")
-    answer = await ask_gemini(update.message.text)
-    await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
+    answer = await ask_groq(update.message.text)
+    await update.message.reply_text(f"🤖 *Groq:*\n{answer}", parse_mode="Markdown")
 
 # ========== ЗАПУСК ==========
 async def main():
-    print("🚀 Запуск Gemini бота...")
+    print("🚀 Запуск Groq бота...")
     print(f"🤖 Токен: {TOKEN[:10]}...")
-    print(f"🔑 Gemini: Подключен")
-    print(f"📊 Модель: {model.model_name}")
+    print(f"🔑 Groq: Подключен")
     
     app = Application.builder().token(TOKEN).build()
     
@@ -85,22 +88,15 @@ async def main():
     app.add_handler(CommandHandler("id", id_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # Удаляем вебхук
     await app.bot.delete_webhook(drop_pending_updates=True)
-    
-    print("✅ Бот запущен! Напиши /start в Telegram")
-    
     await app.initialize()
     await app.start()
     await app.updater.start_polling()
+    
+    print("✅ Бот работает! Напиши /start")
     
     while True:
         await asyncio.sleep(1)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        print("\n👋 Бот остановлен")
-    except Exception as e:
-        print(f"❌ Ошибка: {e}")
+    asyncio.run(main())
