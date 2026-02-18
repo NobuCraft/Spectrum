@@ -1343,7 +1343,27 @@ class SpectrumBot:
             f"{s.item('Теперь: 👤 Участник')}",
             parse_mode="Markdown"
         )
-    
+
+    async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """!Снять всех - снять всех модераторов"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 5 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Только для создателя"))
+            return
+        
+        self.db.c.execute("SELECT id FROM users WHERE rank > 0")
+        mods = self.db.c.fetchall()
+        
+        for mod_id in mods:
+            self.db.set_rank(mod_id[0], 0, user_data['id'])
+        
+        await update.message.reply_text(
+            s.success(f"✅ Снято модераторов: {len(mods)}"),
+            parse_mode="Markdown"
+        )
+
     async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.db.c.execute("SELECT first_name, username, rank, rank_name FROM users WHERE rank > 0 ORDER BY rank DESC")
         admins = self.db.c.fetchall()
