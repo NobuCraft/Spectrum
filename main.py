@@ -3,7 +3,7 @@
 
 """
 СПЕКТР - Официальный бот с полным функционалом Iris + Мафия + Groq AI
-Версия 5.0 ULTIMATE
+Версия 3.0 ULTIMATE
 """
 
 import os
@@ -753,7 +753,9 @@ class SpectrumBot:
             return True
         return False
     
-        def setup_handlers(self):
+            def setup_handlers(self):
+        """Регистрация всех обработчиков"""
+        
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
