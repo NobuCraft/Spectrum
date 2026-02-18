@@ -18,11 +18,11 @@ os.system(f"pkill -f '{TOKEN[:20]}' || true")
 os.system("pkill -f 'python.*bot' || true")
 time.sleep(2)
 
-# ========== GEMINI (ИСПРАВЛЕНО) ==========
+# ========== GEMINI (ТОЧНАЯ РАБОЧАЯ МОДЕЛЬ) ==========
 genai.configure(api_key=GEMINI_KEY)
 
-# Используем модель из твоего списка которая точно работает
-model = genai.GenerativeModel('models/gemini-2.0-flash')  # Эта модель есть в списке
+# ЭТА МОДЕЛЬ ТОЧНО РАБОТАЕТ - БЕРИ!
+model = genai.GenerativeModel('models/gemini-2.0-flash')
 
 async def ask_gemini(question: str) -> str:
     try:
@@ -55,8 +55,8 @@ async def ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🤖 *Gemini:*\n{answer}", parse_mode="Markdown")
 
 async def test(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Тестовый запрос к Gemini
-    test_response = await ask_gemini("Привет! Ответь одним словом: 'Работаю'")
+    # Тест Gemini
+    test_response = await ask_gemini("Ответь одним словом: ОК")
     await update.message.reply_text(f"✅ Бот работает!\n🤖 Gemini тест: {test_response}")
 
 async def id_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
