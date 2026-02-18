@@ -817,7 +817,7 @@ class SpectrumBot:
         # ===== МОДЕРАЦИЯ (5 РАНГОВ) =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
-        self.app.add_handler(CommandHandler("снять_всех", self.cmd_remove_all_ranks))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!снять всех|^снять_всех'), self.cmd_remove_all_ranks))
         self.app.add_handler(CommandHandler("кто_админ", self.cmd_who_admins))
         
         # ===== БАНЫ И ПРЕДУПРЕЖДЕНИЯ =====
