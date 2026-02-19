@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-СПЕКТР v2.0 ULTIMATE 
+СПЕКТР v2.0 ULTIMATE - 
 
 """
 
@@ -30,6 +30,14 @@ from telegram.ext import (
 )
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
+
+# ========== GROQ AI ==========
+try:
+    from groq import Groq
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    print("⚠️ Библиотека groq не установлена, AI будет отключен")
 
 # ========== НАСТРОЙКИ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ==========
 TOKEN = os.environ.get("BOT_TOKEN")
@@ -59,9 +67,7 @@ RANKS = {
 GIFS = {
     "mafia_day": "https://files.catbox.moe/g9vc7v.mp4",
     "mafia_night": "https://files.catbox.moe/lvcm8n.mp4",
-    "russian_roulette": "https://files.catbox.moe/pj64wq.gif",
-    "mafia_kill": "https://files.catbox.moe/mafia_kill.gif",
-    "mafia_vote": "https://files.catbox.moe/mafia_vote.gif"
+    "russian_roulette": "https://files.catbox.moe/pj64wq.gif"
 }
 
 # Настройки игр
@@ -99,6 +105,84 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ========== GROQ AI КЛАСС ==========
+class GroqAI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = None
+        self.is_available = False
+        self.contexts = defaultdict(lambda: deque(maxlen=15))
+        self.user_last_ai = defaultdict(float)
+        self.ai_cooldown = AI_COOLDOWN
+        
+        if GROQ_AVAILABLE and api_key:
+            try:
+                self.client = Groq(api_key=api_key)
+                self.is_available = True
+                logger.info("✅ Groq AI инициализирован")
+            except Exception as e:
+                logger.error(f"❌ Ошибка инициализации Groq: {e}")
+                self.is_available = False
+        
+        self.system_prompt = """Ты — Спектр, дружелюбный и умный ИИ-ассистент в Telegram. 
+Ты помогаешь пользователям, отвечаешь на вопросы, шутишь и поддерживаешь беседу.
+Твой характер: дружелюбный, отзывчивый, с чувством юмора.
+Знаешь всё про игры (мафия, русская рулетка, дуэли), экономику, модерацию (5 рангов).
+Отвечай кратко, по делу, используй эмодзи умеренно."""
+    
+    async def get_response(self, user_id: int, message: str, username: str = "Пользователь") -> Optional[str]:
+        if not self.is_available:
+            return None
+            
+        now = time.time()
+        if now - self.user_last_ai[user_id] < self.ai_cooldown:
+            return None
+        self.user_last_ai[user_id] = now
+        
+        try:
+            # Используем asyncio.to_thread для синхронного вызова Groq
+            loop = asyncio.get_event_loop()
+            
+            history = list(self.contexts[user_id])
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                *history,
+                {"role": "user", "content": message}
+            ]
+            
+            def sync_request():
+                return self.client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=messages,
+                    temperature=0.9,
+                    max_tokens=300,
+                    top_p=0.95
+                )
+            
+            chat_completion = await loop.run_in_executor(None, sync_request)
+            response = chat_completion.choices[0].message.content
+            
+            self.contexts[user_id].append({"role": "user", "content": message})
+            self.contexts[user_id].append({"role": "assistant", "content": response})
+            
+            return response
+            
+        except Exception as e:
+            logger.error(f"Groq error: {e}")
+            return None
+
+# Инициализация AI
+ai = None
+if GROQ_API_KEY and GROQ_AVAILABLE:
+    try:
+        ai = GroqAI(GROQ_API_KEY)
+        logger.info("✅ Groq AI инициализирован")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации AI: {e}")
+        ai = None
+else:
+    logger.warning("⚠️ Groq AI не подключен")
 
 # ========== КЛАССЫ МАФИИ ==========
 class MafiaRole(str, Enum):
@@ -1030,74 +1114,6 @@ class Database:
 
 db = Database()
 
-# ========== GROQ AI ==========
-class GroqAI:
-    def __init__(self, api_key: str):
-        self.api_key = api_key
-        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
-        self.session: Optional[aiohttp.ClientSession] = None
-        self.contexts = defaultdict(lambda: deque(maxlen=15))
-        self.user_last_ai = defaultdict(float)
-        self.ai_cooldown = AI_COOLDOWN
-        
-        self.system_prompt = """Ты — Спектр, дерзкий и умный ИИ-бот в Telegram. Ты используешь современный сленг и мемы. 
-Твой характер: дерзкий, но дружелюбный. Можешь жестко ответить на хамство. 
-Знаешь всё про игры (мафия, русская рулетка, дуэли), экономику, модерацию (5 рангов). 
-Твой создатель — @NobuCraft. Отвечай кратко, с юмором, используй эмодзи."""
-    
-    async def get_session(self) -> aiohttp.ClientSession:
-        if not self.session:
-            self.session = aiohttp.ClientSession()
-        return self.session
-    
-    async def get_response(self, user_id: int, message: str, username: str = "Пользователь") -> Optional[str]:
-        now = time.time()
-        if now - self.user_last_ai[user_id] < self.ai_cooldown:
-            return None
-        self.user_last_ai[user_id] = now
-        
-        try:
-            session = await self.get_session()
-            history = list(self.contexts[user_id])
-            messages = [
-                {"role": "system", "content": self.system_prompt},
-                *history,
-                {"role": "user", "content": message}
-            ]
-            
-            data = {
-                "model": "llama-3.3-70b-versatile",
-                "messages": messages,
-                "temperature": 0.9,
-                "max_tokens": 300,
-                "top_p": 0.95
-            }
-            
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            async with session.post(self.api_url, headers=headers, json=data) as resp:
-                if resp.status == 200:
-                    result = await resp.json()
-                    response = result["choices"][0]["message"]["content"]
-                    self.contexts[user_id].append({"role": "user", "content": message})
-                    self.contexts[user_id].append({"role": "assistant", "content": response})
-                    return response
-                else:
-                    logger.error(f"Groq API error: {resp.status}")
-                    return "❌ Ошибка связи с AI."
-        except Exception as e:
-            logger.error(f"Groq error: {e}")
-            return None
-    
-    async def close(self):
-        if self.session:
-            await self.session.close()
-
-ai = GroqAI(GROQ_API_KEY) if GROQ_API_KEY else None
-
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def get_rank_emoji(rank: int) -> str:
     return RANKS.get(rank, RANKS[0])["emoji"]
@@ -1179,12 +1195,15 @@ class SpectrumBot:
         return False
 
     def setup_handlers(self):
-        """Регистрация всех обработчиков (250+ команд)"""
+        """Регистрация всех обработчиков"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         self.app.add_handler(CommandHandler("menu", self.cmd_menu))
+        
+        # ===== AI КОМАНДЫ (только для создателя) =====
+        self.app.add_handler(CommandHandler("aitest", self.cmd_ai_test))
         
         # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
@@ -1208,28 +1227,17 @@ class SpectrumBot:
         
         # ===== МОДЕРАЦИЯ =====
         self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
-        
-        # ===== ПРЕДУПРЕЖДЕНИЯ =====
         self.app.add_handler(CommandHandler("warns", self.cmd_warns))
         self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
-        
-        # ===== МУТЫ =====
         self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
-        
-        # ===== БАНЫ =====
         self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
-        
-        # ===== ТРИГГЕРЫ =====
         self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
-        
-        # ===== НАСТРОЙКИ ЧАТА =====
         self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
         
         # ===== ЭКОНОМИКА =====
         self.app.add_handler(CommandHandler("balance", self.cmd_balance))
         self.app.add_handler(CommandHandler("coins", self.cmd_balance))
         self.app.add_handler(CommandHandler("pay", self.cmd_pay))
-        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
         self.app.add_handler(CommandHandler("daily", self.cmd_daily))
         self.app.add_handler(CommandHandler("streak", self.cmd_streak))
         self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
@@ -1299,13 +1307,14 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
         self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
         self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
+        self.app.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
         
         # ===== ПОЛЕЗНОЕ =====
         self.app.add_handler(CommandHandler("ping", self.cmd_ping))
         self.app.add_handler(CommandHandler("uptime", self.cmd_uptime))
         self.app.add_handler(CommandHandler("info", self.cmd_info))
         
-        # ===== Message handlers (с русскими текстовыми командами) =====
+        # ===== Message handlers (русские текстовые команды) =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2'), self.cmd_set_rank2))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3'), self.cmd_set_rank3))
@@ -1347,7 +1356,27 @@ class SpectrumBot:
         self.app.add_error_handler(self.error_handler)
         
         logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
-    
+
+    # ===== AI КОМАНДЫ =====
+    async def cmd_ai_test(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Тест AI (только для создателя)"""
+        user = update.effective_user
+        if user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Эта команда только для создателя"))
+            return
+        
+        if not self.ai or not self.ai.is_available:
+            await update.message.reply_text(s.error("❌ AI не подключен"))
+            return
+        
+        await update.message.chat.send_action(action="typing")
+        response = await self.ai.get_response(user.id, "Ответь одним словом: ОК", user.first_name)
+        
+        if response:
+            await update.message.reply_text(f"✅ AI работает!\n🤖 Ответ: {response}")
+        else:
+            await update.message.reply_text(s.error("❌ AI не отвечает"))
+
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1366,6 +1395,8 @@ class SpectrumBot:
                 except:
                     pass
         
+        ai_status = "✅ Подключен" if self.ai and self.ai.is_available else "❌ Не подключен"
+        
         text = (
             s.header("СПЕКТР") + "\n"
             f"👋 **Привет, {user.first_name}!**\n"
@@ -1376,7 +1407,7 @@ class SpectrumBot:
             f"{s.stat('Ранг', get_rank_emoji(user_data["rank"]) + ' ' + user_data["rank_name"])}\n"
             f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n\n"
             f"{s.section('ЧТО Я УМЕЮ')}"
-            f"{s.item('🤖 Дерзкий AI со сленгом')}\n"
+            f"{s.item('🤖 AI: ' + ai_status)}\n"
             f"{s.item('🔫 Мафия как TrueMafia')}\n"
             f"{s.item('🎲 Русская рулетка, кости')}\n"
             f"{s.item('👾 Боссы, дуэли, кланы')}\n"
@@ -1399,34 +1430,148 @@ class SpectrumBot:
             f"{s.section('📌 ОСНОВНЫЕ')}"
             f"{s.cmd('start', 'начать')}\n"
             f"{s.cmd('menu', 'главное меню')}\n"
-            f"{s.cmd('profile', 'профиль')}\n\n"
+            f"{s.cmd('profile', 'профиль')}\n"
+            f"{s.cmd('id', 'узнать свой ID')}\n\n"
             
-            f"{s.section('⚙️ МОДЕРАЦИЯ')}"
-            f"{s.cmd('+Модер @user', '1 ранг')}\n"
-            f"{s.cmd('+Модер 2 @user', '2 ранг')}\n"
-            f"{s.cmd('+Модер 3 @user', '3 ранг')}\n"
-            f"{s.cmd('+Модер 4 @user', '4 ранг')}\n"
-            f"{s.cmd('+Модер 5 @user', '5 ранг')}\n"
-            f"{s.cmd('варн @user [причина]', 'предупреждение')}\n"
+            f"{s.section('🤖 ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ')}"
+            f"{s.cmd('ask [вопрос]', 'задать вопрос AI')}\n\n"
+            
+            f"{s.section('⚙️ МОДЕРАЦИЯ (5 РАНГОВ)')}"
+            f"{s.cmd('+Модер @user', '1 ранг (Младший модератор)')}\n"
+            f"{s.cmd('+Модер 2 @user', '2 ранг (Старший модератор)')}\n"
+            f"{s.cmd('+Модер 3 @user', '3 ранг (Младший админ)')}\n"
+            f"{s.cmd('+Модер 4 @user', '4 ранг (Старший админ)')}\n"
+            f"{s.cmd('+Модер 5 @user', '5 ранг (Создатель)')}\n"
+            f"{s.cmd('повысить @user', 'повысить на 1 ранг')}\n"
+            f"{s.cmd('понизить @user', 'понизить на 1 ранг')}\n"
+            f"{s.cmd('снять @user', 'снять модератора')}\n"
+            f"{s.cmd('снять вышедших', 'снять всех вышедших')}\n"
+            f"{s.cmd('!снять всех', 'снять всех модераторов')}\n"
+            f"{s.cmd('админы', 'список администрации')}\n\n"
+            
+            f"{s.section('🔨 БАНЫ И ПРЕДУПРЕЖДЕНИЯ')}"
+            f"{s.cmd('варн @user [причина]', 'выдать предупреждение')}\n"
+            f"{s.cmd('варны @user', 'список предупреждений')}\n"
+            f"{s.cmd('моиварны', 'свои предупреждения')}\n"
+            f"{s.cmd('снять варн @user', 'снять последнее предупреждение')}\n"
+            f"{s.cmd('снять все варны @user', 'снять все предупреждения')}\n"
             f"{s.cmd('мут @user 30м [причина]', 'заглушить')}\n"
-            f"{s.cmd('бан @user [причина]', 'заблокировать')}\n\n"
+            f"{s.cmd('мутлист', 'список замученных')}\n"
+            f"{s.cmd('размут @user', 'снять мут')}\n"
+            f"{s.cmd('бан @user [причина]', 'заблокировать')}\n"
+            f"{s.cmd('банлист', 'список забаненных')}\n"
+            f"{s.cmd('разбан @user', 'разблокировать')}\n"
+            f"{s.cmd('кик @user', 'исключить из чата')}\n\n"
+            
+            f"{s.section('🤖 ТРИГГЕРЫ')}"
+            f"{s.cmd('+триггер слово = действие', 'создать триггер')}\n"
+            f"{s.cmd('-триггер ID', 'удалить триггер')}\n"
+            f"{s.cmd('триггеры', 'список триггеров')}\n"
+            f"{s.cmd('антимат on/off', 'фильтр мата')}\n"
+            f"{s.cmd('антиссылки on/off', 'запрет ссылок')}\n"
+            f"{s.cmd('антифлуд on/off', 'защита от флуда')}\n\n"
+            
+            f"{s.section('🧹 ЧИСТКА ЧАТА')}"
+            f"{s.cmd('чистка 50', 'удалить 50 сообщений')}\n"
+            f"{s.cmd('чистка от @user', 'удалить сообщения пользователя')}\n\n"
+            
+            f"{s.section('⚙️ НАСТРОЙКИ ЧАТА')}"
+            f"{s.cmd('+приветствие Текст', 'установить приветствие')}\n"
+            f"{s.cmd('+правила Текст', 'установить правила')}\n"
+            f"{s.cmd('правила', 'показать правила')}\n"
+            f"{s.cmd('капча on/off', 'включить капчу')}\n\n"
+            
+            f"{s.section('👤 ПРОФИЛЬ')}"
+            f"{s.cmd('nick [ник]', 'установить ник')}\n"
+            f"{s.cmd('title [титул]', 'установить титул')}\n"
+            f"{s.cmd('motto [девиз]', 'установить девиз')}\n"
+            f"{s.cmd('bio [текст]', 'информация о себе')}\n"
+            f"{s.cmd('gender [м/ж]', 'установить пол')}\n"
+            f"{s.cmd('city [город]', 'установить город')}\n"
+            f"{s.cmd('country [страна]', 'установить страну')}\n"
+            f"{s.cmd('birth [ДД.ММ.ГГГГ]', 'дата рождения')}\n"
+            f"{s.cmd('age [число]', 'установить возраст')}\n\n"
+            
+            f"{s.section('📊 СТАТИСТИКА')}"
+            f"{s.cmd('stats', 'статистика чата')}\n"
+            f"{s.cmd('mystats', 'моя статистика')}\n"
+            f"{s.cmd('top', 'топ игроков')}\n"
+            f"{s.cmd('topcoins', 'топ по монетам')}\n"
+            f"{s.cmd('toplevel', 'топ по уровню')}\n\n"
             
             f"{s.section('💰 ЭКОНОМИКА')}"
             f"{s.cmd('balance', 'баланс')}\n"
-            f"{s.cmd('pay @user сумма', 'перевести')}\n"
+            f"{s.cmd('pay @user сумма', 'перевести монеты')}\n"
             f"{s.cmd('daily', 'ежедневный бонус')}\n"
-            f"{s.cmd('shop', 'список товаров')}\n\n"
-            
-            f"{s.section('🔫 МАФИЯ')}"
-            f"{s.cmd('mafia', 'меню мафии')}\n"
-            f"{s.cmd('mafiastart', 'начать игру')}\n"
-            f"{s.cmd('mafiajoin', 'присоединиться')}\n\n"
+            f"{s.cmd('streak', 'текущий стрик')}\n"
+            f"{s.cmd('vip', 'информация о VIP')}\n"
+            f"{s.cmd('buyvip', 'купить VIP')}\n"
+            f"{s.cmd('premium', 'информация о PREMIUM')}\n"
+            f"{s.cmd('buypremium', 'купить PREMIUM')}\n"
+            f"{s.cmd('shop', 'список товаров')}\n"
+            f"{s.cmd('buy [товар]', 'купить товар')}\n\n"
             
             f"{s.section('🎮 ИГРЫ')}"
-            f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
+            f"{s.cmd('games', 'меню игр')}\n"
+            f"{s.cmd('coin', 'подбросить монету')}\n"
+            f"{s.cmd('dice', 'бросить кубик')}\n"
             f"{s.cmd('dicebet [ставка]', 'игра в кости')}\n"
+            f"{s.cmd('rps', 'камень-ножницы-бумага')}\n"
+            f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
+            f"{s.cmd('roulette [ставка] [цвет]', 'рулетка')}\n"
+            f"{s.cmd('slots [ставка]', 'слоты')}\n"
+            f"{s.cmd('saper [ставка]', 'сапёр')}\n"
+            f"{s.cmd('guess [ставка]', 'угадай число')}\n"
+            f"{s.cmd('bulls [ставка]', 'быки и коровы')}\n\n"
+            
+            f"{s.section('👾 БОССЫ')}"
             f"{s.cmd('bosses', 'список боссов')}\n"
-            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}"
+            f"{s.cmd('boss [ID]', 'атаковать босса')}\n"
+            f"{s.cmd('bossinfo [ID]', 'информация о боссе')}\n"
+            f"{s.cmd('regen', 'восстановить энергию')}\n\n"
+            
+            f"{s.section('⚔️ ДУЭЛИ')}"
+            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n"
+            f"{s.cmd('duels', 'список дуэлей')}\n"
+            f"{s.cmd('duelrating', 'рейтинг дуэлянтов')}\n\n"
+            
+            f"{s.section('🏰 КЛАНЫ')}"
+            f"{s.cmd('clan', 'информация о клане')}\n"
+            f"{s.cmd('clans', 'список кланов')}\n"
+            f"{s.cmd('createclan [название]', 'создать клан')}\n"
+            f"{s.cmd('joinclan [название]', 'вступить в клан')}\n"
+            f"{s.cmd('leaveclan', 'покинуть клан')}\n\n"
+            
+            f"{s.section('💕 ОТНОШЕНИЯ')}"
+            f"{s.cmd('friend @user', 'добавить в друзья')}\n"
+            f"{s.cmd('enemy @user', 'объявить врагом')}\n"
+            f"{s.cmd('forgive @user', 'простить врага')}\n\n"
+            
+            f"{s.section('💍 БРАКИ')}"
+            f"{s.cmd('propose @user', 'сделать предложение')}\n"
+            f"{s.cmd('divorce', 'развестись')}\n"
+            f"{s.cmd('families', 'список семей')}\n\n"
+            
+            f"{s.section('⭐ РЕПУТАЦИЯ')}"
+            f"{s.cmd('+репа @user', 'повысить репутацию')}\n"
+            f"{s.cmd('-репа @user', 'понизить репутацию')}\n"
+            f"{s.cmd('rep [@user]', 'репутация пользователя')}\n\n"
+            
+            f"{s.section('🎭 МАФИЯ')}"
+            f"{s.cmd('mafia', 'меню мафии')}\n"
+            f"{s.cmd('mafiastart', 'начать игру')}\n"
+            f"{s.cmd('mafiajoin', 'присоединиться')}\n"
+            f"{s.cmd('mafialeave', 'выйти из игры')}\n"
+            f"{s.cmd('mafiaroles', 'список ролей')}\n"
+            f"{s.cmd('mafiarules', 'правила игры')}\n"
+            f"{s.cmd('mafiastats', 'статистика мафии')}\n\n"
+            
+            f"{s.section('🌦️ ПОЛЕЗНОЕ')}"
+            f"{s.cmd('ping', 'проверка бота')}\n"
+            f"{s.cmd('uptime', 'время работы')}\n"
+            f"{s.cmd('info', 'информация о боте')}\n\n"
+            
+            f"👑 **Владелец:** {OWNER_USERNAME}"
         )
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
@@ -3398,6 +3543,33 @@ class SpectrumBot:
             parse_mode=ParseMode.MARKDOWN
         )
     
+    async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о донате"""
+        text = (
+            s.header("💎 ПРИВИЛЕГИИ") + "\n\n"
+            f"{s.section('VIP СТАТУС')}"
+            f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n"
+            f"{s.item('⚔️ Урон в битвах +20%')}\n"
+            f"{s.item('💰 Награда с боссов +50%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +50%')}\n"
+            f"{s.item('💎 Алмазы +1 в день')}\n"
+            f"{s.item('💸 Комиссия за переводы 0%')}\n\n"
+            
+            f"{s.section('PREMIUM СТАТУС')}"
+            f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n"
+            f"{s.item('⚔️ Урон в битвах +50%')}\n"
+            f"{s.item('💰 Награда с боссов +100%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +100%')}\n"
+            f"{s.item('💎 Алмазы +3 в день')}\n"
+            f"{s.item('💸 Комиссия за переводы 0%')}\n"
+            f"{s.item('🚫 Игнорирование спам-фильтра')}\n\n"
+            
+            f"{s.cmd('buyvip', 'купить VIP')}\n"
+            f"{s.cmd('buypremium', 'купить PREMIUM')}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
+    
     # ===== КЛАНЫ =====
     async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
@@ -3918,55 +4090,6 @@ class SpectrumBot:
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-    
-    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        if len(game.players) < MAFIA_MIN_PLAYERS:
-            await context.bot.send_message(
-                game.chat_id,
-                s.error(f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}")
-            )
-            del self.mafia_games[game.chat_id]
-            return
-        
-        game.assign_roles()
-        game.status = "night"
-        game.phase = "night"
-        game.start_time = datetime.datetime.now()
-        
-        for player_id in game.players:
-            role = game.roles[player_id]
-            role_desc = game.get_role_description(role)
-            
-            try:
-                await context.bot.send_message(
-                    player_id,
-                    f"{s.header('🔫 МАФИЯ')}\n\n"
-                    f"{s.item(f'Ваша роль: {role}')}\n"
-                    f"{s.item(role_desc)}\n\n"
-                    f"{s.info('Ночь начинается. Ожидайте действий.')}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except:
-                pass
-        
-        try:
-            await context.bot.send_animation(
-                chat_id=game.chat_id,
-                animation=GIFS["mafia_night"]
-            )
-        except:
-            pass
-        
-        await context.bot.send_message(
-            game.chat_id,
-            f"{s.header('🔫 МАФИЯ')}\n\n"
-            f"{s.success('🌙 НАСТУПИЛА НОЧЬ')}\n"
-            f"{s.item('Мафия выбирает жертву...')}\n"
-            f"{s.item('Доктор выбирает, кого спасти...')}",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        asyncio.create_task(self._mafia_night_timer(game, context, MAFIA_NIGHT_TIME))
 
     async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Статистика мафии"""
@@ -4177,7 +4300,7 @@ class SpectrumBot:
             f"**Владелец:** {OWNER_USERNAME}\n\n"
             f"{s.stat('Пользователей', users_count)}\n"
             f"{s.stat('Команд', '250+')}\n"
-            f"{s.stat('AI', 'Подключен' if ai else 'Не подключен')}"
+            f"{s.stat('AI', 'Подключен' if self.ai and self.ai.is_available else 'Не подключен')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -4228,8 +4351,17 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Задайте вопрос: /ask [вопрос]"))
             return
         
-        answers = ["Да", "Нет", "Возможно", "Определённо да", "Определённо нет"]
-        await update.message.reply_text(f"🎱 **Вопрос:** {question}\n\n**Ответ:** {random.choice(answers)}", parse_mode=ParseMode.MARKDOWN)
+        if not self.ai or not self.ai.is_available:
+            await update.message.reply_text(s.error("❌ AI не подключен"))
+            return
+        
+        await update.message.chat.send_action(action="typing")
+        response = await self.ai.get_response(update.effective_user.id, question, update.effective_user.first_name)
+        
+        if response:
+            await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
+        else:
+            await update.message.reply_text(s.error("❌ AI временно недоступен"))
     
     async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -4386,9 +4518,9 @@ class SpectrumBot:
                         await update.message.reply_text(s.error("❌ Введите число от 1 до 9"))
                     return
         
-        if ai and random.randint(1, 100) <= AI_CHANCE:
+        if self.ai and self.ai.is_available and random.randint(1, 100) <= AI_CHANCE:
             await update.message.chat.send_action(action="typing")
-            response = await ai.get_response(user.id, message_text, user.first_name)
+            response = await self.ai.get_response(user.id, message_text, user.first_name)
             if response:
                 await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
                 return
@@ -4503,7 +4635,6 @@ class SpectrumBot:
             context.args = []
             await self.cmd_top_coins(update, context)
         elif data == "menu_donate":
-            context.args = []
             await self.cmd_donate(update, context)
         elif data == "menu_mod":
             await query.edit_message_text(
@@ -4680,7 +4811,7 @@ class SpectrumBot:
             
             logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
             logger.info(f"👑 Владелец: {OWNER_USERNAME}")
-            logger.info(f"🤖 AI: {'Подключен' if ai else 'Не подключен'}")
+            logger.info(f"🤖 AI: {'Подключен' if self.ai and self.ai.is_available else 'Не подключен'}")
             
             while True:
                 await asyncio.sleep(1)
@@ -4691,8 +4822,8 @@ class SpectrumBot:
     
     async def close(self):
         logger.info("👋 Завершение работы бота...")
-        if ai:
-            await ai.close()
+        if self.ai:
+            await self.ai.close()
         self.db.close()
         logger.info("✅ Бот остановлен")
 
@@ -4704,7 +4835,7 @@ async def main():
     print("=" * 60)
     print(f"📊 Команд: 250+")
     print(f"📊 Модулей: 25+")
-    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY else 'Не подключен'}")
+    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY and ai and ai.is_available else 'Не подключен'}")
     print("=" * 60)
     
     bot = SpectrumBot()
