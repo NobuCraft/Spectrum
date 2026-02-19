@@ -3389,6 +3389,14 @@ class SpectrumBot:
             text += f"{medal} **{name}** — {row[2]} очков\n"
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Меню игр"""
+        await update.message.reply_text(
+            s.header("🎮 ИГРЫ") + "\nВыберите игру:",
+            reply_markup=kb.games(),
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     # ===== КЛАНЫ =====
     async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
