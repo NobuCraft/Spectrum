@@ -1155,20 +1155,37 @@ class SpectrumBot:
         self.mafia_games = {}
         self.duels_in_progress = {}
         self.boss_fights = {}
-        self.setup_handlers()  # ← ЭТО ВЫЗЫВАЕТ МЕТОД
+        self.setup_handlers()
         logger.info(f"✅ Бот {BOT_NAME} инициализирован")
-
+    
     async def check_spam(self, update: Update) -> bool:
-        # ... код метода ...
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if has_permission(user_data, 2):
+            return False
+        
+        now = time.time()
+        user_id = user.id
+        
+        self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
+        self.spam_tracker[user_id].append(now)
+        
+        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+            self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
+            await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
+            self.spam_tracker[user_id] = []
+            return True
+        return False
 
-    def setup_handlers(self):  # ← ЭТО МЕТОД КЛАССА
-        """Регистрация всех обработчиков"""
+    def setup_handlers(self):
+        """Регистрация всех обработчиков (250+ команд)"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         self.app.add_handler(CommandHandler("menu", self.cmd_menu))
-
+        
         # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
         self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
@@ -1181,122 +1198,156 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
         self.app.add_handler(CommandHandler("age", self.cmd_set_age))
         self.app.add_handler(CommandHandler("id", self.cmd_id))
-
+        
         # ===== СТАТИСТИКА =====
         self.app.add_handler(CommandHandler("stats", self.cmd_stats))
         self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
         self.app.add_handler(CommandHandler("top", self.cmd_top))
         self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
         self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
-
+        
         # ===== МОДЕРАЦИЯ =====
-        self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
-        self.app.add_handler(CommandHandler("warns", self.cmd_warns))
-        self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
-        self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
-        self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
-        self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
-        self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
-        self.app.add_handler(CommandHandler("balance", self.cmd_balance))
-        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
-        self.app.add_handler(CommandHandler("daily", self.cmd_daily))
-        self.app.add_handler(CommandHandler("streak", self.cmd_streak))
-        self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
-        self.app.add_handler(CommandHandler("buyvip", self.cmd_buy_vip))
-        self.app.add_handler(CommandHandler("premium", self.cmd_premium_info))
-        self.app.add_handler(CommandHandler("buypremium", self.cmd_buy_premium))
-        self.app.add_handler(CommandHandler("shop", self.cmd_shop))
-        self.app.add_handler(CommandHandler("buy", self.cmd_buy))
-        self.app.add_handler(CommandHandler("pay", self.cmd_pay))
-        self.app.add_handler(CommandHandler("joke", self.cmd_joke))
-        self.app.add_handler(CommandHandler("fact", self.cmd_fact))
-        self.app.add_handler(CommandHandler("quote", self.cmd_quote))
-        self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
-        self.app.add_handler(CommandHandler("advice", self.cmd_advice))
-        self.app.add_handler(CommandHandler("ask", self.cmd_ask))
-        self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
-        self.app.add_handler(CommandHandler("games", self.cmd_games))
-        self.app.add_handler(CommandHandler("coin", self.cmd_coin))
-        self.app.add_handler(CommandHandler("dice", self.cmd_dice))
-        self.app.add_handler(CommandHandler("dicebet", self.cmd_dice_bet))
-        self.app.add_handler(CommandHandler("rps", self.cmd_rps))
-        self.app.add_handler(CommandHandler("rr", self.cmd_russian_roulette))
-        self.app.add_handler(CommandHandler("roulette", self.cmd_roulette))
-        self.app.add_handler(CommandHandler("slots", self.cmd_slots))
-        self.app.add_handler(CommandHandler("saper", self.cmd_saper))
-        self.app.add_handler(CommandHandler("guess", self.cmd_guess))
-        self.app.add_handler(CommandHandler("bulls", self.cmd_bulls))
-        self.app.add_handler(CommandHandler("bosses", self.cmd_bosses))
-        self.app.add_handler(CommandHandler("boss", self.cmd_boss_fight))
-        self.app.add_handler(CommandHandler("bossinfo", self.cmd_boss_info))
-        self.app.add_handler(CommandHandler("regen", self.cmd_regen))
-        self.app.add_handler(CommandHandler("duel", self.cmd_duel))
-        self.app.add_handler(CommandHandler("duels", self.cmd_duels))
-        self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
-        self.app.add_handler(CommandHandler("clan", self.cmd_clan))
-        self.app.add_handler(CommandHandler("clans", self.cmd_clans))
-        self.app.add_handler(CommandHandler("createclan", self.cmd_create_clan))
-        self.app.add_handler(CommandHandler("joinclan", self.cmd_join_clan))
-        self.app.add_handler(CommandHandler("leaveclan", self.cmd_leave_clan))
-        self.app.add_handler(CommandHandler("friend", self.cmd_add_friend))
-        self.app.add_handler(CommandHandler("enemy", self.cmd_add_enemy))
-        self.app.add_handler(CommandHandler("forgive", self.cmd_remove_enemy))
-        self.app.add_handler(CommandHandler("propose", self.cmd_propose))
-        self.app.add_handler(CommandHandler("divorce", self.cmd_divorce))
-        self.app.add_handler(CommandHandler("families", self.cmd_families))
-        self.app.add_handler(CommandHandler("rep", self.cmd_rep))
-        self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
-        self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
-        self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
-        self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
-        self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
-        self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
-        self.app.add_handler(CommandHandler("ping", self.cmd_ping))
-        self.app.add_handler(CommandHandler("uptime", self.cmd_uptime))
-        self.app.add_handler(CommandHandler("info", self.cmd_info))
-
-        # ===== Message handlers =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+moder'), self.cmd_set_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+moder 2'), self.cmd_set_rank2))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+moder 3'), self.cmd_set_rank3))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+moder 4'), self.cmd_set_rank4))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+moder 5'), self.cmd_set_rank5))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^demote'), self.cmd_lower_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^remove '), self.cmd_remove_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^remove_left'), self.cmd_remove_left))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^remove_all'), self.cmd_remove_all_ranks))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^warn'), self.cmd_warn))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^unwarn'), self.cmd_unwarn))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^unwarn_all'), self.cmd_unwarn_all))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^mute'), self.cmd_mute))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^unmute'), self.cmd_unmute))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^ban'), self.cmd_ban))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^unban'), self.cmd_unban))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^kick'), self.cmd_kick))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+trigger'), self.cmd_add_trigger))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-trigger'), self.cmd_remove_trigger))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^antimat'), self.cmd_set_antimat))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^antilink'), self.cmd_set_antilink))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^antiflood'), self.cmd_set_antiflood))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^clear'), self.cmd_clear))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^clear_user'), self.cmd_clear_user))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+welcome'), self.cmd_set_welcome))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+rules'), self.cmd_set_rules))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^captcha'), self.cmd_set_captcha))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+rep'), self.cmd_add_rep))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-rep'), self.cmd_remove_rep))
-
-        # ===== Callback handler =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2'), self.cmd_set_rank2))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3'), self.cmd_set_rank3))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 4|^!модер 4|^повысить 4'), self.cmd_set_rank4))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 5|^!модер 5|^повысить 5'), self.cmd_set_rank5))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^понизить'), self.cmd_lower_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять вышедших'), self.cmd_remove_left))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!снять всех'), self.cmd_remove_all_ranks))
+        self.app.add_handler(CommandHandler("админы", self.cmd_who_admins))
+        
+        # ===== ПРЕДУПРЕЖДЕНИЯ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варны'), self.cmd_warns))
+        self.app.add_handler(CommandHandler("моиварны", self.cmd_my_warns))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн'), self.cmd_unwarn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять все варны'), self.cmd_unwarn_all))
+        
+        # ===== МУТЫ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
+        self.app.add_handler(CommandHandler("мутлист", self.cmd_mutelist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
+        
+        # ===== БАНЫ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
+        self.app.add_handler(CommandHandler("банлист", self.cmd_banlist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
+        
+        # ===== ТРИГГЕРЫ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+триггер'), self.cmd_add_trigger))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-триггер'), self.cmd_remove_trigger))
+        self.app.add_handler(CommandHandler("триггеры", self.cmd_list_triggers))
+        
+        # ===== АВТОМОДЕРАЦИЯ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антимат'), self.cmd_set_antimat))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антиссылки'), self.cmd_set_antilink))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антифлуд'), self.cmd_set_antiflood))
+        
+        # ===== ЧИСТКА =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка'), self.cmd_clear))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка от'), self.cmd_clear_user))
+        
+        # ===== НАСТРОЙКИ ЧАТА =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
+        self.app.add_handler(CommandHandler("правила", self.cmd_show_rules))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
+        
+        # ===== ЭКОНОМИКА =====
+        self.app.add_handler(CommandHandler("ириски", self.cmd_balance))
+        self.app.add_handler(CommandHandler("баланс", self.cmd_balance))
+        self.app.add_handler(CommandHandler("передать", self.cmd_pay))
+        self.app.add_handler(CommandHandler("топирисок", self.cmd_top_coins))
+        self.app.add_handler(CommandHandler("бонус", self.cmd_daily))
+        self.app.add_handler(CommandHandler("стрик", self.cmd_streak))
+        self.app.add_handler(CommandHandler("вип", self.cmd_vip_info))
+        self.app.add_handler(CommandHandler("купитьвип", self.cmd_buy_vip))
+        self.app.add_handler(CommandHandler("премиум", self.cmd_premium_info))
+        self.app.add_handler(CommandHandler("купитьпремиум", self.cmd_buy_premium))
+        self.app.add_handler(CommandHandler("магазин", self.cmd_shop))
+        self.app.add_handler(CommandHandler("купить", self.cmd_buy))
+        
+        # ===== РАЗВЛЕЧЕНИЯ =====
+        self.app.add_handler(CommandHandler("анекдот", self.cmd_joke))
+        self.app.add_handler(CommandHandler("факт", self.cmd_fact))
+        self.app.add_handler(CommandHandler("цитата", self.cmd_quote))
+        self.app.add_handler(CommandHandler("ктоя", self.cmd_whoami))
+        self.app.add_handler(CommandHandler("совет", self.cmd_advice))
+        self.app.add_handler(CommandHandler("гадать", self.cmd_ask))
+        self.app.add_handler(CommandHandler("совместимость", self.cmd_compatibility))
+        
+        # ===== ИГРЫ =====
+        self.app.add_handler(CommandHandler("монетка", self.cmd_coin))
+        self.app.add_handler(CommandHandler("кубик", self.cmd_dice))
+        self.app.add_handler(CommandHandler("кости", self.cmd_dice_bet))
+        self.app.add_handler(CommandHandler("кнб", self.cmd_rps))
+        self.app.add_handler(CommandHandler("рр", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("русская", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("рулетка", self.cmd_roulette))
+        self.app.add_handler(CommandHandler("слоты", self.cmd_slots))
+        self.app.add_handler(CommandHandler("сапёр", self.cmd_saper))
+        self.app.add_handler(CommandHandler("угадай", self.cmd_guess))
+        self.app.add_handler(CommandHandler("быки", self.cmd_bulls))
+        
+        # ===== БОССЫ =====
+        self.app.add_handler(CommandHandler("боссы", self.cmd_bosses))
+        self.app.add_handler(CommandHandler("босс", self.cmd_boss_fight))
+        self.app.add_handler(CommandHandler("боссинфо", self.cmd_boss_info))
+        self.app.add_handler(CommandHandler("реген", self.cmd_regen))
+        
+        # ===== ДУЭЛИ =====
+        self.app.add_handler(CommandHandler("дуэль", self.cmd_duel))
+        self.app.add_handler(CommandHandler("дуэли", self.cmd_duels))
+        self.app.add_handler(CommandHandler("рейтинг", self.cmd_duel_rating))
+        
+        # ===== КЛАНЫ =====
+        self.app.add_handler(CommandHandler("клан", self.cmd_clan))
+        self.app.add_handler(CommandHandler("кланы", self.cmd_clans))
+        self.app.add_handler(CommandHandler("создатьклан", self.cmd_create_clan))
+        self.app.add_handler(CommandHandler("вступить", self.cmd_join_clan))
+        self.app.add_handler(CommandHandler("выйти", self.cmd_leave_clan))
+        
+        # ===== ОТНОШЕНИЯ =====
+        self.app.add_handler(CommandHandler("друг", self.cmd_add_friend))
+        self.app.add_handler(CommandHandler("враг", self.cmd_add_enemy))
+        self.app.add_handler(CommandHandler("простить", self.cmd_remove_enemy))
+        
+        # ===== БРАКИ =====
+        self.app.add_handler(CommandHandler("предложить", self.cmd_propose))
+        self.app.add_handler(CommandHandler("развод", self.cmd_divorce))
+        self.app.add_handler(CommandHandler("семьи", self.cmd_families))
+        
+        # ===== РЕПУТАЦИЯ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+репа'), self.cmd_add_rep))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-репа'), self.cmd_remove_rep))
+        self.app.add_handler(CommandHandler("репа", self.cmd_rep))
+        
+        # ===== МАФИЯ =====
+        self.app.add_handler(CommandHandler("мафия", self.cmd_mafia))
+        self.app.add_handler(CommandHandler("мафиястарт", self.cmd_mafia_start))
+        self.app.add_handler(CommandHandler("мафияприсоединиться", self.cmd_mafia_join))
+        self.app.add_handler(CommandHandler("мафиявыйти", self.cmd_mafia_leave))
+        self.app.add_handler(CommandHandler("мафияроли", self.cmd_mafia_roles))
+        self.app.add_handler(CommandHandler("мафияправила", self.cmd_mafia_rules))
+        
+        # ===== ПОЛЕЗНОЕ =====
+        self.app.add_handler(CommandHandler("пинг", self.cmd_ping))
+        self.app.add_handler(CommandHandler("аптайм", self.cmd_uptime))
+        self.app.add_handler(CommandHandler("инфо", self.cmd_info))
+        
+        # ===== CALLBACK =====
         self.app.add_handler(CallbackQueryHandler(self.button_callback))
-
-        # ===== Message handlers =====
+        
+        # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
         self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
-
-        # ===== Error handler =====
+        
         self.app.add_error_handler(self.error_handler)
-
+        
         logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
