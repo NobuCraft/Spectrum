@@ -1177,15 +1177,15 @@ class SpectrumBot:
             self.spam_tracker[user_id] = []
             return True
         return False
-    
+
     def setup_handlers(self):
-    """Регистрация всех обработчиков (более 250 команд)"""
-    
+        """Регистрация всех обработчиков (более 250 команд)"""
+        
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     self.app.add_handler(CommandHandler("start", self.cmd_start))
     self.app.add_handler(CommandHandler("help", self.cmd_help))
     self.app.add_handler(CommandHandler("menu", self.cmd_menu))
-    
+
     # ===== ПРОФИЛЬ =====
     self.app.add_handler(CommandHandler("profile", self.cmd_profile))
     self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
@@ -1198,7 +1198,7 @@ class SpectrumBot:
     self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
     self.app.add_handler(CommandHandler("age", self.cmd_set_age))
     self.app.add_handler(CommandHandler("id", self.cmd_id))
-    
+
     # ===== СТАТИСТИКА =====
     self.app.add_handler(CommandHandler("stats", self.cmd_stats))
     self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
