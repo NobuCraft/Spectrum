@@ -26,7 +26,7 @@ from io import BytesIO
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from datetime import datetime, timedelta
+from datetime, timedelta
 
 import aiohttp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
@@ -211,7 +211,7 @@ class MafiaGame:
             "maniac_kill": None
         }
         self.message_id: Optional[int] = None
-        self.start_time: Optional[datetime.datetime] = None
+        self.start_time: Optional[datetime] = None
     
     def add_player(self, user_id: int, name: str, username: str = "") -> bool:
         if user_id in self.players:
@@ -693,14 +693,14 @@ class Database:
             self.cursor.execute('''
                 INSERT INTO users (telegram_id, first_name, role, rank, rank_name, last_seen)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (telegram_id, first_name, role, rank, rank_name, datetime.datetime.now().isoformat()))
+            ''', (telegram_id, first_name, role, rank, rank_name, datetime.now().isoformat()))
             self.conn.commit()
             return self.get_user(telegram_id, first_name)
         
         user = dict(row)
         
         self.cursor.execute("UPDATE users SET last_seen = ?, first_name = ? WHERE telegram_id = ?",
-                          (datetime.datetime.now().isoformat(), first_name, telegram_id))
+                          (datetime.now().isoformat(), first_name, telegram_id))
         self.conn.commit()
         
         return user
@@ -756,8 +756,8 @@ class Database:
             return None
         
         total_messages, registered, last_seen = user_data
-        registered = datetime.datetime.fromisoformat(registered)
-        last_seen = datetime.datetime.fromisoformat(last_seen)
+        registered = datetime.fromisoformat(registered)
+        last_seen =  datetime.fromisoformat(last_seen)
         
         # Получаем активность по дням за последние 365 дней
         self.cursor.execute('''
@@ -820,25 +820,25 @@ class Database:
         self.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_id,))
         row = self.cursor.fetchone()
         if row and row[0]:
-            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+            return datetime.fromisoformat(row[0]) > datetime.now()
         return False
     
     def is_premium(self, user_id: int) -> bool:
         self.cursor.execute("SELECT premium_until FROM users WHERE id = ?", (user_id,))
         row = self.cursor.fetchone()
         if row and row[0]:
-            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+            return datetime.fromisoformat(row[0]) > datetime.now()
         return False
     
-    def set_vip(self, user_id: int, days: int) -> datetime.datetime:
-        until = datetime.datetime.now() + datetime.timedelta(days=days)
+    def set_vip(self, user_id: int, days: int) -> datetime:
+        until = datetime.now() + datetime.timedelta(days=days)
         self.cursor.execute("UPDATE users SET vip_until = ?, role = 'vip' WHERE id = ?",
                           (until.isoformat(), user_id))
         self.conn.commit()
         return until
     
-    def set_premium(self, user_id: int, days: int) -> datetime.datetime:
-        until = datetime.datetime.now() + datetime.timedelta(days=days)
+    def set_premium(self, user_id: int, days: int) -> datetime:
+        until = datetime.now() + datetime.timedelta(days=days)
         self.cursor.execute("UPDATE users SET premium_until = ?, role = 'premium' WHERE id = ?",
                           (until.isoformat(), user_id))
         self.conn.commit()
@@ -865,7 +865,7 @@ class Database:
             'id': len(warns_list) + 1,
             'admin_id': admin_id,
             'reason': reason,
-            'date': datetime.datetime.now().isoformat()
+            'date': datetime.now().isoformat()
         })
         new_warns = warns + 1
         self.cursor.execute("UPDATE users SET warns = ?, warns_list = ? WHERE id = ?",
@@ -892,8 +892,8 @@ class Database:
         self.log_action(admin_id, "remove_warn", f"{user_id}")
         return removed
     
-    def mute_user(self, user_id: int, minutes: int, admin_id: int, reason: str = "") -> datetime.datetime:
-        until = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
+    def mute_user(self, user_id: int, minutes: int, admin_id: int, reason: str = "") -> datetime:
+        until = datetime.now() + datetime.timedelta(minutes=minutes)
         self.cursor.execute("UPDATE users SET mute_until = ? WHERE id = ?", (until.isoformat(), user_id))
         self.conn.commit()
         self.log_action(admin_id, "mute", f"{user_id} {minutes}мин: {reason}")
@@ -903,7 +903,7 @@ class Database:
         self.cursor.execute("SELECT mute_until FROM users WHERE id = ?", (user_id,))
         row = self.cursor.fetchone()
         if row and row[0]:
-            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+            return datetime.fromisoformat(row[0]) > datetime.now()
         return False
     
     def unmute_user(self, user_id: int, admin_id: int) -> bool:
@@ -914,14 +914,14 @@ class Database:
     
     def get_muted_users(self) -> List[Dict]:
         self.cursor.execute("SELECT id, first_name, username, mute_until FROM users WHERE mute_until > ?",
-                          (datetime.datetime.now().isoformat(),))
+                          (datetime.now().isoformat(),))
         return [dict(row) for row in self.cursor.fetchall()]
     
     def ban_user(self, user_id: int, admin_id: int, reason: str) -> bool:
         self.cursor.execute('''
             UPDATE users SET banned = 1, ban_reason = ?, ban_date = ?, ban_admin = ?
             WHERE id = ?
-        ''', (reason, datetime.datetime.now().isoformat(), admin_id, user_id))
+        ''', (reason, datetime.now().isoformat(), admin_id, user_id))
         self.conn.commit()
         self.log_action(admin_id, "ban", f"{user_id}: {reason}")
         return True
@@ -973,12 +973,12 @@ class Database:
         return self.cursor.fetchall()
     
     def add_daily_streak(self, user_id: int) -> int:
-        today = datetime.datetime.now().date()
+        today = datetime.now().date()
         self.cursor.execute("SELECT last_daily, daily_streak FROM users WHERE id = ?", (user_id,))
         row = self.cursor.fetchone()
         
         if row and row[0]:
-            last = datetime.datetime.fromisoformat(row[0]).date()
+            last = datetime.fromisoformat(row[0]).date()
             if last == today - datetime.timedelta(days=1):
                 streak = row[1] + 1
             elif last == today:
@@ -989,7 +989,7 @@ class Database:
             streak = 1
         
         self.cursor.execute("UPDATE users SET daily_streak = ?, last_daily = ? WHERE id = ?",
-                          (streak, datetime.datetime.now().isoformat(), user_id))
+                          (streak, datetime.now().isoformat(), user_id))
         self.conn.commit()
         return streak
     
@@ -1046,7 +1046,7 @@ class Database:
         self.cursor.execute('''
             INSERT INTO logs (user_id, action, details, chat_id, timestamp)
             VALUES (?, ?, ?, ?, ?)
-        ''', (user_id, action, details, chat_id, datetime.datetime.now().isoformat()))
+        ''', (user_id, action, details, chat_id, datetime.now().isoformat()))
         self.conn.commit()
     
     def close(self):
@@ -1106,7 +1106,7 @@ class SpectrumBot:
         self.ai = ai
         self.spam_tracker = defaultdict(list)
         self.app = Application.builder().token(TOKEN).build()
-        self.start_time = datetime.datetime.now()
+        self.start_time = datetime.now()
         self.games_in_progress = {}
         self.mafia_games = {}
         self.duels_in_progress = {}
@@ -1459,8 +1459,8 @@ class SpectrumBot:
         messages_count = stats['total_messages'] if stats else user_data['messages_count']
         
         # Дата регистрации
-        registered = datetime.datetime.fromisoformat(user_data['registered']) if user_data.get('registered') else datetime.datetime.now()
-        days_in_chat = (datetime.datetime.now() - registered).days
+        registered = datetime.fromisoformat(user_data['registered']) if user_data.get('registered') else datetime.now()
+        days_in_chat = (datetime.now() - registered).days
         
         text = (
             f"# Спектр | Профиль\n\n"
@@ -1515,7 +1515,7 @@ class SpectrumBot:
             ax.set_facecolor('#2a2a2a')
             
             # Подготавливаем данные
-            end_date = datetime.datetime.now()
+            end_date = datetime.now()
             start_date = end_date - datetime.timedelta(days=365)
             
             dates = []
@@ -1677,7 +1677,7 @@ class SpectrumBot:
         self.db.update_user(user_data['id'], birth_date=birth)
         try:
             day, month, year = map(int, birth.split('.'))
-            today = datetime.datetime.now()
+            today = datetime.now()
             age = today.year - year - ((today.month, today.day) < (month, day))
             self.db.update_user(user_data['id'], age=age)
         except:
@@ -1708,7 +1708,7 @@ class SpectrumBot:
         chat = update.effective_chat
         cursor = self.db.cursor
         
-        now = datetime.datetime.now()
+        now = datetime.now()
         day_ago = now - datetime.timedelta(days=1)
         week_ago = now - datetime.timedelta(days=7)
         month_ago = now - datetime.timedelta(days=30)
@@ -2077,7 +2077,7 @@ class SpectrumBot:
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
             admin_name = admin.get('first_name', 'Система') if admin else 'Система'
-            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
             text += (
                 f"**ID: {warn['id']}**\n"
                 f"{s.item(f'Причина: {warn["reason"]}')}\n"
@@ -2099,7 +2099,7 @@ class SpectrumBot:
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
             admin_name = admin.get('first_name', 'Система') if admin else 'Система'
-            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
             text += (
                 f"**ID: {warn['id']}**\n"
                 f"{s.item(f'Причина: {warn["reason"]}')}\n"
@@ -2235,7 +2235,7 @@ class SpectrumBot:
         
         text = s.header("СПИСОК ЗАМУЧЕННЫХ") + "\n\n"
         for user in muted[:10]:
-            until = datetime.datetime.fromisoformat(user['mute_until']).strftime("%d.%m.%Y %H:%M")
+            until = datetime.fromisoformat(user['mute_until']).strftime("%d.%m.%Y %H:%M")
             name = user['first_name']
             text += f"{s.item(f'{name} — до {until}')}\n"
         
@@ -2661,9 +2661,9 @@ class SpectrumBot:
         user_data = self.db.get_user(user.id)
         
         if user_data.get('last_daily'):
-            last = datetime.datetime.fromisoformat(user_data['last_daily'])
-            if (datetime.datetime.now() - last).seconds < DAILY_COOLDOWN:
-                remain = DAILY_COOLDOWN - (datetime.datetime.now() - last).seconds
+            last = datetime.fromisoformat(user_data['last_daily'])
+            if (datetime.now() - last).seconds < DAILY_COOLDOWN:
+                remain = DAILY_COOLDOWN - (datetime.now() - last).seconds
                 hours = remain // 3600
                 minutes = (remain % 3600) // 60
                 await update.message.reply_text(s.warning(f"⏳ Бонус через {hours}ч {minutes}м"))
@@ -2851,7 +2851,7 @@ class SpectrumBot:
         vip_until = ""
         if self.db.is_vip(user_data['id']):
             vip_until = self.db.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_data['id'],)).fetchone()[0]
-            vip_until = datetime.datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
+            vip_until = datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
         
         premium_status = "✅ Активен" if self.db.is_premium(user_data['id']) else "❌ Не активен"
         
@@ -4090,7 +4090,7 @@ class SpectrumBot:
         game.assign_roles()
         game.status = "night"
         game.phase = "night"
-        game.start_time = datetime.datetime.now()
+        game.start_time = datetime.now()
         
         for player_id in game.players:
             role = game.roles[player_id]
@@ -4277,7 +4277,7 @@ class SpectrumBot:
         await msg.edit_text(f"🏓 **Понг!**\n⏱️ {ping} мс", parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_uptime(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        uptime = datetime.datetime.now() - self.start_time
+        uptime = datetime.now() - self.start_time
         days = uptime.days
         hours = uptime.seconds // 3600
         minutes = (uptime.seconds % 3600) // 60
@@ -4883,7 +4883,7 @@ class SpectrumBot:
                 await query.edit_message_text(s.error("❌ Пользователь уже в браке"), parse_mode=ParseMode.MARKDOWN)
                 return
             
-            now = datetime.datetime.now().isoformat()
+            now = datetime.now().isoformat()
             self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
             self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
             
