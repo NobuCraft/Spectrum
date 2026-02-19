@@ -2,8 +2,8 @@
 # -*- coding: utf-8 -*-
 
 """
-СПЕКТР v6.0 ULTIMATE - ПОЛНАЯ ВЕРСИЯ ДЛЯ RAILWAY
-Мафия как TrueMafia, все команды Iris, оформление как на картинке
+СПЕКТР v2.0 ULTIMATE 
+
 """
 
 import os
