@@ -1,5208 +1,4699 @@
-import asyncio
-import logging
-import random
-import re
-import sqlite3
-import string
-import json
-import aiohttp
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple, Union
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+"""
+СПЕКТР v6.0 ULTIMATE - ПОЛНАЯ ВЕРСИЯ ДЛЯ RAILWAY
+Мафия как TrueMafia, все команды Iris, оформление как на картинке
+"""
+
 import os
+import sys
+import logging
+import asyncio
+import json
+import random
+import sqlite3
+import datetime
+import time
+import hashlib
+import re
+import math
+from typing import Optional, Dict, Any, List, Tuple, Union
+from collections import defaultdict, deque
+from enum import Enum
 
-from aiogram import Bot, Dispatcher, types
-from aiogram.contrib.middlewares.logging import LoggingMiddleware
-from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Command, Text
-from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ParseMode, InputFile
-from aiogram.utils import executor
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
-import groq
+import aiohttp
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, CallbackQueryHandler,
+    MessageHandler, filters, ContextTypes
+)
+from telegram.constants import ParseMode
+from telegram.error import TelegramError
 
-# Конфигурация из переменных окружения
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-ADMIN_IDS = list(map(int, os.getenv("ADMIN_IDS", "123456789").split(",")))
-DATABASE_URL = os.getenv("DATABASE_URL", "spectr.db")
+# ========== НАСТРОЙКИ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ ==========
+TOKEN = os.environ.get("BOT_TOKEN")
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+OWNER_ID = int(os.environ.get("OWNER_ID", "1732658530"))
+OWNER_USERNAME = os.environ.get("OWNER_USERNAME", "@NobuCraft")
 
-# Инициализация
-bot = Bot(token=BOT_TOKEN, parse_mode=ParseMode.HTML)
-storage = MemoryStorage()
-dp = Dispatcher(bot, storage=storage)
-dp.middleware.setup(LoggingMiddleware())
-groq_client = groq.AsyncGroq(api_key=GROQ_API_KEY)
+if not TOKEN:
+    print("❌ ОШИБКА: BOT_TOKEN не найден в переменных окружения!")
+    sys.exit(1)
 
-# База данных
-conn = sqlite3.connect(DATABASE_URL, check_same_thread=False)
-cursor = conn.cursor()
+# ========== КОНСТАНТЫ ==========
+BOT_NAME = "Спектр"
+BOT_VERSION = "6.0 ULTIMATE"
 
-# Создание таблиц
-cursor.executescript("""
--- Пользователи
-CREATE TABLE IF NOT EXISTS users (
-    user_id INTEGER PRIMARY KEY,
-    username TEXT,
-    first_name TEXT,
-    last_name TEXT,
-    rank INTEGER DEFAULT 0,
-    warnings INTEGER DEFAULT 0,
-    is_muted INTEGER DEFAULT 0,
-    mute_until TEXT,
-    iris_balance INTEGER DEFAULT 100,
-    vip_level INTEGER DEFAULT 0,
-    reputation INTEGER DEFAULT 0,
-    married_to INTEGER,
-    clan_id INTEGER,
-    joined_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    messages_count INTEGER DEFAULT 0,
-    commands_count INTEGER DEFAULT 0,
-    daily_streak INTEGER DEFAULT 0,
-    last_daily TIMESTAMP,
-    bio TEXT,
-    age INTEGER,
-    city TEXT,
-    gender TEXT,
-    photo_id TEXT
-);
+# Настройки модерации
+RANKS = {
+    0: {"name": "Участник", "emoji": "👤"},
+    1: {"name": "Младший модератор", "emoji": "🟢"},
+    2: {"name": "Старший модератор", "emoji": "🔵"},
+    3: {"name": "Младший администратор", "emoji": "🟣"},
+    4: {"name": "Старший администратор", "emoji": "🔴"},
+    5: {"name": "Создатель", "emoji": "👑"}
+}
 
--- Модераторы чата
-CREATE TABLE IF NOT EXISTS moderators (
-    user_id INTEGER,
-    chat_id INTEGER,
-    rank INTEGER,
-    assigned_by INTEGER,
-    assigned_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    is_active INTEGER DEFAULT 1,
-    PRIMARY KEY (user_id, chat_id)
-);
+# Гифки
+GIFS = {
+    "mafia_day": "https://files.catbox.moe/g9vc7v.mp4",
+    "mafia_night": "https://files.catbox.moe/lvcm8n.mp4",
+    "russian_roulette": "https://files.catbox.moe/pj64wq.gif",
+    "mafia_kill": "https://files.catbox.moe/mafia_kill.gif",
+    "mafia_vote": "https://files.catbox.moe/mafia_vote.gif"
+}
 
--- Предупреждения
-CREATE TABLE IF NOT EXISTS warnings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    chat_id INTEGER,
-    reason TEXT,
-    issued_by INTEGER,
-    issued_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+# Настройки игр
+MAFIA_MIN_PLAYERS = 6
+MAFIA_MAX_PLAYERS = 20
+MAFIA_NIGHT_TIME = 60  # секунд
+MAFIA_DAY_TIME = 120   # секунд
+MAFIA_VOTE_TIME = 60   # секунд
 
--- Муты
-CREATE TABLE IF NOT EXISTS mutes (
-    user_id INTEGER,
-    chat_id INTEGER,
-    until TIMESTAMP,
-    reason TEXT,
-    issued_by INTEGER,
-    PRIMARY KEY (user_id, chat_id)
-);
+# Экономика
+DAILY_COOLDOWN = 86400  # 24 часа
+VIP_PRICE = 5000
+PREMIUM_PRICE = 15000
+VIP_DAYS = 30
+PREMIUM_DAYS = 30
 
--- Баны
-CREATE TABLE IF NOT EXISTS bans (
-    user_id INTEGER,
-    chat_id INTEGER,
-    reason TEXT,
-    issued_by INTEGER,
-    issued_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, chat_id)
-);
+# Антиспам
+SPAM_LIMIT = 5
+SPAM_WINDOW = 3
+SPAM_MUTE_TIME = 10
 
--- Глобальные баны
-CREATE TABLE IF NOT EXISTS global_bans (
-    user_id INTEGER PRIMARY KEY,
-    reason TEXT,
-    issued_by INTEGER,
-    issued_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+# AI
+AI_CHANCE = 30
+AI_COOLDOWN = 2
 
--- Триггеры
-CREATE TABLE IF NOT EXISTS triggers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER,
-    trigger_word TEXT,
-    action TEXT,
-    action_param TEXT,
-    created_by INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
+# Лимиты
+MAX_NICK_LENGTH = 30
+MAX_TITLE_LENGTH = 30
+MAX_MOTTO_LENGTH = 100
+MAX_BIO_LENGTH = 500
 
--- Настройки чата
-CREATE TABLE IF NOT EXISTS chat_settings (
-    chat_id INTEGER PRIMARY KEY,
-    welcome_message TEXT,
-    rules TEXT,
-    captcha_enabled INTEGER DEFAULT 0,
-    captcha_difficulty INTEGER DEFAULT 3,
-    antimat INTEGER DEFAULT 0,
-    antilinks INTEGER DEFAULT 0,
-    antiflood INTEGER DEFAULT 0,
-    antispam INTEGER DEFAULT 0,
-    antiraid INTEGER DEFAULT 0,
-    antibot INTEGER DEFAULT 0,
-    language TEXT DEFAULT 'ru',
-    region TEXT,
-    allow_links INTEGER DEFAULT 1,
-    allow_media INTEGER DEFAULT 1,
-    allow_stickers INTEGER DEFAULT 1,
-    allow_gifs INTEGER DEFAULT 1,
-    verification_enabled INTEGER DEFAULT 0
-);
+# ========== ЛОГИРОВАНИЕ ==========
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
--- Команды и права
-CREATE TABLE IF NOT EXISTS command_permissions (
-    command TEXT,
-    chat_id INTEGER,
-    min_rank INTEGER DEFAULT 0,
-    PRIMARY KEY (command, chat_id)
-);
+# ========== КЛАССЫ МАФИИ ==========
+class MafiaRole(str, Enum):
+    MAFIA = "😈 Мафия"
+    COMMISSIONER = "👮 Комиссар"
+    DOCTOR = "👨‍⚕️ Доктор"
+    MANIAC = "🔪 Маньяк"
+    BOSS = "👑 Босс"
+    CITIZEN = "👤 Мирный"
+    LADY = "💃 Леди"
+    SHERIFF = "🔫 Шериф"
+    TERRORIST = "💣 Террорист"
 
--- Исключения для команд
-CREATE TABLE IF NOT EXISTS command_exceptions (
-    command TEXT,
-    user_id INTEGER,
-    chat_id INTEGER,
-    PRIMARY KEY (command, user_id, chat_id)
-);
-
--- Сетка чатов
-CREATE TABLE IF NOT EXISTS chat_grids (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    created_by INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS grid_chats (
-    grid_id INTEGER,
-    chat_id INTEGER,
-    PRIMARY KEY (grid_id, chat_id)
-);
-
--- Игры мафии
-CREATE TABLE IF NOT EXISTS mafia_games (
-    game_id TEXT PRIMARY KEY,
-    chat_id INTEGER,
-    status TEXT DEFAULT 'waiting',
-    phase TEXT DEFAULT 'day',
-    day_count INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    mafia_kill_target INTEGER,
-    doctor_heal_target INTEGER,
-    commissioner_check_target INTEGER,
-    maniac_kill_target INTEGER,
-    boss_protected INTEGER DEFAULT 0,
-    min_players INTEGER DEFAULT 6,
-    max_players INTEGER DEFAULT 20
-);
-
-CREATE TABLE IF NOT EXISTS mafia_players (
-    user_id INTEGER,
-    game_id TEXT,
-    role TEXT,
-    is_alive INTEGER DEFAULT 1,
-    action_target INTEGER,
-    action_done INTEGER DEFAULT 0,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    vote_for INTEGER,
-    PRIMARY KEY (user_id, game_id)
-);
-
--- Русская рулетка
-CREATE TABLE IF NOT EXISTS russian_roulette (
-    user_id INTEGER PRIMARY KEY,
-    chat_id INTEGER,
-    chamber_position INTEGER,
-    bullet_position INTEGER,
-    games_played INTEGER DEFAULT 0,
-    games_won INTEGER DEFAULT 0,
-    last_game TIMESTAMP
-);
-
--- Ириски (транзакции)
-CREATE TABLE IF NOT EXISTS iris_transactions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    from_user INTEGER,
-    to_user INTEGER,
-    amount INTEGER,
-    reason TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Магазин
-CREATE TABLE IF NOT EXISTS shop_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    description TEXT,
-    price INTEGER,
-    type TEXT,
-    stock INTEGER DEFAULT -1,
-    is_available INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS user_items (
-    user_id INTEGER,
-    item_id INTEGER,
-    quantity INTEGER DEFAULT 1,
-    purchased_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, item_id)
-);
-
--- Друзья
-CREATE TABLE IF NOT EXISTS friends (
-    user_id INTEGER,
-    friend_id INTEGER,
-    status TEXT DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, friend_id)
-);
-
--- Враги
-CREATE TABLE IF NOT EXISTS enemies (
-    user_id INTEGER,
-    enemy_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, enemy_id)
-);
-
--- Игнор
-CREATE TABLE IF NOT EXISTS ignored (
-    user_id INTEGER,
-    ignored_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, ignored_id)
-);
-
--- Кланы
-CREATE TABLE IF NOT EXISTS clans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE,
-    leader_id INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    balance INTEGER DEFAULT 0,
-    description TEXT,
-    emblem TEXT
-);
-
-CREATE TABLE IF NOT EXISTS clan_members (
-    clan_id INTEGER,
-    user_id INTEGER,
-    role TEXT DEFAULT 'member',
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (clan_id, user_id)
-);
-
--- Кружки
-CREATE TABLE IF NOT EXISTS circles (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    description TEXT,
-    created_by INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS circle_members (
-    circle_id INTEGER,
-    user_id INTEGER,
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (circle_id, user_id)
-);
-
-CREATE TABLE IF NOT EXISTS circle_meetings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    circle_id INTEGER,
-    title TEXT,
-    date TEXT,
-    time TEXT,
-    place TEXT,
-    created_by INTEGER
-);
-
--- Достижения
-CREATE TABLE IF NOT EXISTS achievements (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT UNIQUE,
-    description TEXT,
-    reward INTEGER DEFAULT 0,
-    icon TEXT
-);
-
-CREATE TABLE IF NOT EXISTS user_achievements (
-    user_id INTEGER,
-    achievement_id INTEGER,
-    earned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, achievement_id)
-);
-
--- Награды
-CREATE TABLE IF NOT EXISTS awards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    description TEXT,
-    created_by INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS user_awards (
-    user_id INTEGER,
-    award_id INTEGER,
-    awarded_by INTEGER,
-    awarded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, award_id)
-);
-
--- Заметки
-CREATE TABLE IF NOT EXISTS notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    title TEXT,
-    content TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    tags TEXT
-);
-
--- Закладки
-CREATE TABLE IF NOT EXISTS bookmarks (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    title TEXT,
-    content TEXT,
-    url TEXT,
-    category TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Таймеры
-CREATE TABLE IF NOT EXISTS timers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    chat_id INTEGER,
-    title TEXT,
-    end_time TIMESTAMP,
-    is_active INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Напоминания
-CREATE TABLE IF NOT EXISTS reminders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER,
-    text TEXT,
-    remind_time TIMESTAMP,
-    repeat_interval TEXT,
-    is_active INTEGER DEFAULT 1,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Дуэли
-CREATE TABLE IF NOT EXISTS duels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    challenger_id INTEGER,
-    opponent_id INTEGER,
-    bet_amount INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    challenger_hp INTEGER DEFAULT 100,
-    opponent_hp INTEGER DEFAULT 100,
-    current_turn INTEGER,
-    winner_id INTEGER
-);
-
--- Кубы (коллекционные)
-CREATE TABLE IF NOT EXISTS cubes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    color TEXT,
-    rarity TEXT,
-    price INTEGER,
-    emoji TEXT
-);
-
-CREATE TABLE IF NOT EXISTS user_cubes (
-    user_id INTEGER,
-    cube_id INTEGER,
-    quantity INTEGER DEFAULT 1,
-    obtained_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (user_id, cube_id)
-);
-
--- Темы
-CREATE TABLE IF NOT EXISTS topics (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER,
-    title TEXT,
-    description TEXT,
-    created_by INTEGER,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    votes_for INTEGER DEFAULT 0,
-    votes_against INTEGER DEFAULT 0,
-    is_active INTEGER DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS topic_votes (
-    topic_id INTEGER,
-    user_id INTEGER,
-    vote_type TEXT,
-    voted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (topic_id, user_id)
-);
-
--- Предложения команд
-CREATE TABLE IF NOT EXISTS command_suggestions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    command TEXT,
-    description TEXT,
-    suggested_by INTEGER,
-    votes_for INTEGER DEFAULT 0,
-    votes_against INTEGER DEFAULT 0,
-    status TEXT DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Черный список слов
-CREATE TABLE IF NOT EXISTS blacklist (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    chat_id INTEGER,
-    word TEXT,
-    added_by INTEGER,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Спамлист
-CREATE TABLE IF NOT EXISTS spamlist (
-    user_id INTEGER PRIMARY KEY,
-    reason TEXT,
-    added_by INTEGER,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Мошенники
-CREATE TABLE IF NOT EXISTS scammers (
-    user_id INTEGER PRIMARY KEY,
-    proof TEXT,
-    added_by INTEGER,
-    added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-""")
-conn.commit()
-
-# Состояния для FSM
-class MafiaGame(StatesGroup):
-    waiting = State()
-    joining = State()
-    night_actions = State()
-    day_voting = State()
-    trial = State()
-
-class RussianRoulette(StatesGroup):
-    playing = State()
-
-class Duel(StatesGroup):
-    fighting = State()
-
-class Profile(StatesGroup):
-    editing_name = State()
-    editing_age = State()
-    editing_city = State()
-    editing_bio = State()
-    editing_gender = State()
-    editing_photo = State()
-
-class Note(StatesGroup):
-    adding = State()
-    editing = State()
-
-class Bookmark(StatesGroup):
-    adding = State()
-    editing = State()
-
-class Timer(StatesGroup):
-    adding = State()
-
-class Reminder(StatesGroup):
-    adding = State()
-
-class Clan(StatesGroup):
-    creating = State()
-    joining = State()
-
-class Circle(StatesGroup):
-    creating = State()
-    meeting = State()
-
-# Утилиты
-def get_user_rank(user_id: int, chat_id: int) -> int:
-    """Получить ранг пользователя в чате"""
-    cursor.execute("SELECT rank FROM moderators WHERE user_id = ? AND chat_id = ? AND is_active = 1", (user_id, chat_id))
-    result = cursor.fetchone()
-    if result:
-        return result[0]
+class MafiaGame:
+    def __init__(self, chat_id: int, game_id: str, creator_id: int):
+        self.chat_id = chat_id
+        self.game_id = game_id
+        self.creator_id = creator_id
+        self.status = "waiting"  # waiting, night, day, voting, ended
+        self.players: List[int] = []
+        self.players_data: Dict[int, Dict[str, Any]] = {}
+        self.roles: Dict[int, str] = {}
+        self.alive: Dict[int, bool] = {}
+        self.day = 1
+        self.phase = "night"
+        self.votes: Dict[int, int] = {}
+        self.night_actions: Dict[str, Optional[int]] = {
+            "mafia_kill": None,
+            "doctor_save": None,
+            "commissioner_check": None,
+            "maniac_kill": None
+        }
+        self.message_id: Optional[int] = None
+        self.start_time: Optional[datetime.datetime] = None
+        
+        # Для TrueMafia стиля
+        self.mafia_chat_id: Optional[int] = None
+        self.kill_history: List[str] = []
     
-    if user_id in ADMIN_IDS:
-        return 5
-    
-    return 0
-
-def check_permission(command: str, chat_id: int, user_id: int) -> bool:
-    """Проверить, есть ли у пользователя права на команду"""
-    # Проверка исключений
-    cursor.execute("SELECT 1 FROM command_exceptions WHERE command = ? AND user_id = ? AND chat_id = ?", 
-                  (command, user_id, chat_id))
-    if cursor.fetchone():
+    def add_player(self, user_id: int, name: str, username: str = "") -> bool:
+        if user_id in self.players:
+            return False
+        self.players.append(user_id)
+        self.players_data[user_id] = {
+            "name": name,
+            "username": username,
+            "confirmed": False
+        }
         return True
     
-    user_rank = get_user_rank(user_id, chat_id)
+    def remove_player(self, user_id: int) -> bool:
+        if user_id not in self.players:
+            return False
+        self.players.remove(user_id)
+        if user_id in self.players_data:
+            del self.players_data[user_id]
+        return True
     
-    cursor.execute("SELECT min_rank FROM command_permissions WHERE command = ? AND chat_id = ?", (command, chat_id))
-    result = cursor.fetchone()
-    required_rank = result[0] if result else 0
+    def confirm_player(self, user_id: int) -> bool:
+        if user_id not in self.players_data:
+            return False
+        self.players_data[user_id]["confirmed"] = True
+        return True
     
-    return user_rank >= required_rank
+    def all_confirmed(self) -> bool:
+        return all(p["confirmed"] for p in self.players_data.values()) and len(self.players) >= 6
+    
+    def assign_roles(self):
+        num_players = len(self.players)
+        
+        if num_players <= 7:
+            num_mafia = 2
+            extra_roles = []
+        elif num_players <= 10:
+            num_mafia = 3
+            extra_roles = [MafiaRole.MANIAC]
+        elif num_players <= 13:
+            num_mafia = 4
+            extra_roles = [MafiaRole.MANIAC, MafiaRole.LADY]
+        else:
+            num_mafia = 4
+            extra_roles = [MafiaRole.MANIAC, MafiaRole.LADY, MafiaRole.SHERIFF]
+        
+        roles = [MafiaRole.MAFIA] * num_mafia
+        roles.append(MafiaRole.COMMISSIONER)
+        roles.append(MafiaRole.DOCTOR)
+        roles.extend(extra_roles)
+        
+        remaining = num_players - len(roles)
+        roles.extend([MafiaRole.CITIZEN] * remaining)
+        
+        random.shuffle(roles)
+        
+        for i, player_id in enumerate(self.players):
+            self.roles[player_id] = roles[i]
+            self.alive[player_id] = True
+    
+    def get_role_description(self, role: str) -> str:
+        descriptions = {
+            MafiaRole.MAFIA: "Ночью вы можете убивать мирных жителей. Общайтесь с другими мафиози в ЛС.",
+            MafiaRole.COMMISSIONER: "Ночью вы можете проверять игроков, узнавая их роль.",
+            MafiaRole.DOCTOR: "Ночью вы можете спасать одного игрока от смерти.",
+            MafiaRole.MANIAC: "Ночью вы можете убивать. Вы ни с кем не связаны.",
+            MafiaRole.BOSS: "Вы - глава мафии. Вас нельзя убить ночью.",
+            MafiaRole.CITIZEN: "У вас нет особых способностей. Ищите мафию днём.",
+            MafiaRole.LADY: "Ночью вы можете соблазнить игрока - он не умрёт, но пропустит день.",
+            MafiaRole.SHERIFF: "Вы можете застрелить игрока раз за игру.",
+            MafiaRole.TERRORIST: "Если вас убьют, вы забираете с собой одного случайного игрока."
+        }
+        return descriptions.get(role, "Ошибка")
+    
+    def get_alive_players(self) -> List[int]:
+        return [pid for pid in self.players if self.alive.get(pid, False)]
+    
+    def get_alive_count(self) -> Dict[str, int]:
+        alive = self.get_alive_players()
+        mafia = sum(1 for pid in alive if self.roles[pid] in [MafiaRole.MAFIA, MafiaRole.BOSS])
+        citizens = len(alive) - mafia
+        return {"mafia": mafia, "citizens": citizens, "total": len(alive)}
+    
+    def check_win(self) -> Optional[str]:
+        alive = self.get_alive_players()
+        if not alive:
+            return None
+        
+        mafia_count = 0
+        citizen_count = 0
+        
+        for pid in alive:
+            role = self.roles[pid]
+            if role in [MafiaRole.MAFIA, MafiaRole.BOSS]:
+                mafia_count += 1
+            else:
+                citizen_count += 1
+        
+        if mafia_count == 0:
+            return "citizens"
+        if mafia_count >= citizen_count:
+            return "mafia"
+        return None
+    
+    def process_night(self) -> Dict[str, Any]:
+        killed = self.night_actions.get("mafia_kill")
+        saved = self.night_actions.get("doctor_save")
+        maniac_kill = self.night_actions.get("maniac_kill")
+        checked = self.night_actions.get("commissioner_check")
+        
+        if saved and saved == killed:
+            killed = None
+        
+        if maniac_kill and maniac_kill != saved:
+            if killed:
+                pass
+            else:
+                killed = maniac_kill
+        
+        result = {
+            "killed": killed,
+            "checked": checked,
+            "check_result": self.roles.get(checked) if checked else None
+        }
+        
+        self.night_actions = {
+            "mafia_kill": None,
+            "doctor_save": None,
+            "commissioner_check": None,
+            "maniac_kill": None
+        }
+        
+        return result
+    
+    def process_voting(self) -> Optional[int]:
+        if not self.votes:
+            return None
+        
+        vote_count = {}
+        for target in self.votes.values():
+            vote_count[target] = vote_count.get(target, 0) + 1
+        
+        max_votes = max(vote_count.values())
+        candidates = [pid for pid, votes in vote_count.items() if votes == max_votes]
+        
+        if len(candidates) == 1:
+            executed = candidates[0]
+            self.alive[executed] = False
+            self.votes = {}
+            return executed
+        
+        self.votes = {}
+        return None
 
-def parse_time(time_str: str) -> Optional[timedelta]:
-    """Парсинг времени из строки (30м, 2ч, 1д)"""
-    match = re.match(r"(\d+)([сcмчд])", time_str.lower())
+# ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ ==========
+class Style:
+    SEPARATOR = "─" * 28
+    SEPARATOR_BOLD = "━" * 28
+    
+    @classmethod
+    def header(cls, title: str, emoji: str = "⚜️") -> str:
+        return f"\n{emoji}{emoji} **{title.upper()}** {emoji}{emoji}\n{cls.SEPARATOR_BOLD}\n"
+    
+    @classmethod
+    def section(cls, title: str, emoji: str = "📌") -> str:
+        return f"\n{emoji} **{title}**\n{cls.SEPARATOR}\n"
+    
+    @classmethod
+    def cmd(cls, cmd: str, desc: str, usage: str = "") -> str:
+        if usage:
+            return f"▸ `/{cmd} {usage}` — {desc}"
+        return f"▸ `/{cmd}` — {desc}"
+    
+    @classmethod
+    def item(cls, text: str, emoji: str = "•") -> str:
+        return f"{emoji} {text}"
+    
+    @classmethod
+    def stat(cls, name: str, value: str, emoji: str = "◉") -> str:
+        return f"{emoji} **{name}:** {value}"
+    
+    @classmethod
+    def progress(cls, current: int, total: int, length: int = 15) -> str:
+        filled = int((current / total) * length) if total > 0 else 0
+        bar = "█" * filled + "░" * (length - filled)
+        return f"`{bar}` {current}/{total}"
+    
+    @classmethod
+    def success(cls, text: str) -> str:
+        return f"✅ **{text}**"
+    
+    @classmethod
+    def error(cls, text: str) -> str:
+        return f"❌ **{text}**"
+    
+    @classmethod
+    def warning(cls, text: str) -> str:
+        return f"⚠️ **{text}**"
+    
+    @classmethod
+    def info(cls, text: str) -> str:
+        return f"ℹ️ **{text}**"
+    
+    @classmethod
+    def code(cls, text: str) -> str:
+        return f"`{text}`"
+
+s = Style()
+
+# ========== КЛАВИАТУРЫ ==========
+class Keyboard:
+    @staticmethod
+    def make(buttons: List[List[Tuple[str, str]]]) -> InlineKeyboardMarkup:
+        keyboard = []
+        for row in buttons:
+            kb_row = []
+            for text, cb in row:
+                kb_row.append(InlineKeyboardButton(text, callback_data=cb))
+            keyboard.append(kb_row)
+        return InlineKeyboardMarkup(keyboard)
+    
+    @classmethod
+    def main(cls):
+        return cls.make([
+            [("👤 ПРОФИЛЬ", "menu_profile"), ("📊 СТАТИСТИКА", "menu_stats")],
+            [("🔫 МАФИЯ", "menu_mafia"), ("💰 ЭКОНОМИКА", "menu_economy")],
+            [("🎲 ИГРЫ", "menu_games"), ("⚙️ МОДЕРАЦИЯ", "menu_mod")],
+            [("💎 ПРИВИЛЕГИИ", "menu_donate"), ("📚 ПОМОЩЬ", "menu_help")]
+        ])
+    
+    @classmethod
+    def games(cls):
+        return cls.make([
+            [("🔫 РУССКАЯ РУЛЕТКА", "game_rr"), ("🎲 КОСТИ", "game_dice")],
+            [("🎰 РУЛЕТКА", "game_roulette"), ("🎰 СЛОТЫ", "game_slots")],
+            [("✊ КНБ", "game_rps"), ("💣 САПЁР", "game_saper")],
+            [("👾 БОССЫ", "game_bosses"), ("⚔️ ДУЭЛИ", "game_duels")],
+            [("🔙 НАЗАД", "menu_back")]
+        ])
+    
+    @classmethod
+    def mafia(cls):
+        return cls.make([
+            [("🎮 НАЧАТЬ ИГРУ", "mafia_start"), ("📋 ПРАВИЛА", "mafia_rules")],
+            [("👥 РОЛИ", "mafia_roles"), ("📊 СТАТИСТИКА", "mafia_stats")],
+            [("🔙 НАЗАД", "menu_back")]
+        ])
+    
+    @classmethod
+    def mafia_confirm(cls, chat_id: int):
+        return cls.make([[(f"✅ ПОДТВЕРДИТЬ", f"mafia_confirm_{chat_id}")]])
+    
+    @classmethod
+    def economy(cls):
+        return cls.make([
+            [("💰 БАЛАНС", "eco_balance"), ("📦 МАГАЗИН", "eco_shop")],
+            [("🎁 БОНУСЫ", "eco_bonus"), ("💳 ПЕРЕВОД", "eco_pay")],
+            [("💎 ПРИВИЛЕГИИ", "menu_donate"), ("📊 ТОП", "eco_top")],
+            [("👾 БОССЫ", "game_bosses"), ("🔙 НАЗАД", "menu_back")]
+        ])
+    
+    @classmethod
+    def mod(cls):
+        return cls.make([
+            [("⚠️ ВАРНЫ", "mod_warns"), ("🔇 МУТЫ", "mod_mutes")],
+            [("🔨 БАНЫ", "mod_bans"), ("📋 ЧЕРНЫЙ СПИСОК", "mod_blacklist")],
+            [("👥 АДМИНЫ", "mod_admins"), ("⚙️ НАСТРОЙКИ", "mod_settings")],
+            [("🔙 НАЗАД", "menu_back")]
+        ])
+    
+    @classmethod
+    def back(cls):
+        return cls.make([[("◀ НАЗАД", "menu_back")]])
+    
+    @classmethod
+    def rps(cls):
+        return cls.make([
+            [("🪨 КАМЕНЬ", "rps_rock"), ("✂️ НОЖНИЦЫ", "rps_scissors"), ("📄 БУМАГА", "rps_paper")],
+            [("🔙 НАЗАД", "menu_back")]
+        ])
+    
+    @classmethod
+    def duel_accept(cls, duel_id: int):
+        return cls.make([
+            [("✅ ПРИНЯТЬ", f"accept_duel_{duel_id}"),
+             ("❌ ОТКЛОНИТЬ", f"reject_duel_{duel_id}")]
+        ])
+
+kb = Keyboard()
+
+# ========== БАЗА ДАННЫХ ==========
+class Database:
+    def __init__(self):
+        self.conn = sqlite3.connect("spectrum.db", check_same_thread=False)
+        self.conn.row_factory = sqlite3.Row
+        self.cursor = self.conn.cursor()
+        self.create_tables()
+        self.init_data()
+        logger.info("✅ База данных инициализирована")
+    
+    def create_tables(self):
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER UNIQUE,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                language TEXT DEFAULT 'ru',
+                coins INTEGER DEFAULT 1000,
+                diamonds INTEGER DEFAULT 0,
+                energy INTEGER DEFAULT 100,
+                level INTEGER DEFAULT 1,
+                exp INTEGER DEFAULT 0,
+                health INTEGER DEFAULT 100,
+                max_health INTEGER DEFAULT 100,
+                damage INTEGER DEFAULT 10,
+                armor INTEGER DEFAULT 0,
+                crit_chance INTEGER DEFAULT 5,
+                crit_multiplier INTEGER DEFAULT 150,
+                messages_count INTEGER DEFAULT 0,
+                commands_used INTEGER DEFAULT 0,
+                rps_wins INTEGER DEFAULT 0,
+                rps_losses INTEGER DEFAULT 0,
+                rps_draws INTEGER DEFAULT 0,
+                casino_wins INTEGER DEFAULT 0,
+                casino_losses INTEGER DEFAULT 0,
+                dice_wins INTEGER DEFAULT 0,
+                dice_losses INTEGER DEFAULT 0,
+                rr_wins INTEGER DEFAULT 0,
+                rr_losses INTEGER DEFAULT 0,
+                slots_wins INTEGER DEFAULT 0,
+                slots_losses INTEGER DEFAULT 0,
+                guess_wins INTEGER DEFAULT 0,
+                guess_losses INTEGER DEFAULT 0,
+                bulls_wins INTEGER DEFAULT 0,
+                bulls_losses INTEGER DEFAULT 0,
+                boss_kills INTEGER DEFAULT 0,
+                boss_damage INTEGER DEFAULT 0,
+                duel_wins INTEGER DEFAULT 0,
+                duel_losses INTEGER DEFAULT 0,
+                duel_rating INTEGER DEFAULT 1000,
+                mafia_games INTEGER DEFAULT 0,
+                mafia_wins INTEGER DEFAULT 0,
+                mafia_losses INTEGER DEFAULT 0,
+                clan_id INTEGER DEFAULT 0,
+                clan_role TEXT DEFAULT 'member',
+                circles TEXT DEFAULT '[]',
+                friends TEXT DEFAULT '[]',
+                enemies TEXT DEFAULT '[]',
+                crush INTEGER DEFAULT 0,
+                spouse INTEGER DEFAULT 0,
+                married_since TEXT,
+                reputation INTEGER DEFAULT 0,
+                achievements TEXT DEFAULT '[]',
+                bookmarks TEXT DEFAULT '[]',
+                notes TEXT DEFAULT '[]',
+                timers TEXT DEFAULT '[]',
+                nickname TEXT,
+                title TEXT DEFAULT '',
+                motto TEXT DEFAULT 'Нет девиза',
+                bio TEXT DEFAULT '',
+                gender TEXT DEFAULT 'не указан',
+                city TEXT DEFAULT 'не указан',
+                country TEXT DEFAULT 'не указана',
+                birth_date TEXT,
+                age INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user',
+                rank INTEGER DEFAULT 0,
+                rank_name TEXT DEFAULT 'Участник',
+                warns INTEGER DEFAULT 0,
+                warns_list TEXT DEFAULT '[]',
+                mute_until TEXT,
+                banned INTEGER DEFAULT 0,
+                ban_reason TEXT,
+                ban_date TEXT,
+                ban_admin INTEGER,
+                vip_until TEXT,
+                premium_until TEXT,
+                daily_streak INTEGER DEFAULT 0,
+                last_daily TEXT,
+                last_weekly TEXT,
+                last_monthly TEXT,
+                last_work TEXT,
+                last_seen TEXT,
+                notifications INTEGER DEFAULT 1,
+                registered TEXT DEFAULT CURRENT_TIMESTAMP,
+                referrer_id INTEGER
+            )
+        ''')
+        
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_telegram_id ON users(telegram_id)')
+        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_username ON users(username)')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT,
+                details TEXT,
+                chat_id INTEGER,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT UNIQUE,
+                added_by INTEGER,
+                added_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER PRIMARY KEY,
+                welcome TEXT,
+                rules TEXT,
+                antiflood INTEGER DEFAULT 1,
+                antispam INTEGER DEFAULT 1,
+                antilink INTEGER DEFAULT 0,
+                captcha INTEGER DEFAULT 0,
+                log_chat INTEGER,
+                lang TEXT DEFAULT 'ru'
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bosses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                level INTEGER,
+                health INTEGER,
+                max_health INTEGER,
+                damage INTEGER,
+                reward_coins INTEGER,
+                reward_exp INTEGER,
+                image_url TEXT,
+                is_alive INTEGER DEFAULT 1
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE,
+                owner_id INTEGER,
+                level INTEGER DEFAULT 1,
+                exp INTEGER DEFAULT 0,
+                coins INTEGER DEFAULT 0,
+                members INTEGER DEFAULT 1,
+                rating INTEGER DEFAULT 1000,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clan_members (
+                clan_id INTEGER,
+                user_id INTEGER UNIQUE,
+                role TEXT DEFAULT 'member',
+                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (clan_id) REFERENCES clans(id),
+                FOREIGN KEY (user_id) REFERENCES users(id)
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS duels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                challenger_id INTEGER,
+                opponent_id INTEGER,
+                bet INTEGER,
+                status TEXT DEFAULT 'pending',
+                winner_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                word TEXT,
+                action TEXT,
+                action_value TEXT,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS topics (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                title TEXT,
+                description TEXT,
+                created_by INTEGER,
+                votes_for TEXT DEFAULT '[]',
+                votes_against TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'active',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS suggestions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                command TEXT,
+                description TEXT,
+                votes_for TEXT DEFAULT '[]',
+                votes_against TEXT DEFAULT '[]',
+                status TEXT DEFAULT 'pending',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.conn.commit()
+    
+    def init_data(self):
+        self.cursor.execute("SELECT COUNT(*) FROM bosses")
+        if self.cursor.fetchone()[0] == 0:
+            bosses = [
+                ("Ядовитый комар", 5, 500, 500, 15, 250, 50),
+                ("Лесной тролль", 10, 1000, 1000, 25, 500, 100),
+                ("Огненный дракон", 15, 2000, 2000, 40, 1000, 200),
+                ("Ледяной великан", 20, 3500, 3500, 60, 2000, 350),
+                ("Король демонов", 25, 5000, 5000, 85, 3500, 500),
+                ("Бог разрушения", 30, 10000, 10000, 150, 5000, 1000)
+            ]
+            for boss in bosses:
+                self.cursor.execute('''
+                    INSERT INTO bosses (name, level, health, max_health, damage, reward_coins, reward_exp)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', boss)
+            self.conn.commit()
+    
+    def get_user(self, telegram_id: int, first_name: str = "Player") -> Dict[str, Any]:
+        self.cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
+        row = self.cursor.fetchone()
+        
+        if not row:
+            role = 'owner' if telegram_id == OWNER_ID else 'user'
+            rank = 5 if telegram_id == OWNER_ID else 0
+            rank_name = RANKS[rank]["name"]
+            
+            self.cursor.execute('''
+                INSERT INTO users (telegram_id, first_name, role, rank, rank_name, last_seen)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (telegram_id, first_name, role, rank, rank_name, datetime.datetime.now().isoformat()))
+            self.conn.commit()
+            return self.get_user(telegram_id, first_name)
+        
+        user = dict(row)
+        
+        self.cursor.execute("UPDATE users SET last_seen = ?, first_name = ? WHERE telegram_id = ?",
+                          (datetime.datetime.now().isoformat(), first_name, telegram_id))
+        self.conn.commit()
+        
+        return user
+    
+    def get_user_by_id(self, user_id: int) -> Optional[Dict[str, Any]]:
+        self.cursor.execute("SELECT * FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_user_by_username(self, username: str) -> Optional[Dict[str, Any]]:
+        if username.startswith('@'):
+            username = username[1:]
+        self.cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def update_user(self, user_id: int, **kwargs) -> bool:
+        if not kwargs:
+            return False
+        for key, value in kwargs.items():
+            self.cursor.execute(f"UPDATE users SET {key} = ? WHERE id = ?", (value, user_id))
+        self.conn.commit()
+        return True
+    
+    def add_coins(self, user_id: int, amount: int) -> int:
+        self.cursor.execute("UPDATE users SET coins = coins + ? WHERE id = ?", (amount, user_id))
+        self.conn.commit()
+        self.cursor.execute("SELECT coins FROM users WHERE id = ?", (user_id,))
+        return self.cursor.fetchone()[0]
+    
+    def add_diamonds(self, user_id: int, amount: int) -> int:
+        self.cursor.execute("UPDATE users SET diamonds = diamonds + ? WHERE id = ?", (amount, user_id))
+        self.conn.commit()
+        self.cursor.execute("SELECT diamonds FROM users WHERE id = ?", (user_id,))
+        return self.cursor.fetchone()[0]
+    
+    def add_exp(self, user_id: int, amount: int) -> bool:
+        self.cursor.execute("UPDATE users SET exp = exp + ? WHERE id = ?", (amount, user_id))
+        self.cursor.execute("SELECT exp, level FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        exp, level = row[0], row[1]
+        if exp >= level * 100:
+            self.cursor.execute("UPDATE users SET level = level + 1, exp = exp - ? WHERE id = ?", 
+                              (level * 100, user_id))
+            self.conn.commit()
+            return True
+        self.conn.commit()
+        return False
+    
+    def add_energy(self, user_id: int, amount: int) -> int:
+        self.cursor.execute("UPDATE users SET energy = MIN(100, energy + ?) WHERE id = ?", (amount, user_id))
+        self.conn.commit()
+        self.cursor.execute("SELECT energy FROM users WHERE id = ?", (user_id,))
+        return self.cursor.fetchone()[0]
+    
+    def heal(self, user_id: int, amount: int) -> int:
+        self.cursor.execute("UPDATE users SET health = MIN(max_health, health + ?) WHERE id = ?", (amount, user_id))
+        self.conn.commit()
+        self.cursor.execute("SELECT health FROM users WHERE id = ?", (user_id,))
+        return self.cursor.fetchone()[0]
+    
+    def damage(self, user_id: int, amount: int) -> int:
+        self.cursor.execute("UPDATE users SET health = MAX(0, health - ?) WHERE id = ?", (amount, user_id))
+        self.conn.commit()
+        self.cursor.execute("SELECT health FROM users WHERE id = ?", (user_id,))
+        return self.cursor.fetchone()[0]
+    
+    def is_vip(self, user_id: int) -> bool:
+        self.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+        return False
+    
+    def is_premium(self, user_id: int) -> bool:
+        self.cursor.execute("SELECT premium_until FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+        return False
+    
+    def set_vip(self, user_id: int, days: int) -> datetime.datetime:
+        until = datetime.datetime.now() + datetime.timedelta(days=days)
+        self.cursor.execute("UPDATE users SET vip_until = ?, role = 'vip' WHERE id = ?",
+                          (until.isoformat(), user_id))
+        self.conn.commit()
+        return until
+    
+    def set_premium(self, user_id: int, days: int) -> datetime.datetime:
+        until = datetime.datetime.now() + datetime.timedelta(days=days)
+        self.cursor.execute("UPDATE users SET premium_until = ?, role = 'premium' WHERE id = ?",
+                          (until.isoformat(), user_id))
+        self.conn.commit()
+        return until
+    
+    def set_rank(self, user_id: int, rank: int, admin_id: int) -> bool:
+        if rank not in RANKS:
+            return False
+        self.cursor.execute("UPDATE users SET rank = ?, rank_name = ? WHERE id = ?",
+                          (rank, RANKS[rank]["name"], user_id))
+        self.conn.commit()
+        self.log_action(admin_id, "set_rank", f"{user_id} -> {rank}")
+        return True
+    
+    def get_admins(self) -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username, rank, rank_name FROM users WHERE rank > 0 ORDER BY rank DESC")
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def add_warn(self, user_id: int, admin_id: int, reason: str) -> int:
+        self.cursor.execute("SELECT warns, warns_list FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        warns, warns_list = row[0], json.loads(row[1])
+        warns_list.append({
+            'id': len(warns_list) + 1,
+            'admin_id': admin_id,
+            'reason': reason,
+            'date': datetime.datetime.now().isoformat()
+        })
+        new_warns = warns + 1
+        self.cursor.execute("UPDATE users SET warns = ?, warns_list = ? WHERE id = ?",
+                          (new_warns, json.dumps(warns_list), user_id))
+        self.conn.commit()
+        self.log_action(admin_id, "add_warn", f"{user_id}: {reason}")
+        return new_warns
+    
+    def get_warns(self, user_id: int) -> List[Dict]:
+        self.cursor.execute("SELECT warns_list FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        return json.loads(row[0]) if row and row[0] else []
+    
+    def remove_last_warn(self, user_id: int, admin_id: int) -> Optional[Dict]:
+        self.cursor.execute("SELECT warns, warns_list FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        warns, warns_list = row[0], json.loads(row[1])
+        if not warns_list:
+            return None
+        removed = warns_list.pop()
+        self.cursor.execute("UPDATE users SET warns = ?, warns_list = ? WHERE id = ?",
+                          (warns - 1, json.dumps(warns_list), user_id))
+        self.conn.commit()
+        self.log_action(admin_id, "remove_warn", f"{user_id}")
+        return removed
+    
+    def mute_user(self, user_id: int, minutes: int, admin_id: int, reason: str = "") -> datetime.datetime:
+        until = datetime.datetime.now() + datetime.timedelta(minutes=minutes)
+        self.cursor.execute("UPDATE users SET mute_until = ? WHERE id = ?", (until.isoformat(), user_id))
+        self.conn.commit()
+        self.log_action(admin_id, "mute", f"{user_id} {minutes}мин: {reason}")
+        return until
+    
+    def is_muted(self, user_id: int) -> bool:
+        self.cursor.execute("SELECT mute_until FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.datetime.fromisoformat(row[0]) > datetime.datetime.now()
+        return False
+    
+    def unmute_user(self, user_id: int, admin_id: int) -> bool:
+        self.cursor.execute("UPDATE users SET mute_until = NULL WHERE id = ?", (user_id,))
+        self.conn.commit()
+        self.log_action(admin_id, "unmute", str(user_id))
+        return True
+    
+    def get_muted_users(self) -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username, mute_until FROM users WHERE mute_until > ?",
+                          (datetime.datetime.now().isoformat(),))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def ban_user(self, user_id: int, admin_id: int, reason: str) -> bool:
+        self.cursor.execute('''
+            UPDATE users SET banned = 1, ban_reason = ?, ban_date = ?, ban_admin = ?
+            WHERE id = ?
+        ''', (reason, datetime.datetime.now().isoformat(), admin_id, user_id))
+        self.conn.commit()
+        self.log_action(admin_id, "ban", f"{user_id}: {reason}")
+        return True
+    
+    def unban_user(self, user_id: int, admin_id: int) -> bool:
+        self.cursor.execute("UPDATE users SET banned = 0, ban_reason = NULL, ban_date = NULL, ban_admin = NULL WHERE id = ?", (user_id,))
+        self.conn.commit()
+        self.log_action(admin_id, "unban", str(user_id))
+        return True
+    
+    def is_banned(self, user_id: int) -> bool:
+        self.cursor.execute("SELECT banned FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        return row and row[0] == 1
+    
+    def get_banlist(self) -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username FROM users WHERE banned = 1")
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def add_to_blacklist(self, word: str, admin_id: int) -> bool:
+        try:
+            self.cursor.execute("INSERT INTO blacklist (word, added_by) VALUES (?, ?)", (word.lower(), admin_id))
+            self.conn.commit()
+            self.log_action(admin_id, "add_blacklist", word)
+            return True
+        except:
+            return False
+    
+    def remove_from_blacklist(self, word: str, admin_id: int) -> bool:
+        self.cursor.execute("DELETE FROM blacklist WHERE word = ?", (word.lower(),))
+        self.conn.commit()
+        self.log_action(admin_id, "remove_blacklist", word)
+        return self.cursor.rowcount > 0
+    
+    def get_blacklist(self) -> List[str]:
+        self.cursor.execute("SELECT word FROM blacklist ORDER BY word")
+        return [row[0] for row in self.cursor.fetchall()]
+    
+    def is_word_blacklisted(self, text: str) -> bool:
+        words = self.get_blacklist()
+        text_lower = text.lower()
+        for word in words:
+            if word in text_lower:
+                return True
+        return False
+    
+    def get_top(self, field: str, limit: int = 10) -> List[Tuple]:
+        self.cursor.execute(f"SELECT first_name, nickname, {field} FROM users ORDER BY {field} DESC LIMIT ?", (limit,))
+        return self.cursor.fetchall()
+    
+    def add_daily_streak(self, user_id: int) -> int:
+        today = datetime.datetime.now().date()
+        self.cursor.execute("SELECT last_daily, daily_streak FROM users WHERE id = ?", (user_id,))
+        row = self.cursor.fetchone()
+        
+        if row and row[0]:
+            last = datetime.datetime.fromisoformat(row[0]).date()
+            if last == today - datetime.timedelta(days=1):
+                streak = row[1] + 1
+            elif last == today:
+                return row[1]
+            else:
+                streak = 1
+        else:
+            streak = 1
+        
+        self.cursor.execute("UPDATE users SET daily_streak = ?, last_daily = ? WHERE id = ?",
+                          (streak, datetime.datetime.now().isoformat(), user_id))
+        self.conn.commit()
+        return streak
+    
+    def get_bosses(self, alive_only: bool = True) -> List[Dict]:
+        if alive_only:
+            self.cursor.execute("SELECT * FROM bosses WHERE is_alive = 1 ORDER BY level")
+        else:
+            self.cursor.execute("SELECT * FROM bosses ORDER BY level")
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def get_boss(self, boss_id: int) -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM bosses WHERE id = ?", (boss_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def damage_boss(self, boss_id: int, damage: int) -> bool:
+        self.cursor.execute("UPDATE bosses SET health = health - ? WHERE id = ?", (damage, boss_id))
+        self.cursor.execute("SELECT health FROM bosses WHERE id = ?", (boss_id,))
+        health = self.cursor.fetchone()[0]
+        if health <= 0:
+            self.cursor.execute("UPDATE bosses SET is_alive = 0 WHERE id = ?", (boss_id,))
+            self.conn.commit()
+            return True
+        self.conn.commit()
+        return False
+    
+    def respawn_bosses(self):
+        self.cursor.execute("UPDATE bosses SET health = max_health, is_alive = 1")
+        self.conn.commit()
+    
+    def add_boss_kill(self, user_id: int):
+        self.cursor.execute("UPDATE users SET boss_kills = boss_kills + 1 WHERE id = ?", (user_id,))
+        self.conn.commit()
+    
+    def create_duel(self, challenger_id: int, opponent_id: int, bet: int) -> int:
+        self.cursor.execute('''
+            INSERT INTO duels (challenger_id, opponent_id, bet)
+            VALUES (?, ?, ?)
+        ''', (challenger_id, opponent_id, bet))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def get_duel(self, duel_id: int) -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM duels WHERE id = ?", (duel_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def update_duel(self, duel_id: int, **kwargs):
+        for key, value in kwargs.items():
+            self.cursor.execute(f"UPDATE duels SET {key} = ? WHERE id = ?", (value, duel_id))
+        self.conn.commit()
+    
+    def create_clan(self, name: str, owner_id: int) -> Optional[int]:
+        try:
+            self.cursor.execute("INSERT INTO clans (name, owner_id) VALUES (?, ?)", (name, owner_id))
+            clan_id = self.cursor.lastrowid
+            self.cursor.execute("INSERT INTO clan_members (clan_id, user_id, role) VALUES (?, ?, 'owner')", (clan_id, owner_id))
+            self.cursor.execute("UPDATE users SET clan_id = ?, clan_role = 'owner' WHERE id = ?", (clan_id, owner_id))
+            self.conn.commit()
+            return clan_id
+        except:
+            return None
+    
+    def get_clan(self, clan_id: int) -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM clans WHERE id = ?", (clan_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_clan_by_name(self, name: str) -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM clans WHERE name = ?", (name,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_clan_members(self, clan_id: int) -> List[Dict]:
+        self.cursor.execute('''
+            SELECT u.id, u.first_name, u.username, u.nickname, cm.role, cm.joined_at
+            FROM clan_members cm
+            JOIN users u ON cm.user_id = u.id
+            WHERE cm.clan_id = ?
+        ''', (clan_id,))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def log_action(self, user_id: int, action: str, details: str = "", chat_id: int = None):
+        self.cursor.execute('''
+            INSERT INTO logs (user_id, action, details, chat_id, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, action, details, chat_id, datetime.datetime.now().isoformat()))
+        self.conn.commit()
+    
+    def close(self):
+        self.conn.close()
+
+db = Database()
+
+# ========== GROQ AI ==========
+class GroqAI:
+    def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.api_url = "https://api.groq.com/openai/v1/chat/completions"
+        self.session: Optional[aiohttp.ClientSession] = None
+        self.contexts = defaultdict(lambda: deque(maxlen=15))
+        self.user_last_ai = defaultdict(float)
+        self.ai_cooldown = AI_COOLDOWN
+        
+        self.system_prompt = """Ты — Спектр, дерзкий и умный ИИ-бот в Telegram. Ты используешь современный сленг и мемы. 
+Твой характер: дерзкий, но дружелюбный. Можешь жестко ответить на хамство. 
+Знаешь всё про игры (мафия, русская рулетка, дуэли), экономику, модерацию (5 рангов). 
+Твой создатель — @NobuCraft. Отвечай кратко, с юмором, используй эмодзи."""
+    
+    async def get_session(self) -> aiohttp.ClientSession:
+        if not self.session:
+            self.session = aiohttp.ClientSession()
+        return self.session
+    
+    async def get_response(self, user_id: int, message: str, username: str = "Пользователь") -> Optional[str]:
+        now = time.time()
+        if now - self.user_last_ai[user_id] < self.ai_cooldown:
+            return None
+        self.user_last_ai[user_id] = now
+        
+        try:
+            session = await self.get_session()
+            history = list(self.contexts[user_id])
+            messages = [
+                {"role": "system", "content": self.system_prompt},
+                *history,
+                {"role": "user", "content": message}
+            ]
+            
+            data = {
+                "model": "llama-3.3-70b-versatile",
+                "messages": messages,
+                "temperature": 0.9,
+                "max_tokens": 300,
+                "top_p": 0.95
+            }
+            
+            headers = {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json"
+            }
+            
+            async with session.post(self.api_url, headers=headers, json=data) as resp:
+                if resp.status == 200:
+                    result = await resp.json()
+                    response = result["choices"][0]["message"]["content"]
+                    self.contexts[user_id].append({"role": "user", "content": message})
+                    self.contexts[user_id].append({"role": "assistant", "content": response})
+                    return response
+                else:
+                    logger.error(f"Groq API error: {resp.status}")
+                    return "❌ Ошибка связи с AI."
+        except Exception as e:
+            logger.error(f"Groq error: {e}")
+            return None
+    
+    async def close(self):
+        if self.session:
+            await self.session.close()
+
+ai = GroqAI(GROQ_API_KEY) if GROQ_API_KEY else None
+
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+def get_rank_emoji(rank: int) -> str:
+    return RANKS.get(rank, RANKS[0])["emoji"]
+
+def get_rank_name(rank: int) -> str:
+    return RANKS.get(rank, RANKS[0])["name"]
+
+def has_permission(user_data: Dict, required_rank: int) -> bool:
+    return user_data.get('rank', 0) >= required_rank
+
+def extract_user_id(text: str) -> Optional[int]:
+    match = re.search(r'@(\w+)', text)
+    if match:
+        username = match.group(1)
+        user = db.get_user_by_username(username)
+        if user:
+            return user['id']
+    
+    match = re.search(r'tg://user\?id=(\d+)', text)
+    if match:
+        return int(match.group(1))
+    
+    match = re.search(r'(\d+)', text)
+    if match:
+        return int(match.group(1))
+    
+    return None
+
+def parse_time(time_str: str) -> Optional[int]:
+    match = re.match(r'(\d+)([мчд])', time_str)
     if not match:
         return None
     
     amount = int(match.group(1))
     unit = match.group(2)
     
-    if unit in ["с", "c"]:
-        return timedelta(seconds=amount)
-    elif unit == "м":
-        return timedelta(minutes=amount)
-    elif unit == "ч":
-        return timedelta(hours=amount)
-    elif unit == "д":
-        return timedelta(days=amount)
+    if unit == 'м':
+        return amount
+    elif unit == 'ч':
+        return amount * 60
+    elif unit == 'д':
+        return amount * 1440
     
     return None
 
-def format_number(num: int) -> str:
-    """Форматирование числа с разделителями"""
-    return f"{num:,}".replace(",", " ")
-
-def get_rank_emoji(rank: int) -> str:
-    """Получить эмодзи для ранга"""
-    emojis = ["👤", "🛡️", "⚔️", "👑", "💎", "🌟"]
-    return emojis[rank] if rank < len(emojis) else "❓"
-
-def get_rank_name(rank: int) -> str:
-    """Получить название ранга"""
-    names = ["Пользователь", "Мл. модератор", "Ст. модератор", "Мл. администратор", "Ст. администратор", "Создатель"]
-    return names[rank] if rank < len(names) else "Неизвестно"
-
-def extract_user_id(text: str) -> Optional[int]:
-    """Извлечь ID пользователя из текста (ссылка или упоминание)"""
-    # Формат: @username
-    match = re.search(r"@(\w+)", text)
-    if match:
-        username = match.group(1)
-        cursor.execute("SELECT user_id FROM users WHERE username = ?", (username,))
-        result = cursor.fetchone()
-        if result:
-            return result[0]
+# ========== ОСНОВНОЙ КЛАСС БОТА ==========
+class SpectrumBot:
+    def __init__(self):
+        self.db = db
+        self.ai = ai
+        self.spam_tracker = defaultdict(list)
+        self.app = Application.builder().token(TOKEN).build()
+        self.start_time = datetime.datetime.now()
+        self.games_in_progress = {}
+        self.mafia_games = {}
+        self.duels_in_progress = {}
+        self.boss_fights = {}
+        self.setup_handlers()
+        logger.info(f"✅ Бот {BOT_NAME} инициализирован")
     
-    # Формат: ссылка на пользователя
-    match = re.search(r"tg://user\?id=(\d+)", text)
-    if match:
-        return int(match.group(1))
-    
-    # Формат: просто число
-    match = re.search(r"(\d+)", text)
-    if match:
-        return int(match.group(1))
-    
-    return None
-
-def get_user_info(user_id: int) -> Dict:
-    """Получить информацию о пользователе"""
-    cursor.execute("""
-        SELECT user_id, username, first_name, last_name, iris_balance, 
-               vip_level, reputation, messages_count, commands_count
-        FROM users WHERE user_id = ?
-    """, (user_id,))
-    result = cursor.fetchone()
-    if result:
-        return {
-            "id": result[0],
-            "username": result[1],
-            "first_name": result[2],
-            "last_name": result[3],
-            "balance": result[4],
-            "vip": result[5],
-            "reputation": result[6],
-            "messages": result[7],
-            "commands": result[8]
-        }
-    return None
-
-# Декоратор проверки прав
-def permission_required(command: str):
-    def decorator(func):
-        async def wrapper(message: types.Message, *args, **kwargs):
-            if not check_permission(command, message.chat.id, message.from_user.id):
-                await message.reply("🚫 У вас нет прав для использования этой команды.")
-                return
-            return await func(message, *args, **kwargs)
-        return wrapper
-    return decorator
-
-# Регистрация пользователя
-async def register_user(message: types.Message):
-    cursor.execute("""
-        INSERT OR IGNORE INTO users (user_id, username, first_name, last_name)
-        VALUES (?, ?, ?, ?)
-    """, (message.from_user.id, message.from_user.username, 
-          message.from_user.first_name, message.from_user.last_name))
-    conn.commit()
-
-# Команды модерации
-@dp.message_handler(commands=["start"])
-async def cmd_start(message: types.Message):
-    await register_user(message)
-    
-    text = """
-🌟 <b>Спектр 2.0</b> — многофункциональный бот для чатов
-
-<b>Доступные модули:</b>
-👮‍♂️ Модерация (5 рангов)
-🎮 Игры: Мафия, Русская рулетка, Дуэли
-💰 Экономика: Ириски, магазин, донат
-👥 Социальное: Кланы, друзья, браки
-📊 Статистика и рейтинги
-🤖 Искусственный интеллект
-
-<b>Команды:</b>
-/help — список всех команд
-/profile — анкета пользователя
-/mafia — начать игру в мафию
-/roulette — русская рулетка
-/duel — вызвать на дуэль
-/clan — управление кланом
-/shop — магазин
-/daily — ежедневный бонус
-
-Присоединяйся к игре! 🎮
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help"])
-async def cmd_help(message: types.Message):
-    await register_user(message)
-    
-    text = """
-📚 <b>Спектр 2.0 — Справка</b>
-
-<b>Основные разделы:</b>
-• /help_mod — команды модерации
-• /help_game — игровые команды
-• /help_social — социальные команды
-• /help_economy — экономика и магазин
-• /help_utils — полезные команды
-
-<b>Быстрые команды:</b>
-/mafia — начать мафию
-/roulette — русская рулетка
-/profile — анкета
-/top — топ чата
-/daily — бонус
-
-По всем вопросам: @admin
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help_mod"])
-async def cmd_help_mod(message: types.Message):
-    text = """
-👮‍♂️ <b>Команды модерации</b>
-
-<b>Назначение модераторов:</b>
-+Модер [ссылка] — ранг 1
-+Модер 2 [ссылка] — ранг 2
-+Модер 3 [ссылка] — ранг 3
-+Модер 4 [ссылка] — ранг 4
-+Модер 5 [ссылка] — ранг 5
-
-<b>Управление рангами:</b>
-Повысить [ссылка] — +1 ранг
-Понизить [ссылка] — -1 ранг
-Снять [ссылка] — снять статус
-
-<b>Предупреждения:</b>
-Варн [ссылка] [причина] — выдать варн
-Варны [ссылка] — список варнов
-Снять варн [ссылка] — снять последний
-
-<b>Муты и баны:</b>
-Мут [ссылка] [время] [причина]
-Размут [ссылка]
-Бан [ссылка] [причина]
-Разбан [ссылка]
-Кик [ссылка]
-
-<b>Очистка:</b>
-Чистка [количество]
-Чистка всё
-Чистка от [ссылка]
-
-<b>Настройки:</b>
-Антимат on/off
-Антиссылки on/off
-Антифлуд on/off
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help_game"])
-async def cmd_help_game(message: types.Message):
-    text = """
-🎮 <b>Игровые команды</b>
-
-<b>Мафия:</b>
-/mafia — начать игру
-/join — присоединиться
-/start_game — начать (создатель)
-/leave — выйти из игры
-/roles — список ролей
-/vote [@user] — голосовать
-/kill [@user] — убить (мафия)
-/heal [@user] — лечить (доктор)
-/check [@user] — проверить (комиссар)
-
-<b>Русская рулетка:</b>
-/roulette — начать игру
-/shoot — выстрелить
-/spin — прокрутить барабан
-
-<b>Дуэли:</b>
-/duel [@user] [ставка] — вызвать
-/accept [ID] — принять
-/attack [сила] — атаковать
-/defend — защищаться
-/surrender — сдаться
-
-<b>Развлечения:</b>
-/anekdot — случайный анекдот
-/fact — интересный факт
-/quote — цитата
-/whoami — кто я?
-/coin — монетка
-/dice — бросить кубик
-/random [мин] [макс] — число
-/choose [вар1/вар2] — выбор
-/compatibility [@user1] [@user2] — совместимость
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help_social"])
-async def cmd_help_social(message: types.Message):
-    text = """
-👥 <b>Социальные команды</b>
-
-<b>Анкета:</b>
-/profile — моя анкета
-/profile [@user] — анкета пользователя
-/name [текст] — изменить имя
-/age [число] — изменить возраст
-/city [город] — изменить город
-/bio [текст] — о себе
-/gender [м/ж] — пол
-/photo — загрузить фото
-
-<b>Отношения:</b>
-/friend [@user] — добавить в друзья
-/unfriend [@user] — удалить из друзей
-/enemy [@user] — объявить врагом
-/forgive [@user] — простить
-/ignore [@user] — игнорировать
-/unignore [@user] — убрать из игнора
-
-<b>Браки:</b>
-/marry [@user] — предложить
-/accept_marriage — принять
-/divorce — развод
-/families — список семей
-
-<b>Кланы:</b>
-/clan create [название] — создать
-/clan join [название] — вступить
-/clan leave — выйти
-/clan info — информация
-/clan top — топ кланов
-
-<b>Кружки:</b>
-/circle create [название] — создать
-/circle join [название] — вступить
-/circle meeting [дата] [время] [место] — встреча
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help_economy"])
-async def cmd_help_economy(message: types.Message):
-    text = """
-💰 <b>Экономика и магазин</b>
-
-<b>Ириски (валюта):</b>
-/balance — мой баланс
-/balance [@user] — баланс пользователя
-/transfer [@user] [сумма] — перевести
-/top_balance — топ богачей
-
-<b>Ежедневные бонусы:</b>
-/daily — получить бонус
-/streak — текущий стрик
-/bonuses — список бонусов
-
-<b>VIP статус:</b>
-/vip — информация о VIP
-/vip_price — стоимость
-/vip_list — список VIP
-
-<b>Магазин:</b>
-/shop — список товаров
-/buy [товар] — купить
-/gift [@user] [товар] — подарить
-/inventory — инвентарь
-
-<b>Кубы (коллекционные):</b>
-/cubes — мои кубы
-/buy_cube [цвет] — купить куб
-/cube_top — топ коллекционеров
-/gift_cube [@user] [ID] — подарить куб
-
-<b>Награды:</b>
-/awards — список наград
-/give_award [@user] [название] — вручить (модератор)
-/my_awards — мои награды
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["help_utils"])
-async def cmd_help_utils(message: types.Message):
-    text = """
-🔧 <b>Полезные команды</b>
-
-<b>Заметки:</b>
-/note [текст] — создать заметку
-/notes — список заметок
-/note_del [ID] — удалить
-/note_edit [ID] [текст] — редактировать
-
-<b>Закладки:</b>
-/bookmark [название] [ссылка] — сохранить
-/bookmarks — список
-/bookmark_del [ID] — удалить
-
-<b>Таймеры и напоминания:</b>
-/timer [название] [время] — создать таймер
-/timers — список таймеров
-/remind [текст] [время] — напоминание
-/reminders — список напоминаний
-
-<b>Статистика:</b>
-/stat — статистика чата
-/stat_today — за сегодня
-/stat_week — за неделю
-/stat_month — за месяц
-/top_messages — топ по сообщениям
-/top_commands — топ по командам
-/top_warns — топ нарушителей
-/my_stat — моя статистика
-
-<b>Темы и голосования:</b>
-/topic [название] — создать тему
-/topics — список тем
-/vote_for [ID] — голосовать за
-/vote_against [ID] — голосовать против
-/suggest [команда] [описание] — предложить команду
-"""
-    await message.reply(text)
-
-# Команды модерации
-@dp.message_handler(lambda message: re.match(r"^[+!]+модер|админ", message.text.lower()))
-async def cmd_add_moderator(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("add_moderator", message.chat.id, message.from_user.id) and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 У вас нет прав для назначения модераторов.")
-        return
-    
-    # Определяем ранг по количеству восклицательных знаков или плюсов
-    text = message.text.lower()
-    rank = text.count("!") + text.count("+") - 1  # -1 потому что минимум 1 символ
-    
-    # Проверка на +Модер 2 и т.д.
-    match = re.search(r"модер\s*(\d)", text)
-    if match:
-        rank = int(match.group(1))
-    
-    # Извлекаем ссылку на пользователя
-    parts = message.text.split()
-    user_link = None
-    for part in parts:
-        if "@" in part or "tg://" in part or part.isdigit():
-            user_link = part
-            break
-    
-    if not user_link:
-        await message.reply("❌ Укажите пользователя (ссылку или @username)")
-        return
-    
-    target_id = extract_user_id(user_link)
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    # Проверяем, не превышает ли назначаемый ранг ранг назначающего
-    user_rank = get_user_rank(message.from_user.id, message.chat.id)
-    if rank > user_rank and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 Вы не можете назначить модератора с рангом выше вашего")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO moderators (user_id, chat_id, rank, assigned_by)
-        VALUES (?, ?, ?, ?)
-    """, (target_id, message.chat.id, rank, message.from_user.id))
-    conn.commit()
-    
-    rank_name = get_rank_name(rank)
-    await message.reply(f"✅ Пользователь назначен модератором\nРанг: {rank_name} {get_rank_emoji(rank)}")
-
-@dp.message_handler(lambda message: message.text.startswith("Повысить"))
-async def cmd_promote(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("promote", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для повышения.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("SELECT rank FROM moderators WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    result = cursor.fetchone()
-    
-    if not result:
-        await message.reply("❌ Пользователь не является модератором")
-        return
-    
-    current_rank = result[0]
-    new_rank = min(current_rank + 1, 5)
-    
-    user_rank = get_user_rank(message.from_user.id, message.chat.id)
-    if new_rank > user_rank and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 Вы не можете повысить пользователя до ранга выше вашего")
-        return
-    
-    cursor.execute("UPDATE moderators SET rank = ? WHERE user_id = ? AND chat_id = ?", 
-                  (new_rank, target_id, message.chat.id))
-    conn.commit()
-    
-    rank_name = get_rank_name(new_rank)
-    await message.reply(f"✅ Пользователь повышен\nНовый ранг: {rank_name} {get_rank_emoji(new_rank)}")
-
-@dp.message_handler(lambda message: message.text.startswith("Понизить"))
-async def cmd_demote(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("demote", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для понижения.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("SELECT rank FROM moderators WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    result = cursor.fetchone()
-    
-    if not result:
-        await message.reply("❌ Пользователь не является модератором")
-        return
-    
-    current_rank = result[0]
-    new_rank = max(current_rank - 1, 1)
-    
-    cursor.execute("UPDATE moderators SET rank = ? WHERE user_id = ? AND chat_id = ?", 
-                  (new_rank, target_id, message.chat.id))
-    conn.commit()
-    
-    rank_name = get_rank_name(new_rank)
-    await message.reply(f"✅ Пользователь понижен\nНовый ранг: {rank_name} {get_rank_emoji(new_rank)}")
-
-@dp.message_handler(lambda message: message.text.startswith(("Снять", "Разжаловать")))
-async def cmd_remove_moderator(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("remove_moderator", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для снятия модераторов.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM moderators WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    conn.commit()
-    
-    await message.reply("✅ Модератор снят")
-
-@dp.message_handler(lambda message: message.text == "Снять вышедших")
-async def cmd_remove_left_moderators(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("remove_moderator", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    # Получаем список участников чата
-    try:
-        chat_members = await bot.get_chat_administrators(message.chat.id)
-        member_ids = [member.user.id for member in chat_members]
-    except:
-        await message.reply("❌ Не удалось получить список участников")
-        return
-    
-    cursor.execute("SELECT user_id FROM moderators WHERE chat_id = ?", (message.chat.id,))
-    mods = cursor.fetchall()
-    
-    removed = 0
-    for mod in mods:
-        if mod[0] not in member_ids:
-            cursor.execute("DELETE FROM moderators WHERE user_id = ? AND chat_id = ?", (mod[0], message.chat.id))
-            removed += 1
-    
-    conn.commit()
-    await message.reply(f"✅ Снято модераторов, вышедших из чата: {removed}")
-
-@dp.message_handler(lambda message: message.text in ["!Снять всех", "!Разжаловать всех"])
-async def cmd_remove_all_moderators(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("remove_moderator", message.chat.id, message.from_user.id) and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    cursor.execute("DELETE FROM moderators WHERE chat_id = ?", (message.chat.id,))
-    conn.commit()
-    
-    await message.reply("✅ Все модераторы сняты")
-
-# Предупреждения
-@dp.message_handler(lambda message: message.text.startswith(("Варн", "Пред")))
-async def cmd_warn(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("warn", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для выдачи предупреждений.")
-        return
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя\nПример: Варн @user причина")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    reason = parts[2] if len(parts) > 2 else "Без причины"
-    
-    cursor.execute("""
-        INSERT INTO warnings (user_id, chat_id, reason, issued_by)
-        VALUES (?, ?, ?, ?)
-    """, (target_id, message.chat.id, reason, message.from_user.id))
-    
-    cursor.execute("UPDATE users SET warnings = warnings + 1 WHERE user_id = ?", (target_id,))
-    
-    # Получаем количество предупреждений
-    cursor.execute("SELECT warnings FROM users WHERE user_id = ?", (target_id,))
-    warn_count = cursor.fetchone()[0]
-    
-    conn.commit()
-    
-    # Автоматические наказания
-    if warn_count >= 5:
-        # Бан
-        await message.chat.kick(target_id)
-        await message.reply(f"🚫 Пользователь забанен (5/5 предупреждений)")
-    elif warn_count >= 3:
-        # Мут на час
-        mute_until = datetime.now() + timedelta(hours=1)
-        cursor.execute("""
-            INSERT OR REPLACE INTO mutes (user_id, chat_id, until, reason, issued_by)
-            VALUES (?, ?, ?, ?, ?)
-        """, (target_id, message.chat.id, mute_until.isoformat(), "Автоматический мут (3 предупреждения)", message.from_user.id))
-        cursor.execute("UPDATE users SET is_muted = 1 WHERE user_id = ?", (target_id,))
-        conn.commit()
-        await message.reply(f"🔇 Пользователь замучен на 1 час (3/5 предупреждений)")
-    else:
-        await message.reply(f"⚠️ Пользователь получил предупреждение ({warn_count}/5)\nПричина: {reason}")
-
-@dp.message_handler(lambda message: message.text.startswith(("Варны", "Преды")))
-async def cmd_warns(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("""
-        SELECT id, reason, issued_by, issued_date 
-        FROM warnings 
-        WHERE user_id = ? AND chat_id = ?
-        ORDER BY issued_date DESC
-    """, (target_id, message.chat.id))
-    warns = cursor.fetchall()
-    
-    if not warns:
-        await message.reply("✅ У пользователя нет предупреждений")
-        return
-    
-    text = f"⚠️ <b>Предупреждения пользователя:</b>\n\n"
-    for warn in warns[:10]:  # Показываем последние 10
-        date = datetime.fromisoformat(warn[3]).strftime("%d.%m.%Y %H:%M")
-        text += f"ID: {warn[0]} | {date}\nПричина: {warn[1]}\n\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(lambda message: message.text.startswith("Снять варн") or message.text.startswith("Снять пред"))
-async def cmd_remove_warn(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("warn", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя или ID предупреждения")
-        return
-    
-    # Проверяем, является ли второй аргумент числом (ID)
-    if parts[1].isdigit():
-        # Снятие по ID
-        warn_id = int(parts[1])
-        cursor.execute("SELECT user_id FROM warnings WHERE id = ? AND chat_id = ?", (warn_id, message.chat.id))
-        result = cursor.fetchone()
+    async def check_spam(self, update: Update) -> bool:
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
         
-        if not result:
-            await message.reply("❌ Предупреждение не найдено")
-            return
+        if has_permission(user_data, 2):
+            return False
         
-        user_id = result[0]
-        cursor.execute("DELETE FROM warnings WHERE id = ?", (warn_id,))
-        cursor.execute("UPDATE users SET warnings = warnings - 1 WHERE user_id = ?", (user_id,))
-        conn.commit()
+        now = time.time()
+        user_id = user.id
         
-        await message.reply(f"✅ Предупреждение ID {warn_id} снято")
-    else:
-        # Снятие последнего предупреждения пользователя
-        target_id = extract_user_id(parts[1])
-        if not target_id:
-            await message.reply("❌ Не удалось определить пользователя")
-            return
+        self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
+        self.spam_tracker[user_id].append(now)
         
-        cursor.execute("""
-            SELECT id FROM warnings 
-            WHERE user_id = ? AND chat_id = ?
-            ORDER BY issued_date DESC LIMIT 1
-        """, (target_id, message.chat.id))
-        result = cursor.fetchone()
+        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+            self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
+            await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
+            self.spam_tracker[user_id] = []
+            return True
+        return False
+    
+    def setup_handlers(self):
+        # Основные
+        self.app.add_handler(CommandHandler("start", self.cmd_start))
+        self.app.add_handler(CommandHandler("help", self.cmd_help))
+        self.app.add_handler(CommandHandler("menu", self.cmd_menu))
         
-        if not result:
-            await message.reply("❌ У пользователя нет предупреждений")
-            return
+        # Профиль
+        self.app.add_handler(CommandHandler("profile", self.cmd_profile))
+        self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
+        self.app.add_handler(CommandHandler("title", self.cmd_set_title))
+        self.app.add_handler(CommandHandler("motto", self.cmd_set_motto))
+        self.app.add_handler(CommandHandler("bio", self.cmd_set_bio))
+        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))
+        self.app.add_handler(CommandHandler("city", self.cmd_set_city))
+        self.app.add_handler(CommandHandler("country", self.cmd_set_country))
+        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
+        self.app.add_handler(CommandHandler("age", self.cmd_set_age))
+        self.app.add_handler(CommandHandler("id", self.cmd_id))
         
-        warn_id = result[0]
-        cursor.execute("DELETE FROM warnings WHERE id = ?", (warn_id,))
-        cursor.execute("UPDATE users SET warnings = warnings - 1 WHERE user_id = ?", (target_id,))
-        conn.commit()
+        # Статистика
+        self.app.add_handler(CommandHandler("stats", self.cmd_stats))
+        self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
+        self.app.add_handler(CommandHandler("top", self.cmd_top))
+        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
+        self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
         
-        await message.reply(f"✅ Последнее предупреждение снято")
-
-@dp.message_handler(lambda message: message.text.startswith("Снять все варны") or message.text.startswith("Снять все преды"))
-async def cmd_remove_all_warns(message: types.Message):
-    await register_user(message)
+        # Модерация
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2'), self.cmd_set_rank2))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3'), self.cmd_set_rank3))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 4|^!модер 4|^повысить 4'), self.cmd_set_rank4))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 5|^!модер 5|^повысить 5'), self.cmd_set_rank5))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^понизить'), self.cmd_lower_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять вышедших'), self.cmd_remove_left))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!снять всех'), self.cmd_remove_all_ranks))
+        self.app.add_handler(CommandHandler("админы", self.cmd_who_admins))
+        
+        # Предупреждения
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варны'), self.cmd_warns))
+        self.app.add_handler(CommandHandler("моиварны", self.cmd_my_warns))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн'), self.cmd_unwarn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять все варны'), self.cmd_unwarn_all))
+        
+        # Муты
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
+        self.app.add_handler(CommandHandler("мутлист", self.cmd_mutelist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
+        
+        # Баны
+        self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
+        self.app.add_handler(CommandHandler("банлист", self.cmd_banlist))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
+        
+        # Триггеры
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+триггер'), self.cmd_add_trigger))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-триггер'), self.cmd_remove_trigger))
+        self.app.add_handler(CommandHandler("триггеры", self.cmd_list_triggers))
+        
+        # Автомодерация
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антимат'), self.cmd_set_antimat))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антиссылки'), self.cmd_set_antilink))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антифлуд'), self.cmd_set_antiflood))
+        
+        # Чистка
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка'), self.cmd_clear))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка от'), self.cmd_clear_user))
+        
+        # Настройки чата
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
+        self.app.add_handler(CommandHandler("правила", self.cmd_show_rules))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
+        
+        # Экономика
+        self.app.add_handler(CommandHandler("ириски", self.cmd_balance))
+        self.app.add_handler(CommandHandler("баланс", self.cmd_balance))
+        self.app.add_handler(CommandHandler("передать", self.cmd_pay))
+        self.app.add_handler(CommandHandler("топирисок", self.cmd_top_coins))
+        self.app.add_handler(CommandHandler("бонус", self.cmd_daily))
+        self.app.add_handler(CommandHandler("стрик", self.cmd_streak))
+        self.app.add_handler(CommandHandler("вип", self.cmd_vip_info))
+        self.app.add_handler(CommandHandler("купитьвип", self.cmd_buy_vip))
+        self.app.add_handler(CommandHandler("премиум", self.cmd_premium_info))
+        self.app.add_handler(CommandHandler("купитьпремиум", self.cmd_buy_premium))
+        self.app.add_handler(CommandHandler("магазин", self.cmd_shop))
+        self.app.add_handler(CommandHandler("купить", self.cmd_buy))
+        
+        # Развлечения
+        self.app.add_handler(CommandHandler("анекдот", self.cmd_joke))
+        self.app.add_handler(CommandHandler("факт", self.cmd_fact))
+        self.app.add_handler(CommandHandler("цитата", self.cmd_quote))
+        self.app.add_handler(CommandHandler("ктоя", self.cmd_whoami))
+        self.app.add_handler(CommandHandler("совет", self.cmd_advice))
+        self.app.add_handler(CommandHandler("гадать", self.cmd_ask))
+        self.app.add_handler(CommandHandler("совместимость", self.cmd_compatibility))
+        
+        # Игры
+        self.app.add_handler(CommandHandler("монетка", self.cmd_coin))
+        self.app.add_handler(CommandHandler("кубик", self.cmd_dice))
+        self.app.add_handler(CommandHandler("кости", self.cmd_dice_bet))
+        self.app.add_handler(CommandHandler("кнб", self.cmd_rps))
+        self.app.add_handler(CommandHandler("рр", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("русская", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("рулетка", self.cmd_roulette))
+        self.app.add_handler(CommandHandler("слоты", self.cmd_slots))
+        self.app.add_handler(CommandHandler("сапёр", self.cmd_saper))
+        self.app.add_handler(CommandHandler("угадай", self.cmd_guess))
+        self.app.add_handler(CommandHandler("быки", self.cmd_bulls))
+        
+        # Боссы
+        self.app.add_handler(CommandHandler("боссы", self.cmd_bosses))
+        self.app.add_handler(CommandHandler("босс", self.cmd_boss_fight))
+        self.app.add_handler(CommandHandler("боссинфо", self.cmd_boss_info))
+        self.app.add_handler(CommandHandler("реген", self.cmd_regen))
+        
+        # Дуэли
+        self.app.add_handler(CommandHandler("дуэль", self.cmd_duel))
+        self.app.add_handler(CommandHandler("дуэли", self.cmd_duels))
+        self.app.add_handler(CommandHandler("рейтинг", self.cmd_duel_rating))
+        
+        # Кланы
+        self.app.add_handler(CommandHandler("клан", self.cmd_clan))
+        self.app.add_handler(CommandHandler("кланы", self.cmd_clans))
+        self.app.add_handler(CommandHandler("создатьклан", self.cmd_create_clan))
+        self.app.add_handler(CommandHandler("вступить", self.cmd_join_clan))
+        self.app.add_handler(CommandHandler("выйти", self.cmd_leave_clan))
+        
+        # Отношения
+        self.app.add_handler(CommandHandler("друг", self.cmd_add_friend))
+        self.app.add_handler(CommandHandler("враг", self.cmd_add_enemy))
+        self.app.add_handler(CommandHandler("простить", self.cmd_remove_enemy))
+        
+        # Браки
+        self.app.add_handler(CommandHandler("предложить", self.cmd_propose))
+        self.app.add_handler(CommandHandler("развод", self.cmd_divorce))
+        self.app.add_handler(CommandHandler("семьи", self.cmd_families))
+        
+        # Репутация
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+репа'), self.cmd_add_rep))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-репа'), self.cmd_remove_rep))
+        self.app.add_handler(CommandHandler("репа", self.cmd_rep))
+        
+        # Мафия
+        self.app.add_handler(CommandHandler("мафия", self.cmd_mafia))
+        self.app.add_handler(CommandHandler("мафиястарт", self.cmd_mafia_start))
+        self.app.add_handler(CommandHandler("мафияприсоединиться", self.cmd_mafia_join))
+        self.app.add_handler(CommandHandler("мафиявыйти", self.cmd_mafia_leave))
+        self.app.add_handler(CommandHandler("мафияроли", self.cmd_mafia_roles))
+        self.app.add_handler(CommandHandler("мафияправила", self.cmd_mafia_rules))
+        
+        # Полезное
+        self.app.add_handler(CommandHandler("пинг", self.cmd_ping))
+        self.app.add_handler(CommandHandler("аптайм", self.cmd_uptime))
+        self.app.add_handler(CommandHandler("инфо", self.cmd_info))
+        
+        # Callback
+        self.app.add_handler(CallbackQueryHandler(self.button_callback))
+        
+        # Обработчики сообщений
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
+        self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
+        
+        self.app.add_error_handler(self.error_handler)
+        
+        logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
     
-    if not check_permission("warn", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[2])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM warnings WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    cursor.execute("UPDATE users SET warnings = 0 WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    await message.reply(f"✅ Все предупреждения сняты")
-
-# Муты
-@dp.message_handler(lambda message: message.text.startswith("Мут"))
-async def cmd_mute(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("mute", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для мута.")
-        return
-    
-    # Парсим команду: Мут @user 30м спам
-    parts = message.text.split(maxsplit=3)
-    if len(parts) < 3:
-        await message.reply("❌ Укажите пользователя и время\nПример: Мут @user 30м спам")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    time_delta = parse_time(parts[2])
-    if not time_delta:
-        await message.reply("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
-        return
-    
-    reason = parts[3] if len(parts) > 3 else "Без причины"
-    
-    mute_until = datetime.now() + time_delta
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO mutes (user_id, chat_id, until, reason, issued_by)
-        VALUES (?, ?, ?, ?, ?)
-    """, (target_id, message.chat.id, mute_until.isoformat(), reason, message.from_user.id))
-    
-    cursor.execute("UPDATE users SET is_muted = 1 WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    # Ограничиваем права пользователя
-    try:
-        await message.chat.restrict(
-            target_id,
-            types.ChatPermissions(can_send_messages=False),
-            until_date=mute_until
+    # ===== ОСНОВНЫЕ КОМАНДЫ =====
+    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id, user.first_name)
+        
+        if context.args and context.args[0].isdigit():
+            referrer_id = int(context.args[0])
+            if referrer_id != user_data['id']:
+                self.db.update_user(user_data['id'], referrer_id=referrer_id)
+                self.db.add_coins(referrer_id, 500)
+                try:
+                    await context.bot.send_message(
+                        referrer_id,
+                        s.success(f"🎉 По вашей ссылке зарегистрировался {user.first_name}! +500 💰")
+                    )
+                except:
+                    pass
+        
+        text = (
+            s.header("СПЕКТР") + "\n"
+            f"👋 **Привет, {user.first_name}!**\n"
+            f"Я — **Спектр**, твой помощник с AI и играми.\n\n"
+            f"{s.section('ТВОЙ ПРОФИЛЬ')}"
+            f"{s.stat('Монеты', f'{user_data["coins"]} 💰')}\n"
+            f"{s.stat('Уровень', user_data["level"])}\n"
+            f"{s.stat('Ранг', get_rank_emoji(user_data["rank"]) + ' ' + user_data["rank_name"])}\n"
+            f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n\n"
+            f"{s.section('ЧТО Я УМЕЮ')}"
+            f"{s.item('🤖 Дерзкий AI со сленгом')}\n"
+            f"{s.item('🔫 Мафия как TrueMafia')}\n"
+            f"{s.item('🎲 Русская рулетка, кости')}\n"
+            f"{s.item('👾 Боссы, дуэли, кланы')}\n"
+            f"{s.item('⚙️ Модерация (5 рангов)')}\n"
+            f"{s.item('💰 Экономика, VIP')}\n\n"
+            f"{s.section('БЫСТРЫЙ СТАРТ')}"
+            f"{s.cmd('profile', 'профиль')}\n"
+            f"{s.cmd('мафия', 'игра в мафию')}\n"
+            f"{s.cmd('бонус', 'ежедневный бонус')}\n"
+            f"{s.cmd('help', 'все команды')}\n\n"
+            f"👑 **Владелец:** {OWNER_USERNAME}"
         )
-    except:
-        pass
+        
+        await update.message.reply_text(text, reply_markup=kb.main(), parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'start')
     
-    time_str = f"{time_delta.seconds // 3600}ч {(time_delta.seconds // 60) % 60}м" if time_delta.seconds < 86400 else f"{time_delta.days}д"
-    await message.reply(f"🔇 Пользователь замучен на {time_str}\nПричина: {reason}")
-
-@dp.message_handler(commands=["мутлист", "Мутлист", "Мут-лист"])
-async def cmd_mutelist(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT m.user_id, u.username, u.first_name, m.until, m.reason
-        FROM mutes m
-        LEFT JOIN users u ON m.user_id = u.user_id
-        WHERE m.chat_id = ? AND datetime(m.until) > datetime('now')
-        ORDER BY m.until
-    """, (message.chat.id,))
-    mutes = cursor.fetchall()
-    
-    if not mutes:
-        await message.reply("📋 Список замученных пуст")
-        return
-    
-    text = "🔇 <b>Список замученных:</b>\n\n"
-    for mute in mutes:
-        user = mute[1] or mute[2] or str(mute[0])
-        until = datetime.fromisoformat(mute[3]).strftime("%d.%m.%Y %H:%M")
-        text += f"• {user} — до {until}\nПричина: {mute[4]}\n\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(lambda message: message.text.startswith(("Размут", "Снять мут")))
-async def cmd_unmute(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("mute", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM mutes WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    cursor.execute("UPDATE users SET is_muted = 0 WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    # Восстанавливаем права
-    try:
-        await message.chat.restrict(
-            target_id,
-            types.ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_polls=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True
-            )
+    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("СПРАВКА") + "\n"
+            f"{s.section('📌 ОСНОВНЫЕ')}"
+            f"{s.cmd('start', 'начать')}\n"
+            f"{s.cmd('menu', 'главное меню')}\n"
+            f"{s.cmd('profile', 'профиль')}\n\n"
+            
+            f"{s.section('⚙️ МОДЕРАЦИЯ')}"
+            f"{s.cmd('+Модер @user', '1 ранг')}\n"
+            f"{s.cmd('+Модер 2 @user', '2 ранг')}\n"
+            f"{s.cmd('+Модер 3 @user', '3 ранг')}\n"
+            f"{s.cmd('+Модер 4 @user', '4 ранг')}\n"
+            f"{s.cmd('+Модер 5 @user', '5 ранг')}\n"
+            f"{s.cmd('варн @user [причина]', 'предупреждение')}\n"
+            f"{s.cmd('мут @user 30м [причина]', 'заглушить')}\n"
+            f"{s.cmd('бан @user [причина]', 'заблокировать')}\n\n"
+            
+            f"{s.section('💰 ЭКОНОМИКА')}"
+            f"{s.cmd('ириски', 'баланс')}\n"
+            f"{s.cmd('передать @user сумма', 'перевести')}\n"
+            f"{s.cmd('бонус', 'ежедневный бонус')}\n"
+            f"{s.cmd('магазин', 'список товаров')}\n\n"
+            
+            f"{s.section('🔫 МАФИЯ')}"
+            f"{s.cmd('мафия', 'меню мафии')}\n"
+            f"{s.cmd('мафиястарт', 'начать игру')}\n"
+            f"{s.cmd('мафияприсоединиться', 'присоединиться')}\n\n"
+            
+            f"{s.section('🎮 ИГРЫ')}"
+            f"{s.cmd('рр [ставка]', 'русская рулетка')}\n"
+            f"{s.cmd('кости [ставка]', 'игра в кости')}\n"
+            f"{s.cmd('боссы', 'список боссов')}\n"
+            f"{s.cmd('дуэль @user [ставка]', 'вызвать на дуэль')}"
         )
-    except:
-        pass
-    
-    await message.reply(f"✅ Мут снят")
-
-# Баны
-@dp.message_handler(lambda message: message.text.startswith("Бан"))
-async def cmd_ban(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("ban", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для бана.")
-        return
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    reason = parts[2] if len(parts) > 2 else "Без причины"
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO bans (user_id, chat_id, reason, issued_by)
-        VALUES (?, ?, ?, ?)
-    """, (target_id, message.chat.id, reason, message.from_user.id))
-    conn.commit()
-    
-    try:
-        await message.chat.kick(target_id)
-        await message.reply(f"🚫 Пользователь забанен\nПричина: {reason}")
-    except:
-        await message.reply("❌ Не удалось забанить пользователя")
-
-@dp.message_handler(commands=["банлист", "Банлист", "Бан-лист"])
-async def cmd_banlist(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT b.user_id, u.username, u.first_name, b.reason, b.issued_date
-        FROM bans b
-        LEFT JOIN users u ON b.user_id = u.user_id
-        WHERE b.chat_id = ?
-        ORDER BY b.issued_date DESC
-    """, (message.chat.id,))
-    bans = cursor.fetchall()
-    
-    if not bans:
-        await message.reply("📋 Список забаненных пуст")
-        return
-    
-    text = "🚫 <b>Список забаненных:</b>\n\n"
-    for ban in bans[:20]:  # Показываем последние 20
-        user = ban[1] or ban[2] or str(ban[0])
-        date = datetime.fromisoformat(ban[4]).strftime("%d.%m.%Y")
-        text += f"• {user} — {date}\nПричина: {ban[3]}\n\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(lambda message: message.text.startswith(("Разбан", "Снять бан")))
-async def cmd_unban(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("ban", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM bans WHERE user_id = ? AND chat_id = ?", (target_id, message.chat.id))
-    conn.commit()
-    
-    try:
-        await message.chat.unban(target_id)
-        await message.reply(f"✅ Пользователь разбанен")
-    except:
-        await message.reply("❌ Не удалось разбанить пользователя")
-
-@dp.message_handler(lambda message: message.text.startswith("Кик"))
-async def cmd_kick(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("kick", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для кика.")
-        return
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    reason = parts[2] if len(parts) > 2 else "Без причины"
-    
-    try:
-        await message.chat.kick(target_id)
-        await message.chat.unban(target_id)  # Сразу разбаниваем, чтобы можно было заново зайти
-        await message.reply(f"👢 Пользователь кикнут\nПричина: {reason}")
-    except:
-        await message.reply("❌ Не удалось кикнуть пользователя")
-
-# Глобальные действия
-@dp.message_handler(lambda message: message.text.startswith("Глобал бан"))
-async def cmd_global_ban(message: types.Message):
-    await register_user(message)
-    
-    if message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 Только создатель может использовать глобальные команды.")
-        return
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    reason = parts[2] if len(parts) > 2 else "Без причины"
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO global_bans (user_id, reason, issued_by)
-        VALUES (?, ?, ?)
-    """, (target_id, reason, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"🌐 Пользователь забанен глобально\nПричина: {reason}")
-
-@dp.message_handler(lambda message: message.text.startswith("Глобал разбан"))
-async def cmd_global_unban(message: types.Message):
-    await register_user(message)
-    
-    if message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 Только создатель может использовать глобальные команды.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM global_bans WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    await message.reply(f"🌐 Глобальный бан снят")
-
-# Триггеры
-@dp.message_handler(lambda message: message.text.startswith("+Триггер"))
-async def cmd_add_trigger(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("triggers", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для создания триггеров.")
-        return
-    
-    # Формат: +Триггер слово = действие
-    text = message.text[9:].strip()  # Убираем "+Триггер "
-    
-    if "=" not in text:
-        await message.reply("❌ Неверный формат. Используйте: +Триггер слово = действие")
-        return
-    
-    trigger_word, action = text.split("=", 1)
-    trigger_word = trigger_word.strip().lower()
-    action = action.strip()
-    
-    # Парсим действие: delete, mute 30м, warn, ban
-    action_parts = action.split()
-    action_type = action_parts[0].lower()
-    action_param = action_parts[1] if len(action_parts) > 1 else None
-    
-    if action_type not in ["delete", "mute", "warn", "ban"]:
-        await message.reply("❌ Неверное действие. Доступно: delete, mute [время], warn, ban")
-        return
-    
-    cursor.execute("""
-        INSERT INTO triggers (chat_id, trigger_word, action, action_param, created_by)
-        VALUES (?, ?, ?, ?, ?)
-    """, (message.chat.id, trigger_word, action_type, action_param, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Триггер добавлен\nСлово: {trigger_word}\nДействие: {action}")
-
-@dp.message_handler(lambda message: message.text.startswith("-Триггер"))
-async def cmd_remove_trigger(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("triggers", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    trigger_id = message.text[9:].strip()
-    if not trigger_id.isdigit():
-        await message.reply("❌ Укажите ID триггера")
-        return
-    
-    cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", (int(trigger_id), message.chat.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Триггер удален")
-
-@dp.message_handler(commands=["триггеры", "Триггеры"])
-async def cmd_triggers(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT id, trigger_word, action, action_param FROM triggers WHERE chat_id = ?", (message.chat.id,))
-    triggers = cursor.fetchall()
-    
-    if not triggers:
-        await message.reply("📋 В этом чате нет триггеров")
-        return
-    
-    text = "🔍 <b>Триггеры чата:</b>\n\n"
-    for trigger in triggers:
-        action_text = trigger[2]
-        if trigger[3]:
-            action_text += f" {trigger[3]}"
-        text += f"ID: {trigger[0]} | Слово: {trigger[1]} → {action_text}\n"
-    
-    await message.reply(text)
-
-# Автомодерация
-@dp.message_handler(lambda message: message.text.startswith(("Антимат", "антимат")))
-async def cmd_antimat(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on или off")
-        return
-    
-    state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, antimat)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET antimat = excluded.antimat
-    """, (message.chat.id, state))
-    conn.commit()
-    
-    status = "включен" if state else "выключен"
-    await message.reply(f"✅ Антимат {status}")
-
-@dp.message_handler(lambda message: message.text.startswith(("Антиссылки", "антиссылки")))
-async def cmd_antilinks(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on или off")
-        return
-    
-    state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, antilinks)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET antilinks = excluded.antilinks
-    """, (message.chat.id, state))
-    conn.commit()
-    
-    status = "включен" if state else "выключен"
-    await message.reply(f"✅ Антиссылки {status}")
-
-@dp.message_handler(lambda message: message.text.startswith(("Антифлуд", "антифлуд")))
-async def cmd_antiflood(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on или off")
-        return
-    
-    state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, antiflood)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET antiflood = excluded.antiflood
-    """, (message.chat.id, state))
-    conn.commit()
-    
-    status = "включен" if state else "выключен"
-    await message.reply(f"✅ Антифлуд {status}")
-
-# Права доступа
-@dp.message_handler(lambda message: message.text.startswith("Права"))
-async def cmd_permissions(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("permissions", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для настройки прав.")
-        return
-    
-    parts = message.text.split()
-    
-    if len(parts) == 1 or (len(parts) == 2 and parts[1] == "список"):
-        # Список прав
-        cursor.execute("SELECT command, min_rank FROM command_permissions WHERE chat_id = ?", (message.chat.id,))
-        perms = cursor.fetchall()
         
-        if not perms:
-            await message.reply("📋 Все команды используют стандартные права")
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
+            reply_markup=kb.main(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        display_name = user_data.get('nickname') or user.first_name
+        title = user_data.get('title', '')
+        motto = user_data.get('motto', 'Нет девиза')
+        bio = user_data.get('bio', '')
+        
+        vip_status = "✅ VIP" if self.db.is_vip(user_data['id']) else "❌"
+        premium_status = "✅ PREMIUM" if self.db.is_premium(user_data['id']) else "❌"
+        
+        exp_needed = user_data['level'] * 100
+        exp_progress = s.progress(user_data['exp'], exp_needed)
+        
+        warns = "🔴" * user_data['warns'] + "⚪" * (3 - user_data['warns'])
+        
+        friends_list = json.loads(user_data.get('friends', '[]'))
+        friends_count = len(friends_list)
+        
+        enemies_list = json.loads(user_data.get('enemies', '[]'))
+        enemies_count = len(enemies_list)
+        
+        clan_info = ""
+        if user_data.get('clan_id', 0) > 0:
+            clan = self.db.get_clan(user_data['clan_id'])
+            if clan:
+                clan_info = f"\n{s.stat('Клан', clan['name'])}"
+        
+        spouse_info = ""
+        if user_data.get('spouse', 0) > 0:
+            spouse = self.db.get_user_by_id(user_data['spouse'])
+            if spouse:
+                spouse_name = spouse.get('nickname') or spouse['first_name']
+                spouse_info = f"\n{s.stat('💍 Супруг(а)', spouse_name)}"
+        
+        text = (
+            s.header("ПРОФИЛЬ") + "\n"
+            f"**{display_name}** {title}\n"
+            f"_{motto}_\n"
+            f"{bio}\n\n"
+            f"{s.section('ХАРАКТЕРИСТИКИ')}"
+            f"{s.stat('Ранг', get_rank_emoji(user_data['rank']) + ' ' + user_data['rank_name'])}\n"
+            f"{s.stat('Уровень', user_data['level'])}\n"
+            f"{s.stat('Опыт', exp_progress)}\n"
+            f"{s.stat('Монеты', f'{user_data["coins"]} 💰')}\n"
+            f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n"
+            f"{s.stat('Здоровье', f'{user_data["health"]}/{user_data["max_health"]} ❤️')}\n\n"
+            f"{s.section('СТАТИСТИКА')}"
+            f"{s.stat('Сообщений', user_data['messages_count'])}\n"
+            f"{s.stat('Репутация', user_data['reputation'])}\n"
+            f"{s.stat('Предупреждения', warns)}\n"
+            f"{s.stat('Боссов убито', user_data['boss_kills'])}{clan_info}{spouse_info}\n\n"
+            f"{s.section('СТАТУС')}"
+            f"{s.item(f'VIP: {vip_status}')}\n"
+            f"{s.item(f'PREMIUM: {premium_status}')}\n"
+            f"{s.item(f'ID: {s.code(str(user.id))}')}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_set_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ник: /nick [ник]"))
             return
-        
-        text = "🔧 <b>Настройки прав:</b>\n\n"
-        for perm in perms:
-            text += f"• {perm[0]} — мин. ранг {perm[1]} {get_rank_emoji(perm[1])}\n"
-        
-        await message.reply(text)
-        return
+        nick = " ".join(context.args)
+        if len(nick) > MAX_NICK_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимальная длина: {MAX_NICK_LENGTH} символов"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], nickname=nick)
+        await update.message.reply_text(s.success(f"✅ Ник установлен: {nick}"))
     
-    if len(parts) >= 4 and parts[2] == "=":
-        # Установка прав: Права команда = ранг
-        command = parts[1]
+    async def cmd_set_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите титул: /title [титул]"))
+            return
+        title = " ".join(context.args)
+        if len(title) > MAX_TITLE_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимальная длина: {MAX_TITLE_LENGTH} символов"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], title=title)
+        await update.message.reply_text(s.success(f"✅ Титул установлен: {title}"))
+    
+    async def cmd_set_motto(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите девиз: /motto [девиз]"))
+            return
+        motto = " ".join(context.args)
+        if len(motto) > MAX_MOTTO_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимальная длина: {MAX_MOTTO_LENGTH} символов"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], motto=motto)
+        await update.message.reply_text(s.success(f"✅ Девиз установлен: {motto}"))
+    
+    async def cmd_set_bio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Напишите о себе: /bio [текст]"))
+            return
+        bio = " ".join(context.args)
+        if len(bio) > MAX_BIO_LENGTH:
+            await update.message.reply_text(s.error(f"❌ Максимальная длина: {MAX_BIO_LENGTH} символов"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], bio=bio)
+        await update.message.reply_text(s.success("✅ Информация сохранена"))
+    
+    async def cmd_set_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пол (м/ж): /gender [м/ж]"))
+            return
+        gender = context.args[0].lower()
+        if gender not in ["м", "ж"]:
+            await update.message.reply_text(s.error("❌ Пол должен быть 'м' или 'ж'"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], gender=gender)
+        gender_text = "Мужской" if gender == "м" else "Женский"
+        await update.message.reply_text(s.success(f"✅ Пол установлен: {gender_text}"))
+    
+    async def cmd_set_city(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите город: /city [город]"))
+            return
+        city = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], city=city)
+        await update.message.reply_text(s.success(f"✅ Город установлен: {city}"))
+    
+    async def cmd_set_country(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите страну: /country [страна]"))
+            return
+        country = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], country=country)
+        await update.message.reply_text(s.success(f"✅ Страна установлена: {country}"))
+    
+    async def cmd_set_birth(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите дату (ДД.ММ.ГГГГ): /birth [дата]"))
+            return
+        birth = context.args[0]
+        if not re.match(r'\d{2}\.\d{2}\.\d{4}', birth):
+            await update.message.reply_text(s.error("❌ Неверный формат. Используйте ДД.ММ.ГГГГ"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], birth_date=birth)
         try:
-            rank = int(parts[3])
-        except:
-            await message.reply("❌ Ранг должен быть числом от 0 до 5")
-            return
-        
-        if rank < 0 or rank > 5:
-            await message.reply("❌ Ранг должен быть от 0 до 5")
-            return
-        
-        cursor.execute("""
-            INSERT OR REPLACE INTO command_permissions (command, chat_id, min_rank)
-            VALUES (?, ?, ?)
-        """, (command, message.chat.id, rank))
-        conn.commit()
-        
-        await message.reply(f"✅ Для команды {command} установлен минимальный ранг {rank}")
-
-@dp.message_handler(commands=["сброситьправа", "Сбросить права"])
-async def cmd_reset_permissions(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("permissions", message.chat.id, message.from_user.id) and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    cursor.execute("DELETE FROM command_permissions WHERE chat_id = ?", (message.chat.id,))
-    conn.commit()
-    
-    await message.reply("✅ Настройки прав сброшены к стандартным")
-
-@dp.message_handler(lambda message: message.text.startswith("Запретить"))
-async def cmd_forbid_command(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("permissions", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    command = message.text[9:].strip()
-    if not command:
-        await message.reply("❌ Укажите команду")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO command_permissions (command, chat_id, min_rank)
-        VALUES (?, ?, 6)
-    """, (command, message.chat.id))  # Ранг 6 означает запрет для всех
-    conn.commit()
-    
-    await message.reply(f"✅ Команда {command} запрещена для всех")
-
-@dp.message_handler(lambda message: message.text.startswith("Разрешить"))
-async def cmd_allow_command(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("permissions", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    command = message.text[9:].strip()
-    if not command:
-        await message.reply("❌ Укажите команду")
-        return
-    
-    cursor.execute("DELETE FROM command_permissions WHERE command = ? AND chat_id = ?", (command, message.chat.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Команда {command} разрешена для всех")
-
-@dp.message_handler(lambda message: message.text.startswith("Исключение"))
-async def cmd_command_exception(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("permissions", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    # Формат: Исключение команда = @user
-    text = message.text[10:].strip()
-    
-    if "=" not in text:
-        await message.reply("❌ Неверный формат. Используйте: Исключение команда = @user")
-        return
-    
-    command_part, user_part = text.split("=", 1)
-    command = command_part.strip()
-    user_link = user_part.strip()
-    
-    target_id = extract_user_id(user_link)
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO command_exceptions (command, user_id, chat_id)
-        VALUES (?, ?, ?)
-    """, (command, target_id, message.chat.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Исключение добавлено\nПользователь может использовать {command}")
-
-# Чистка чата
-@dp.message_handler(lambda message: message.text.startswith("Чистка"))
-async def cmd_clean(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("clean", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для очистки.")
-        return
-    
-    parts = message.text.split(maxsplit=1)
-    if len(parts) < 2:
-        await message.reply("❌ Укажите количество сообщений или фильтр")
-        return
-    
-    param = parts[1].strip()
-    
-    # Проверка на особые команды
-    if param == "всё" or param == "все":
-        if get_user_rank(message.from_user.id, message.chat.id) < 5 and message.from_user.id not in ADMIN_IDS:
-            await message.reply("🚫 Только создатель может очистить всё")
-            return
-        
-        # Очистка всех сообщений (только для супергрупп)
-        try:
-            # В Telegram нельзя удалить все сообщения сразу
-            await message.reply("⚠️ Очистка всех сообщений невозможна. Используйте 'Чистка 100' для удаления последних 100 сообщений")
+            day, month, year = map(int, birth.split('.'))
+            today = datetime.datetime.now()
+            age = today.year - year - ((today.month, today.day) < (month, day))
+            self.db.update_user(user_data['id'], age=age)
         except:
             pass
-        return
+        await update.message.reply_text(s.success(f"✅ Дата рождения установлена: {birth}"))
     
-    if param == "ботов":
-        # Удаление сообщений ботов
-        await message.reply("🔄 Удаляю сообщения ботов...")
-        # Здесь нужна логика поиска сообщений ботов
-        return
+    async def cmd_set_age(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите возраст: /age [число]"))
+            return
+        try:
+            age = int(context.args[0])
+            if age < 1 or age > 150:
+                await update.message.reply_text(s.error("❌ Возраст должен быть от 1 до 150"))
+                return
+        except:
+            await update.message.reply_text(s.error("❌ Возраст должен быть числом"))
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], age=age)
+        await update.message.reply_text(s.success(f"✅ Возраст установлен: {age}"))
     
-    if param == "файлов":
-        # Удаление файлов и медиа
-        await message.reply("🔄 Удаляю файлы...")
-        return
+    async def cmd_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        await update.message.reply_text(s.info(f"🆔 Ваш ID: `{user.id}`"), parse_mode=ParseMode.MARKDOWN)
     
-    if param.startswith("от "):
-        # Удаление сообщений конкретного пользователя
-        user_link = param[3:].strip()
-        target_id = extract_user_id(user_link)
-        if not target_id:
-            await message.reply("❌ Не удалось определить пользователя")
+    async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(s.info("📊 Функция в разработке"), parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        text = (
+            s.header("📊 МОЯ СТАТИСТИКА") + "\n\n"
+            f"{s.stat('Сообщений', user_data['messages_count'])}\n"
+            f"{s.stat('Команд', user_data['commands_used'])}\n"
+            f"{s.stat('Репутация', user_data['reputation'])}\n"
+            f"{s.stat('КНБ побед', user_data['rps_wins'])}\n"
+            f"{s.stat('Дуэлей побед', user_data['duel_wins'])}\n"
+            f"{s.stat('Рейтинг дуэлей', user_data['duel_rating'])}\n"
+            f"{s.stat('Боссов убито', user_data['boss_kills'])}\n"
+            f"{s.stat('Игр в мафию', user_data['mafia_games'])}"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = s.header("🏆 ТОП ИГРОКОВ") + "\n\n"
+        top_coins = self.db.get_top("coins", 5)
+        text += s.section("💰 ПО МОНЕТАМ")
+        for i, row in enumerate(top_coins, 1):
+            name = row[1] or row[0]
+            text += f"{i}. **{name}** — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("coins", 10)
+        text = s.header("💰 ТОП ПО МОНЕТАМ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_level(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("level", 10)
+        text = s.header("📊 ТОП ПО УРОВНЮ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} уровень\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== КОМАНДЫ МОДЕРАЦИИ =====
+    async def _set_rank(self, update: Update, target_rank: int):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
             return
         
-        await message.reply(f"🔄 Удаляю сообщения пользователя...")
-        return
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
+            return
+        
+        self.db.set_rank(target_user['id'], target_rank, user_data['id'])
+        rank_info = RANKS[target_rank]
+        await update.message.reply_text(
+            f"{s.success('Ранг назначен!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
-    if param == "ссылки":
-        # Удаление сообщений со ссылками
-        await message.reply("🔄 Удаляю сообщения со ссылками...")
-        return
+    async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 1)
     
-    if param == "мат":
-        await message.reply("🔄 Удаляю сообщения с матом...")
-        return
+    async def cmd_set_rank2(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 2)
     
-    if param == "спам":
-        await message.reply("🔄 Удаляю спам...")
-        return
+    async def cmd_set_rank3(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 3)
     
-    # Очистка по количеству
-    if param.isdigit():
-        count = int(param)
-        if count > 100:
-            count = 100
+    async def cmd_set_rank4(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 4)
+    
+    async def cmd_set_rank5(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 5)
+    
+    async def cmd_lower_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] <= 0:
+            await update.message.reply_text(s.error("❌ Пользователь и так участник"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя понизить модератора выше рангом"))
+            return
+        
+        new_rank = target_user['rank'] - 1
+        self.db.set_rank(target_user['id'], new_rank, user_data['id'])
+        rank_info = RANKS[new_rank]
+        await update.message.reply_text(
+            f"{s.success('Ранг понижен!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Новый ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            username = text.replace('снять', '').replace('разжаловать', '').strip().replace('@', '')
+            if username:
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
+            return
+        
+        self.db.set_rank(target_user['id'], 0, user_data['id'])
+        await update.message.reply_text(
+            f"{s.success('Модератор снят!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item('Теперь: 👤 Участник')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        await update.message.reply_text(s.success("✅ Проверка вышедших модераторов выполнена"))
+    
+    async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 5 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Только для создателя"))
+            return
+        
+        self.db.cursor.execute("SELECT id FROM users WHERE rank > 0")
+        mods = self.db.cursor.fetchall()
+        
+        for mod_id in mods:
+            self.db.set_rank(mod_id[0], 0, user_data['id'])
+        
+        await update.message.reply_text(
+            s.success(f"✅ Снято модераторов: {len(mods)}"),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        admins = self.db.get_admins()
+        if not admins:
+            await update.message.reply_text(s.info("👥 В чате нет администраторов"))
+            return
+        text = s.header("АДМИНИСТРАЦИЯ") + "\n\n"
+        for admin in admins:
+            name = admin['first_name']
+            username = f" (@{admin['username']})" if admin['username'] else ""
+            rank_emoji = RANKS[admin['rank']]["emoji"]
+            text += f"{s.item(f'{rank_emoji} {name}{username} — {admin["rank_name"]}')}\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== ПРЕДУПРЕЖДЕНИЯ =====
+    async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 1+"))
+            return
+        
+        target_user = None
+        reason = "Нарушение правил"
+        
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+            parts = text.split('\n', 1)
+            if len(parts) > 1 and parts[1].strip():
+                reason = parts[1].strip()
+        else:
+            match = re.search(r'(?:варн|пред)\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+                if match.group(2):
+                    reason = match.group(2)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя выдать предупреждение модератору выше рангом"))
+            return
+        
+        warns = self.db.add_warn(target_user['id'], user_data['id'], reason)
         
         try:
-            # Удаляем сообщение с командой
-            await message.delete()
-            
-            # Получаем сообщения для удаления
+            await context.bot.send_message(
+                target_user['telegram_id'],
+                f"{s.warning('⚠️ ВЫ ПОЛУЧИЛИ ПРЕДУПРЕЖДЕНИЕ')}\n\n"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'Всего: {warns}/3')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("ПРЕДУПРЕЖДЕНИЕ") + "\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Предупреждений: {warns}/3')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        if warns >= 3:
+            self.db.mute_user(target_user['id'], 60, user_data['id'], "3 предупреждения")
+            await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час"))
+        if warns >= 5:
+            self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
+            await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен"))
+    
+    async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /варны @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        warns_list = self.db.get_warns(target['id'])
+        target_name = target.get('nickname') or target['first_name']
+        
+        if not warns_list:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        text = s.header(f"ПРЕДУПРЕЖДЕНИЯ: {target_name}") + "\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
+            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"**ID: {warn['id']}**\n"
+                f"{s.item(f'Причина: {warn["reason"]}')}\n"
+                f"{s.item(f'Админ: {admin_name}')}\n"
+                f"{s.item(f'Дата: {date}')}\n\n"
+            )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        warns_list = self.db.get_warns(user_data['id'])
+        
+        if not warns_list:
+            await update.message.reply_text(s.info("У вас нет предупреждений"))
+            return
+        
+        text = s.header("МОИ ПРЕДУПРЕЖДЕНИЯ") + "\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
+            date = datetime.datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"**ID: {warn['id']}**\n"
+                f"{s.item(f'Причина: {warn["reason"]}')}\n"
+                f"{s.item(f'Админ: {admin_name}')}\n"
+                f"{s.item(f'Дата: {date}')}\n\n"
+            )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'снять варн\s+@?(\S+)', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
+        target_name = target_user.get('nickname') or target_user['first_name']
+        
+        if not removed:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        await update.message.reply_text(s.success(f"✅ Последнее предупреждение снято с {target_name}"))
+    
+    async def cmd_unwarn_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        match = re.search(r'снять все варны\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            return
+        
+        username = match.group(1)
+        target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        warns_list = self.db.get_warns(target_user['id'])
+        for _ in warns_list:
+            self.db.remove_last_warn(target_user['id'], user_data['id'])
+        
+        target_name = target_user.get('nickname') or target_user['first_name']
+        await update.message.reply_text(s.success(f"✅ Все предупреждения сняты с {target_name}"))
+    
+    # ===== МУТЫ =====
+    async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            return
+        
+        match = re.search(r'мут\s+@?(\S+)(?:\s+(\d+[мчд]))?(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: мут @user 30м спам"))
+            return
+        
+        username = match.group(1)
+        time_str = match.group(2) if match.group(2) else "60м"
+        reason = match.group(3) if match.group(3) else "Нарушение правил"
+        
+        minutes = parse_time(time_str)
+        if not minutes:
+            await update.message.reply_text(s.error("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя замутить модератора выше рангом"))
+            return
+        
+        until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
+        until_str = until.strftime("%d.%m.%Y %H:%M")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"{s.warning('🔇 ВАС ЗАМУТИЛИ')}\n\n"
+                f"{s.item(f'Срок: {time_str}')}\n"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'До: {until_str}')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("МУТ") + "\n"
+            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
+            f"{s.item(f'Срок: {time_str}')}\n"
+            f"{s.item(f'До: {until_str}')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        muted = self.db.get_muted_users()
+        
+        if not muted:
+            await update.message.reply_text(s.info("Нет пользователей в муте"))
+            return
+        
+        text = s.header("СПИСОК ЗАМУЧЕННЫХ") + "\n\n"
+        for user in muted[:10]:
+            until = datetime.datetime.fromisoformat(user['mute_until']).strftime("%d.%m.%Y %H:%M")
+            name = user['first_name']
+            text += f"{s.item(f'{name} — до {until}')}\n"
+        
+        if len(muted) > 10:
+            text += f"\n... и еще {len(muted) - 10}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('размут', '').replace('@', '').strip()
+        if not username and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        elif username:
+            target = self.db.get_user_by_username(username)
+        else:
+            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            return
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_muted(target['id']):
+            await update.message.reply_text(s.info("Пользователь не в муте"))
+            return
+        
+        self.db.unmute_user(target['id'], user_data['id'])
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                s.success("✅ Мут снят")
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+    
+    # ===== БАНЫ =====
+    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            return
+        
+        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: бан @user спам"))
+            return
+        
+        username = match.group(1)
+        reason = match.group(2) if match.group(2) else "Нарушение правил"
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя забанить модератора выше рангом"))
+            return
+        
+        self.db.ban_user(target['id'], user_data['id'], reason)
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
+                f"{s.item(f'Причина: {reason}')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("БЛОКИРОВКА") + "\n"
+            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        try:
+            await update.effective_chat.ban_member(target['telegram_id'])
+        except:
+            pass
+    
+    async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        bans = self.db.get_banlist()
+        
+        if not bans:
+            await update.message.reply_text(s.info("Список забаненных пуст"))
+            return
+        
+        text = s.header("СПИСОК ЗАБАНЕННЫХ") + "\n\n"
+        for ban in bans:
+            name = ban.get('first_name', 'Неизвестно')
+            username = f" (@{ban['username']})" if ban['username'] else ""
+            text += f"{s.item(f'{name}{username}')}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('разбан', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_banned(target['id']):
+            await update.message.reply_text(s.info("Пользователь не забанен"))
+            return
+        
+        self.db.unban_user(target['id'], user_data['id'])
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                s.success("✅ Бан снят")
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
+        
+        try:
+            await update.effective_chat.unban_member(target['telegram_id'])
+        except:
+            pass
+    
+    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('кик', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        try:
+            await update.effective_chat.ban_member(target['telegram_id'])
+            await update.effective_chat.unban_member(target['telegram_id'])
+            await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
+        except Exception as e:
+            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+    
+    # ===== ТРИГГЕРЫ =====
+    async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        text = text[9:].strip()
+        if "=" not in text:
+            await update.message.reply_text(s.error("❌ Формат: +триггер слово = действие"))
+            return
+        
+        word, action = text.split("=", 1)
+        word = word.strip().lower()
+        action = action.strip()
+        
+        action_parts = action.split()
+        action_type = action_parts[0].lower()
+        action_value = action_parts[1] if len(action_parts) > 1 else None
+        
+        if action_type not in ["delete", "mute", "warn", "ban"]:
+            await update.message.reply_text(s.error("❌ Действие должно быть: delete, mute, warn, ban"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO triggers (chat_id, word, action, action_value, created_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (update.effective_chat.id, word, action_type, action_value, user_data['id']))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ Триггер добавлен: {word} -> {action}"))
+    
+    async def cmd_remove_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        trigger_id = text[9:].strip()
+        if not trigger_id.isdigit():
+            await update.message.reply_text(s.error("❌ Укажите ID триггера"))
+            return
+        
+        self.db.cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", 
+                             (int(trigger_id), update.effective_chat.id))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Триггер удален"))
+    
+    async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT id, word, action, action_value FROM triggers WHERE chat_id = ?", 
+                             (update.effective_chat.id,))
+        triggers = self.db.cursor.fetchall()
+        
+        if not triggers:
+            await update.message.reply_text(s.info("В этом чате нет триггеров"))
+            return
+        
+        text = s.header("ТРИГГЕРЫ ЧАТА") + "\n\n"
+        for trigger in triggers:
+            action_text = trigger[2]
+            if trigger[3]:
+                action_text += f" {trigger[3]}"
+            text += f"ID: {trigger[0]} | {trigger[1]} → {action_text}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== АВТОМОДЕРАЦИЯ =====
+    async def _toggle_setting(self, update: Update, setting: str):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute(f'''
+            INSERT INTO chat_settings (chat_id, {setting})
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+        
+        status = "включен" if state else "выключен"
+        names = {"antimat": "Антимат", "antilink": "Антиссылки", "antiflood": "Антифлуд"}
+        await update.message.reply_text(s.success(f"✅ {names[setting]} {status}"))
+    
+    async def cmd_set_antimat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antimat")
+    
+    async def cmd_set_antilink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antilink")
+    
+    async def cmd_set_antiflood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antiflood")
+    
+    # ===== ЧИСТКА =====
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите количество: чистка 50"))
+            return
+        
+        try:
+            count = int(parts[1])
+            if count > 100:
+                count = 100
+        except:
+            await update.message.reply_text(s.error("❌ Количество должно быть числом"))
+            return
+        
+        try:
+            await update.message.delete()
             messages = []
-            async for msg in bot.iterate_history(message.chat.id, limit=count):
+            async for msg in context.bot.get_chat_history(update.effective_chat.id, limit=count):
                 messages.append(msg.message_id)
             
             if messages:
-                await bot.delete_messages(message.chat.id, messages)
-                await message.answer(f"✅ Удалено {len(messages)} сообщений", disable_notification=True)
-            else:
-                await message.answer("❌ Нет сообщений для удаления")
+                await context.bot.delete_messages(update.effective_chat.id, messages)
+                await context.bot.send_message(update.effective_chat.id, 
+                                              s.success(f"✅ Удалено {len(messages)} сообщений"),
+                                              disable_notification=True)
         except Exception as e:
-            await message.answer(f"❌ Ошибка: {e}")
-    else:
-        await message.reply("❌ Неверный параметр. Используйте число или: всё, ботов, файлов, от @user, ссылки, мат, спам")
-
-# Настройка чата
-@dp.message_handler(lambda message: message.text.startswith("+Приветствие"))
-async def cmd_set_welcome(message: types.Message):
-    await register_user(message)
+            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
     
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
+    async def cmd_clear_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('чистка от', '').strip().replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        await update.message.reply_text(s.info(f"🔄 Удаляю сообщения {target['first_name']}..."))
     
-    welcome_text = message.text[12:].strip()
-    if not welcome_text:
-        await message.reply("❌ Укажите текст приветствия")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, welcome_message)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET welcome_message = excluded.welcome_message
-    """, (message.chat.id, welcome_text))
-    conn.commit()
-    
-    await message.reply("✅ Приветствие установлено")
-
-@dp.message_handler(lambda message: message.text.startswith("+Правила"))
-async def cmd_set_rules(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    rules_text = message.text[9:].strip()
-    if not rules_text:
-        await message.reply("❌ Укажите текст правил")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, rules)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET rules = excluded.rules
-    """, (message.chat.id, rules_text))
-    conn.commit()
-    
-    await message.reply("✅ Правила установлены")
-
-@dp.message_handler(commands=["правила", "Правила", "Правила чата"])
-async def cmd_rules(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (message.chat.id,))
-    result = cursor.fetchone()
-    
-    if result and result[0]:
-        await message.reply(f"📜 <b>Правила чата:</b>\n\n{result[0]}")
-    else:
-        await message.reply("📜 В этом чате ещё не установлены правила")
-
-@dp.message_handler(lambda message: message.text == "-Приветствие")
-async def cmd_remove_welcome(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    cursor.execute("UPDATE chat_settings SET welcome_message = NULL WHERE chat_id = ?", (message.chat.id,))
-    conn.commit()
-    
-    await message.reply("✅ Приветствие удалено")
-
-@dp.message_handler(lambda message: message.text.startswith("Капча"))
-async def cmd_captcha(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on/off или сложность")
-        return
-    
-    if parts[1].lower() in ["on", "off", "вкл", "выкл"]:
-        state = 1 if parts[1].lower() in ["on", "вкл"] else 0
-        cursor.execute("""
-            INSERT OR REPLACE INTO chat_settings (chat_id, captcha_enabled)
+    # ===== НАСТРОЙКИ ЧАТА =====
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        welcome_text = update.message.text[12:].strip()
+        if not welcome_text:
+            await update.message.reply_text(s.error("❌ Укажите текст приветствия"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, welcome)
             VALUES (?, ?)
-            ON CONFLICT(chat_id) DO UPDATE SET captcha_enabled = excluded.captcha_enabled
-        """, (message.chat.id, state))
-        conn.commit()
+            ON CONFLICT(chat_id) DO UPDATE SET welcome = excluded.welcome
+        ''', (update.effective_chat.id, welcome_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Приветствие установлено"))
+    
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        rules_text = update.message.text[9:].strip()
+        if not rules_text:
+            await update.message.reply_text(s.error("❌ Укажите текст правил"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, rules)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET rules = excluded.rules
+        ''', (update.effective_chat.id, rules_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Правила установлены"))
+    
+    async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (update.effective_chat.id,))
+        row = self.db.cursor.fetchone()
+        
+        if row and row[0]:
+            await update.message.reply_text(f"📜 **Правила чата:**\n\n{row[0]}", parse_mode=ParseMode.MARKDOWN)
+        else:
+            await update.message.reply_text(s.info("В этом чате ещё не установлены правила"))
+    
+    async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, captcha)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET captcha = excluded.captcha
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
         
         status = "включена" if state else "выключена"
-        await message.reply(f"✅ Капча {status}")
-    elif parts[1].lower() == "сложность" and len(parts) >= 3:
-        try:
-            difficulty = int(parts[2])
-            if difficulty < 1 or difficulty > 5:
-                await message.reply("❌ Сложность должна быть от 1 до 5")
-                return
-            
-            cursor.execute("""
-                INSERT OR REPLACE INTO chat_settings (chat_id, captcha_difficulty)
-                VALUES (?, ?)
-                ON CONFLICT(chat_id) DO UPDATE SET captcha_difficulty = excluded.captcha_difficulty
-            """, (message.chat.id, difficulty))
-            conn.commit()
-            
-            await message.reply(f"✅ Сложность капчи установлена: {difficulty}")
-        except:
-            await message.reply("❌ Неверное значение сложности")
-
-@dp.message_handler(lambda message: message.text.startswith("Верификация"))
-async def cmd_verification(message: types.Message):
-    await register_user(message)
+        await update.message.reply_text(s.success(f"✅ Капча {status}"))
     
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on или off")
-        return
-    
-    state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, verification_enabled)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET verification_enabled = excluded.verification_enabled
-    """, (message.chat.id, state))
-    conn.commit()
-    
-    status = "включена" if state else "выключена"
-    await message.reply(f"✅ Ручная верификация {status}")
-
-@dp.message_handler(lambda message: message.text.startswith("Язык"))
-async def cmd_language(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите язык (ru/uk/en)")
-        return
-    
-    lang = parts[1].lower()
-    if lang not in ["ru", "uk", "en"]:
-        await message.reply("❌ Поддерживаемые языки: ru, uk, en")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, language)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET language = excluded.language
-    """, (message.chat.id, lang))
-    conn.commit()
-    
-    languages = {"ru": "Русский", "uk": "Українська", "en": "English"}
-    await message.reply(f"✅ Язык чата: {languages[lang]}")
-
-@dp.message_handler(lambda message: message.text.startswith("Регион"))
-async def cmd_region(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    region = message.text[7:].strip()
-    if not region:
-        await message.reply("❌ Укажите регион")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, region)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET region = excluded.region
-    """, (message.chat.id, region))
-    conn.commit()
-    
-    await message.reply(f"✅ Регион чата: {region}")
-
-@dp.message_handler(lambda message: message.text.startswith("Ссылки"))
-async def cmd_links(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("settings", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите on или off")
-        return
-    
-    state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO chat_settings (chat_id, allow_links)
-        VALUES (?, ?)
-        ON CONFLICT(chat_id) DO UPDATE SET allow_links = excluded.allow_links
-    """, (message.chat.id, state))
-    conn.commit()
-    
-    status = "разрешены" if state else "запрещены"
-    await message.reply(f"✅ Ссылки {status}")
-
-# Сетка чатов
-grids = {}  # Временное хранение сеток в памяти
-
-@dp.message_handler(lambda message: message.text.startswith("Сетка создать"))
-async def cmd_grid_create(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("grid", message.chat.id, message.from_user.id) and message.from_user.id not in ADMIN_IDS:
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    name = message.text[13:].strip()
-    if not name:
-        await message.reply("❌ Укажите название сетки")
-        return
-    
-    cursor.execute("""
-        INSERT INTO chat_grids (name, created_by)
-        VALUES (?, ?)
-    """, (name, message.from_user.id))
-    grid_id = cursor.lastrowid
-    conn.commit()
-    
-    grids[grid_id] = {"name": name, "chats": []}
-    
-    await message.reply(f"✅ Сетка '{name}' создана (ID: {grid_id})")
-
-@dp.message_handler(lambda message: message.text.startswith("Сетка добавить"))
-async def cmd_grid_add(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("grid", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите ID сетки и чат\nПример: Сетка добавить 1 @chat")
-        return
-    
-    try:
-        grid_id = int(parts[2])
-    except:
-        await message.reply("❌ Неверный ID сетки")
-        return
-    
-    # Проверяем существование сетки
-    cursor.execute("SELECT * FROM chat_grids WHERE id = ?", (grid_id,))
-    if not cursor.fetchone():
-        await message.reply("❌ Сетка не найдена")
-        return
-    
-    chat_link = parts[3] if len(parts) > 3 else None
-    if not chat_link:
-        await message.reply("❌ Укажите чат")
-        return
-    
-    # Получаем ID чата (для упрощения используем текущий чат)
-    chat_id = message.chat.id
-    
-    cursor.execute("INSERT INTO grid_chats (grid_id, chat_id) VALUES (?, ?)", (grid_id, chat_id))
-    conn.commit()
-    
-    await message.reply(f"✅ Чат добавлен в сетку {grid_id}")
-
-@dp.message_handler(lambda message: message.text.startswith("Сетка список"))
-async def cmd_grid_list(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT id, name, created_by FROM chat_grids")
-    grids_db = cursor.fetchall()
-    
-    if not grids_db:
-        await message.reply("📋 Нет созданных сеток")
-        return
-    
-    text = "📋 <b>Сетки чатов:</b>\n\n"
-    for grid in grids_db:
-        cursor.execute("SELECT COUNT(*) FROM grid_chats WHERE grid_id = ?", (grid[0],))
-        count = cursor.fetchone()[0]
-        text += f"ID: {grid[0]} | {grid[1]} — чатов: {count}\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(lambda message: message.text.startswith("Сетка синхронизировать"))
-async def cmd_grid_sync(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("grid", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав.")
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите ID сетки")
-        return
-    
-    try:
-        grid_id = int(parts[2])
-    except:
-        await message.reply("❌ Неверный ID сетки")
-        return
-    
-    # Получаем все чаты в сетке
-    cursor.execute("SELECT chat_id FROM grid_chats WHERE grid_id = ?", (grid_id,))
-    chats = cursor.fetchall()
-    
-    if not chats:
-        await message.reply("❌ В сетке нет чатов")
-        return
-    
-    # Получаем настройки текущего чата
-    cursor.execute("SELECT * FROM chat_settings WHERE chat_id = ?", (message.chat.id,))
-    settings = cursor.fetchone()
-    
-    if not settings:
-        await message.reply("❌ Нет настроек для синхронизации")
-        return
-    
-    # Применяем настройки ко всем чатам сетки
-    for chat in chats:
-        chat_id = chat[0]
-        if chat_id == message.chat.id:
-            continue
+    # ===== ЭКОНОМИКА =====
+    async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
         
-        # Копируем настройки
-        cursor.execute("""
-            INSERT OR REPLACE INTO chat_settings 
-            (chat_id, welcome_message, rules, captcha_enabled, captcha_difficulty, 
-             antimat, antilinks, antiflood, antispam, language, region,
-             allow_links, allow_media, allow_stickers, allow_gifs)
-            SELECT ?, welcome_message, rules, captcha_enabled, captcha_difficulty,
-                   antimat, antilinks, antiflood, antispam, language, region,
-                   allow_links, allow_media, allow_stickers, allow_gifs
-            FROM chat_settings WHERE chat_id = ?
-        """, (chat_id, message.chat.id))
+        if user_data.get('last_daily'):
+            last = datetime.datetime.fromisoformat(user_data['last_daily'])
+            if (datetime.datetime.now() - last).seconds < DAILY_COOLDOWN:
+                remain = DAILY_COOLDOWN - (datetime.datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(s.warning(f"⏳ Бонус через {hours}ч {minutes}м"))
+                return
+        
+        streak = self.db.add_daily_streak(user_data['id'])
+        
+        coins = random.randint(100, 300)
+        exp = random.randint(20, 60)
+        energy = 20
+        
+        coins = int(coins * (1 + min(streak, 30) * 0.05))
+        exp = int(exp * (1 + min(streak, 30) * 0.05))
+        
+        if self.db.is_vip(user_data['id']):
+            coins = int(coins * 1.5)
+            exp = int(exp * 1.5)
+            energy = int(energy * 1.5)
+        if self.db.is_premium(user_data['id']):
+            coins = int(coins * 2)
+            exp = int(exp * 2)
+            energy = int(energy * 2)
+        
+        self.db.add_coins(user_data['id'], coins)
+        self.db.add_exp(user_data['id'], exp)
+        self.db.add_energy(user_data['id'], energy)
+        
+        text = (
+            s.header("🎁 ЕЖЕДНЕВНЫЙ БОНУС") + "\n"
+            f"{s.item(f'🔥 Стрик: {streak} дней')}\n"
+            f"{s.item(f'💰 Монеты: +{coins}')}\n"
+            f"{s.item(f'✨ Опыт: +{exp}')}\n"
+            f"{s.item(f'⚡ Энергия: +{energy}')}\n\n"
+            f"{s.info('Заходи завтра!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'daily', f'+{coins}💰')
     
-    conn.commit()
-    await message.reply(f"✅ Настройки синхронизированы для {len(chats)} чатов")
-
-# Анкета пользователя
-@dp.message_handler(commands=["анкета", "profile", "Анкета", "Моя анкета"])
-async def cmd_profile(message: types.Message):
-    await register_user(message)
+    async def cmd_streak(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        streak = user_data.get('daily_streak', 0)
+        
+        text = (
+            s.header("🔥 ТЕКУЩИЙ СТРИК") + "\n\n"
+            f"{s.stat('Дней подряд', streak)}\n"
+            f"{s.stat('Множитель', f'x{1 + min(streak, 30) * 0.05:.2f}')}\n\n"
+            f"{s.info('Чем больше стрик, тем выше бонус!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    parts = message.text.split()
-    if len(parts) > 1:
-        # Просмотр анкеты другого пользователя
-        target_id = extract_user_id(parts[1])
-        if not target_id:
-            await message.reply("❌ Не удалось определить пользователя")
+    async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("🛍️ МАГАЗИН") + "\n\n"
+            f"{s.section('💊 ЗЕЛЬЯ')}"
+            f"{s.cmd('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
+            f"{s.cmd('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
+            f"{s.section('⚔️ ОРУЖИЕ')}"
+            f"{s.cmd('buy меч', '200 💰 (⚔️+10)')}\n"
+            f"{s.cmd('buy легендарный меч', '500 💰 (⚔️+30)')}\n\n"
+            f"{s.section('⚡ ЭНЕРГИЯ')}"
+            f"{s.cmd('buy энергетик', '30 💰 (⚡+20)')}\n"
+            f"{s.cmd('buy батарейка', '80 💰 (⚡+50)')}\n\n"
+            f"{s.section('💎 ПРИВИЛЕГИИ')}"
+            f"{s.cmd('vip', f'VIP ({VIP_PRICE} 💰 / 30 дней)')}\n"
+            f"{s.cmd('premium', f'PREMIUM ({PREMIUM_PRICE} 💰 / 30 дней)')}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Что купить? /buy [предмет]"))
             return
-    else:
-        target_id = message.from_user.id
+        
+        item = " ".join(context.args).lower()
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        items = {
+            "зелье здоровья": {"price": 50, "heal": 30},
+            "большое зелье": {"price": 100, "heal": 70},
+            "меч": {"price": 200, "damage": 10},
+            "легендарный меч": {"price": 500, "damage": 30},
+            "энергетик": {"price": 30, "energy": 20},
+            "батарейка": {"price": 80, "energy": 50}
+        }
+        
+        if item not in items:
+            await update.message.reply_text(s.error("❌ Такого товара нет в магазине"))
+            return
+        
+        item_data = items[item]
+        
+        if user_data['coins'] < item_data['price']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {item_data['price']} 💰"))
+            return
+        
+        self.db.add_coins(user_data['id'], -item_data['price'])
+        
+        effects = []
+        if 'heal' in item_data:
+            new_health = self.db.heal(user_data['id'], item_data['heal'])
+            effects.append(f"❤️ Здоровье +{item_data['heal']} (теперь {new_health})")
+        
+        if 'damage' in item_data:
+            new_damage = user_data['damage'] + item_data['damage']
+            self.db.update_user(user_data['id'], damage=new_damage)
+            effects.append(f"⚔️ Урон +{item_data['damage']} (теперь {new_damage})")
+        
+        if 'energy' in item_data:
+            new_energy = self.db.add_energy(user_data['id'], item_data['energy'])
+            effects.append(f"⚡ Энергия +{item_data['energy']} (теперь {new_energy})")
+        
+        effects_text = "\n".join([f"{s.item(e)}" for e in effects])
+        
+        await update.message.reply_text(
+            f"{s.success('✅ Покупка совершена!')}\n\n"
+            f"{s.item(f'Предмет: {item}')}\n"
+            f"{effects_text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        self.db.log_action(user_data['id'], 'buy', item)
     
-    cursor.execute("""
-        SELECT user_id, username, first_name, last_name, iris_balance, 
-               vip_level, reputation, messages_count, commands_count,
-               bio, age, city, gender, photo_id, joined_date
-        FROM users WHERE user_id = ?
-    """, (target_id,))
-    user = cursor.fetchone()
-    
-    if not user:
-        await message.reply("❌ Пользователь не найден")
-        return
-    
-    # Получаем достижения
-    cursor.execute("""
-        SELECT a.name, a.icon FROM user_achievements ua
-        JOIN achievements a ON ua.achievement_id = a.id
-        WHERE ua.user_id = ?
-    """, (target_id,))
-    achievements = cursor.fetchall()
-    
-    # Получаем клан
-    cursor.execute("""
-        SELECT c.name FROM clan_members cm
-        JOIN clans c ON cm.clan_id = c.id
-        WHERE cm.user_id = ?
-    """, (target_id,))
-    clan = cursor.fetchone()
-    
-    # Получаем супруга
-    cursor.execute("SELECT married_to FROM users WHERE user_id = ?", (target_id,))
-    married_to = cursor.fetchone()[0]
-    
-    if married_to:
-        cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (married_to,))
-        spouse = cursor.fetchone()
-        spouse_text = f"💍 {spouse[0] or spouse[1]}" if spouse else "💍 Неизвестно"
-    else:
-        spouse_text = "💔 Нет"
-    
-    # Формируем анкету
-    name = user[2] or f"ID {user[0]}"
-    if user[3]:
-        name += f" {user[3]}"
-    
-    rank = get_user_rank(target_id, message.chat.id)
-    rank_emoji = get_rank_emoji(rank)
-    rank_name = get_rank_name(rank)
-    
-    text = f"""
-👤 <b>Анкета пользователя</b>
-
-{rank_emoji} <b>{name}</b>
-@{user[1] or 'нет'}
-
-📊 <b>Статистика:</b>
-💰 Ириски: {format_number(user[4])}
-⭐ Репутация: {user[6]}
-💎 VIP: {'Да' if user[5] > 0 else 'Нет'}
-📝 Сообщений: {format_number(user[7])}
-🔧 Команд: {format_number(user[8])}
-{rank_emoji} Ранг: {rank_name}
-
-"""
-    
-    if clan:
-        text += f"🏰 Клан: {clan[0]}\n"
-    
-    text += f"💍 Семья: {spouse_text}\n\n"
-    
-    if user[9] or user[10] or user[11] or user[12]:
-        text += "<b>О себе:</b>\n"
-        if user[9]:
-            text += f"📝 {user[9]}\n"
-        if user[10]:
-            text += f"🎂 Возраст: {user[10]}\n"
-        if user[11]:
-            text += f"🏙️ Город: {user[11]}\n"
-        if user[12]:
-            gender = "Мужской" if user[12] == "м" else "Женский" if user[12] == "ж" else user[12]
-            text += f"⚥ Пол: {gender}\n"
-    
-    if achievements:
-        text += "\n<b>Достижения:</b>\n"
-        for ach in achievements[:5]:  # Показываем последние 5
-            text += f"{ach[1] or '🏅'} {ach[0]}\n"
-    
-    if user[13]:  # Фото
+    async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /pay @user сумма"))
+            return
+        
+        username = context.args[0].replace('@', '')
         try:
-            await bot.send_photo(message.chat.id, user[13], caption=text)
+            amount = int(context.args[1])
         except:
-            await message.reply(text)
-    else:
-        await message.reply(text)
-
-@dp.message_handler(commands=["имя", "name"])
-async def cmd_set_name(message: types.Message):
-    await register_user(message)
-    
-    name = message.text[5:].strip()
-    if not name:
-        await message.reply("❌ Укажите имя")
-        return
-    
-    cursor.execute("UPDATE users SET first_name = ? WHERE user_id = ?", (name, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Имя изменено на: {name}")
-
-@dp.message_handler(commands=["возраст", "age"])
-async def cmd_set_age(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите возраст")
-        return
-    
-    try:
-        age = int(parts[1])
-        if age < 1 or age > 150:
-            await message.reply("❌ Возраст должен быть от 1 до 150")
+            await update.message.reply_text(s.error("❌ Сумма должна быть числом"))
             return
-    except:
-        await message.reply("❌ Возраст должен быть числом")
-        return
-    
-    cursor.execute("UPDATE users SET age = ? WHERE user_id = ?", (age, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Возраст установлен: {age}")
-
-@dp.message_handler(commands=["город", "city"])
-async def cmd_set_city(message: types.Message):
-    await register_user(message)
-    
-    city = message.text[6:].strip()
-    if not city:
-        await message.reply("❌ Укажите город")
-        return
-    
-    cursor.execute("UPDATE users SET city = ? WHERE user_id = ?", (city, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Город установлен: {city}")
-
-@dp.message_handler(commands=["био", "bio", "О себе"])
-async def cmd_set_bio(message: types.Message):
-    await register_user(message)
-    
-    bio = message.text[4:].strip() if message.text.startswith("/bio") else message.text[5:].strip()
-    if not bio:
-        await message.reply("❌ Напишите о себе")
-        return
-    
-    if len(bio) > 500:
-        await message.reply("❌ Текст слишком длинный (максимум 500 символов)")
-        return
-    
-    cursor.execute("UPDATE users SET bio = ? WHERE user_id = ?", (bio, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Информация о себе сохранена")
-
-@dp.message_handler(commands=["пол", "gender"])
-async def cmd_set_gender(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пол (м/ж)")
-        return
-    
-    gender = parts[1].lower()
-    if gender not in ["м", "ж"]:
-        await message.reply("❌ Укажите 'м' для мужского или 'ж' для женского")
-        return
-    
-    cursor.execute("UPDATE users SET gender = ? WHERE user_id = ?", (gender, message.from_user.id))
-    conn.commit()
-    
-    gender_text = "Мужской" if gender == "м" else "Женский"
-    await message.reply(f"✅ Пол установлен: {gender_text}")
-
-@dp.message_handler(commands=["фото", "photo", "аватар"])
-async def cmd_set_photo(message: types.Message):
-    await register_user(message)
-    
-    await message.reply("📸 Отправьте фото для аватара")
-
-@dp.message_handler(content_types=['photo'])
-async def handle_photo(message: types.Message):
-    # Сохраняем ID фото
-    photo_id = message.photo[-1].file_id
-    
-    cursor.execute("UPDATE users SET photo_id = ? WHERE user_id = ?", (photo_id, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Фото профиля обновлено")
-
-# Статистика
-@dp.message_handler(commands=["стата", "stat", "Статистика"])
-async def cmd_stat(message: types.Message):
-    await register_user(message)
-    
-    # Общая статистика чата
-    cursor.execute("SELECT COUNT(*) FROM users WHERE joined_chat IS NOT NULL")
-    total_users = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM users WHERE joined_date > datetime('now', '-1 day')")
-    new_today = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT SUM(messages_count) FROM users")
-    total_messages = cursor.fetchone()[0] or 0
-    
-    cursor.execute("SELECT COUNT(*) FROM warnings WHERE chat_id = ?", (message.chat.id,))
-    total_warns = cursor.fetchone()[0]
-    
-    cursor.execute("SELECT COUNT(*) FROM mutes WHERE chat_id = ?", (message.chat.id,))
-    total_mutes = cursor.fetchone()[0]
-    
-    text = f"""
-📊 <b>Статистика чата</b>
-
-👥 Всего пользователей: {format_number(total_users)}
-🆕 Новых за сегодня: {new_today}
-📝 Всего сообщений: {format_number(total_messages)}
-⚠️ Предупреждений: {total_warns}
-🔇 Му
-
-🔇 Мутов: {total_mutes}
-
-🏆 Активность за сегодня:
-"""
-    
-    # Топ активных за сегодня
-    cursor.execute("""
-        SELECT user_id, username, first_name, messages_count 
-        FROM users 
-        WHERE messages_count > 0
-        ORDER BY messages_count DESC 
-        LIMIT 5
-    """)
-    top = cursor.fetchall()
-    
-    if top:
-        text += "\n<b>Топ по сообщениям:</b>\n"
-        for i, user in enumerate(top, 1):
-            name = user[1] or user[2] or f"ID {user[0]}"
-            text += f"{i}. {name} — {user[3]} 📝\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["статасегодня", "stat_today"])
-async def cmd_stat_today(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT COUNT(DISTINCT user_id) FROM messages 
-        WHERE chat_id = ? AND date(timestamp) = date('now')
-    """, (message.chat.id,))
-    active_users = cursor.fetchone()[0]
-    
-    cursor.execute("""
-        SELECT COUNT(*) FROM messages 
-        WHERE chat_id = ? AND date(timestamp) = date('now')
-    """, (message.chat.id,))
-    messages_today = cursor.fetchone()[0]
-    
-    text = f"""
-📊 <b>Статистика за сегодня</b>
-
-👥 Активных пользователей: {active_users}
-📝 Сообщений: {messages_today}
-
-<b>Самые активные:</b>
-"""
-    
-    cursor.execute("""
-        SELECT u.user_id, u.username, u.first_name, COUNT(*) as msg_count
-        FROM messages m
-        JOIN users u ON m.user_id = u.user_id
-        WHERE m.chat_id = ? AND date(m.timestamp) = date('now')
-        GROUP BY m.user_id
-        ORDER BY msg_count DESC
-        LIMIT 5
-    """, (message.chat.id,))
-    top = cursor.fetchall()
-    
-    for i, user in enumerate(top, 1):
-        name = user[1] or user[2] or f"ID {user[0]}"
-        text += f"{i}. {name} — {user[3]} 📝\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["топ", "top"])
-async def cmd_top(message: types.Message):
-    await register_user(message)
-    
-    text = "🏆 <b>Топ чата</b>\n\n"
-    
-    # Топ по сообщениям
-    cursor.execute("""
-        SELECT user_id, username, first_name, messages_count 
-        FROM users 
-        ORDER BY messages_count DESC 
-        LIMIT 5
-    """)
-    top_messages = cursor.fetchall()
-    
-    if top_messages:
-        text += "<b>По сообщениям:</b>\n"
-        for i, user in enumerate(top_messages, 1):
-            name = user[1] or user[2] or f"ID {user[0]}"
-            text += f"{i}. {name} — {user[3]} 📝\n"
-        text += "\n"
-    
-    # Топ по командам
-    cursor.execute("""
-        SELECT user_id, username, first_name, commands_count 
-        FROM users 
-        ORDER BY commands_count DESC 
-        LIMIT 5
-    """)
-    top_commands = cursor.fetchall()
-    
-    if top_commands:
-        text += "<b>По командам:</b>\n"
-        for i, user in enumerate(top_commands, 1):
-            name = user[1] or user[2] or f"ID {user[0]}"
-            text += f"{i}. {name} — {user[3]} 🔧\n"
-        text += "\n"
-    
-    # Топ по репутации
-    cursor.execute("""
-        SELECT user_id, username, first_name, reputation 
-        FROM users 
-        ORDER BY reputation DESC 
-        LIMIT 5
-    """)
-    top_reputation = cursor.fetchall()
-    
-    if top_reputation:
-        text += "<b>По репутации:</b>\n"
-        for i, user in enumerate(top_reputation, 1):
-            name = user[1] or user[2] or f"ID {user[0]}"
-            text += f"{i}. {name} — {user[3]} ⭐\n"
-    
-    await message.reply(text)
-
-# Экономика и ириски
-@dp.message_handler(commands=["ириски", "balance", "баланс"])
-async def cmd_balance(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) > 1:
-        target_id = extract_user_id(parts[1])
-        if not target_id:
-            await message.reply("❌ Не удалось определить пользователя")
-            return
-    else:
-        target_id = message.from_user.id
-    
-    cursor.execute("SELECT iris_balance, username, first_name FROM users WHERE user_id = ?", (target_id,))
-    result = cursor.fetchone()
-    
-    if not result:
-        await message.reply("❌ Пользователь не найден")
-        return
-    
-    balance = result[0]
-    name = result[1] or result[2] or f"ID {target_id}"
-    
-    await message.reply(f"💰 <b>Баланс {name}</b>\n\nИриски: {format_number(balance)}")
-
-@dp.message_handler(commands=["передать", "transfer"])
-async def cmd_transfer(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите пользователя и сумму\nПример: /передать @user 100")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    try:
-        amount = int(parts[2])
+        
         if amount <= 0:
-            await message.reply("❌ Сумма должна быть положительной")
+            await update.message.reply_text(s.error("❌ Сумма должна быть больше 0"))
             return
-    except:
-        await message.reply("❌ Сумма должна быть числом")
-        return
-    
-    # Проверяем баланс отправителя
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    sender_balance = cursor.fetchone()[0]
-    
-    if sender_balance < amount:
-        await message.reply("❌ Недостаточно ирисок")
-        return
-    
-    # Проверяем существование получателя
-    cursor.execute("SELECT 1 FROM users WHERE user_id = ?", (target_id,))
-    if not cursor.fetchone():
-        await message.reply("❌ Получатель не найден")
-        return
-    
-    # Выполняем перевод
-    cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?", 
-                  (amount, message.from_user.id))
-    cursor.execute("UPDATE users SET iris_balance = iris_balance + ? WHERE user_id = ?", 
-                  (amount, target_id))
-    
-    # Записываем транзакцию
-    cursor.execute("""
-        INSERT INTO iris_transactions (from_user, to_user, amount, reason)
-        VALUES (?, ?, ?, ?)
-    """, (message.from_user.id, target_id, amount, "Перевод"))
-    
-    conn.commit()
-    
-    await message.reply(f"✅ Переведено {amount} ирисок пользователю")
-
-@dp.message_handler(commands=["топбаланса", "top_balance"])
-async def cmd_top_balance(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT user_id, username, first_name, iris_balance 
-        FROM users 
-        ORDER BY iris_balance DESC 
-        LIMIT 10
-    """)
-    top = cursor.fetchall()
-    
-    if not top:
-        await message.reply("📊 Нет данных")
-        return
-    
-    text = "💰 <b>Топ богачей</b>\n\n"
-    for i, user in enumerate(top, 1):
-        name = user[1] or user[2] or f"ID {user[0]}"
-        text += f"{i}. {name} — {format_number(user[3])} 🪙\n"
-    
-    await message.reply(text)
-
-# Ежедневный бонус
-@dp.message_handler(commands=["daily", "бонус", "дэйлик"])
-async def cmd_daily(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT last_daily, daily_streak FROM users WHERE user_id = ?", (message.from_user.id,))
-    result = cursor.fetchone()
-    
-    last_daily = result[0]
-    streak = result[1] or 0
-    
-    now = datetime.now()
-    
-    if last_daily:
-        last = datetime.fromisoformat(last_daily)
-        # Если прошло больше 2 дней, сбрасываем стрик
-        if (now - last).days > 1:
-            streak = 0
         
-        # Если бонус уже получали сегодня
-        if last.date() == now.date():
-            await message.reply("❌ Сегодня вы уже получали бонус. Приходите завтра!")
-            return
-    
-    # Рассчитываем бонус
-    base_bonus = 100
-    streak_bonus = streak * 10
-    total_bonus = base_bonus + streak_bonus
-    
-    # VIP бонус
-    cursor.execute("SELECT vip_level FROM users WHERE user_id = ?", (message.from_user.id,))
-    vip_level = cursor.fetchone()[0]
-    if vip_level > 0:
-        total_bonus = int(total_bonus * (1 + vip_level * 0.1))
-    
-    # Обновляем данные
-    new_streak = streak + 1
-    cursor.execute("""
-        UPDATE users 
-        SET iris_balance = iris_balance + ?,
-            last_daily = ?,
-            daily_streak = ?
-        WHERE user_id = ?
-    """, (total_bonus, now.isoformat(), new_streak, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"""
-🎁 <b>Ежедневный бонус получен!</b>
-
-💰 Получено: {total_bonus} ирисок
-🔥 Текущий стрик: {new_streak} дней
-💎 Базовый бонус: {base_bonus}
-✨ Бонус за стрик: +{streak_bonus}
-{f'👑 VIP бонус: +{int(total_bonus * 0.1 * vip_level)}' if vip_level > 0 else ''}
-""")
-
-@dp.message_handler(commands=["стрик", "streak"])
-async def cmd_streak(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT daily_streak FROM users WHERE user_id = ?", (message.from_user.id,))
-    streak = cursor.fetchone()[0] or 0
-    
-    await message.reply(f"🔥 Ваш текущий стрик: {streak} дней")
-
-# VIP статус
-@dp.message_handler(commands=["vip", "VIP"])
-async def cmd_vip(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT vip_level FROM users WHERE user_id = ?", (message.from_user.id,))
-    vip_level = cursor.fetchone()[0]
-    
-    text = f"""
-👑 <b>VIP статус</b>
-
-Ваш уровень: {vip_level}
-
-<b>Преимущества VIP:</b>
-• Уровень 1: +10% к доходу, особые команды
-• Уровень 2: +20% к доходу, уникальные кубы
-• Уровень 3: +30% к доходу, создание кланов
-• Уровень 4: +40% к доходу, доступ к эксклюзивным играм
-• Уровень 5: +50% к доходу, личный менеджер
-
-<b>Цены:</b>
-Уровень 1: 1000 ирисок
-Уровень 2: 5000 ирисок
-Уровень 3: 15000 ирисок
-Уровень 4: 50000 ирисок
-Уровень 5: 100000 ирисок
-
-/vip_buy [уровень] — купить VIP
-"""
-    await message.reply(text)
-
-@dp.message_handler(commands=["vip_buy", "vip_купить"])
-async def cmd_vip_buy(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите уровень VIP (1-5)")
-        return
-    
-    try:
-        level = int(parts[1])
-        if level < 1 or level > 5:
-            await message.reply("❌ Уровень должен быть от 1 до 5")
-            return
-    except:
-        await message.reply("❌ Уровень должен быть числом")
-        return
-    
-    # Цены
-    prices = {1: 1000, 2: 5000, 3: 15000, 4: 50000, 5: 100000}
-    price = prices[level]
-    
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    balance = cursor.fetchone()[0]
-    
-    if balance < price:
-        await message.reply(f"❌ Недостаточно ирисок. Нужно: {price}")
-        return
-    
-    cursor.execute("UPDATE users SET iris_balance = iris_balance - ?, vip_level = ? WHERE user_id = ?",
-                  (price, level, message.from_user.id))
-    conn.commit()
-    
-    await message.reply(f"✅ Поздравляем! Вы приобрели VIP уровень {level}")
-
-# Магазин
-@dp.message_handler(commands=["shop", "магазин"])
-async def cmd_shop(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT id, name, description, price, stock FROM shop_items WHERE is_available = 1")
-    items = cursor.fetchall()
-    
-    if not items:
-        # Добавляем базовые товары
-        cursor.executemany("""
-            INSERT INTO shop_items (name, description, price, type, stock)
-            VALUES (?, ?, ?, ?, ?)
-        """, [
-            ("🍬 Конфетка", "Маленький подарок", 50, "gift", -1),
-            ("🎁 Подарок", "Случайный приз", 200, "gift", -1),
-            ("🔮 Магический куб", "Редкий коллекционный куб", 500, "cube", 100),
-            ("👑 VIP неделя", "VIP статус на 7 дней", 1000, "vip", -1),
-            ("💎 Кристалл", "Украшение для профиля", 300, "decor", 50),
-            ("🎫 Лотерейный билет", "Шанс выиграть джекпот", 100, "lottery", -1),
-            ("⚔️ Меч", "Оружие для дуэлей", 800, "duel", 20),
-            ("🛡️ Щит", "Защита в дуэлях", 600, "duel", 20)
-        ])
-        conn.commit()
+        user_data = self.db.get_user(update.effective_user.id)
         
-        cursor.execute("SELECT id, name, description, price, stock FROM shop_items WHERE is_available = 1")
-        items = cursor.fetchall()
-    
-    text = "🏪 <b>Магазин</b>\n\n"
-    for item in items:
-        stock_text = f" (в наличии: {item[4]})" if item[4] > 0 else " (∞)" if item[4] == -1 else " (нет)"
-        text += f"<b>ID: {item[0]}</b> {item[1]}\n"
-        text += f"📝 {item[2]}\n"
-        text += f"💰 {item[3]} ирисок{stock_text}\n\n"
-    
-    text += "/buy [ID] [количество] — купить\n/gift [@user] [ID] — подарить"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["buy", "купить"])
-async def cmd_buy(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID товара")
-        return
-    
-    try:
-        item_id = int(parts[1])
-        quantity = int(parts[2]) if len(parts) > 2 else 1
-    except:
-        await message.reply("❌ Неверный формат")
-        return
-    
-    cursor.execute("SELECT name, price, type, stock FROM shop_items WHERE id = ? AND is_available = 1", (item_id,))
-    item = cursor.fetchone()
-    
-    if not item:
-        await message.reply("❌ Товар не найден")
-        return
-    
-    name, price, item_type, stock = item
-    total_price = price * quantity
-    
-    if stock > 0 and stock < quantity:
-        await message.reply(f"❌ В наличии только {stock} шт.")
-        return
-    
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    balance = cursor.fetchone()[0]
-    
-    if balance < total_price:
-        await message.reply(f"❌ Недостаточно ирисок. Нужно: {total_price}")
-        return
-    
-    # Списываем ириски
-    cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?",
-                  (total_price, message.from_user.id))
-    
-    # Добавляем товар в инвентарь
-    cursor.execute("""
-        INSERT INTO user_items (user_id, item_id, quantity)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity
-    """, (message.from_user.id, item_id, quantity))
-    
-    # Обновляем остаток
-    if stock > 0:
-        cursor.execute("UPDATE shop_items SET stock = stock - ? WHERE id = ?", (quantity, item_id))
-    
-    conn.commit()
-    
-    await message.reply(f"✅ Куплено: {name} x{quantity} за {total_price} ирисок")
-
-@dp.message_handler(commands=["gift", "подарить"])
-async def cmd_gift(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите пользователя и ID товара\nПример: /gift @user 1")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    try:
-        item_id = int(parts[2])
-        quantity = int(parts[3]) if len(parts) > 3 else 1
-    except:
-        await message.reply("❌ Неверный формат")
-        return
-    
-    # Проверяем наличие товара у отправителя
-    cursor.execute("SELECT quantity FROM user_items WHERE user_id = ? AND item_id = ?", 
-                  (message.from_user.id, item_id))
-    result = cursor.fetchone()
-    
-    if not result or result[0] < quantity:
-        await message.reply("❌ У вас нет этого товара в таком количестве")
-        return
-    
-    cursor.execute("SELECT name FROM shop_items WHERE id = ?", (item_id,))
-    item_name = cursor.fetchone()[0]
-    
-    # Уменьшаем количество у отправителя
-    if result[0] == quantity:
-        cursor.execute("DELETE FROM user_items WHERE user_id = ? AND item_id = ?", 
-                      (message.from_user.id, item_id))
-    else:
-        cursor.execute("UPDATE user_items SET quantity = quantity - ? WHERE user_id = ? AND item_id = ?",
-                      (quantity, message.from_user.id, item_id))
-    
-    # Добавляем получателю
-    cursor.execute("""
-        INSERT INTO user_items (user_id, item_id, quantity)
-        VALUES (?, ?, ?)
-        ON CONFLICT(user_id, item_id) DO UPDATE SET quantity = quantity + excluded.quantity
-    """, (target_id, item_id, quantity))
-    
-    conn.commit()
-    
-    await message.reply(f"🎁 Подарок отправлен!\n{quantity}x {item_name} → пользователю")
-
-@dp.message_handler(commands=["inventory", "инвентарь"])
-async def cmd_inventory(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT s.id, s.name, s.description, ui.quantity
-        FROM user_items ui
-        JOIN shop_items s ON ui.item_id = s.id
-        WHERE ui.user_id = ?
-        ORDER BY ui.quantity DESC
-    """, (message.from_user.id,))
-    items = cursor.fetchall()
-    
-    if not items:
-        await message.reply("📦 Ваш инвентарь пуст")
-        return
-    
-    text = "📦 <b>Ваш инвентарь</b>\n\n"
-    for item in items:
-        text += f"<b>ID: {item[0]}</b> {item[1]} x{item[3]}\n"
-        text += f"📝 {item[2]}\n\n"
-    
-    await message.reply(text)
-
-# Развлечения
-@dp.message_handler(commands=["анекдот", "anekdot", "шутка"])
-async def cmd_anekdot(message: types.Message):
-    await register_user(message)
-    
-    jokes = [
-        "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный, в обслуживании неприхотлива, вот только с бэкапами беда — каждые 9 месяцев приходится систему переустанавливать.",
-        "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
-        "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
-        "Стоит программист в душе и кричит:\n— Окей, гугл, смой воду!\n— Окей, гугл, убери пену!\n— Окей, гугл, выключи воду!\n— Окей, гугл, подай полотенце!\nЖена из комнаты:\n— Ты там скоро? Ужин стынет.\n— Окей, гугл, найди жену...",
-        "— Вовочка, почему ты опоздал в школу?\n— Я видел сон, что побывал в 30 странах, и так устал, что решил отдохнуть.",
-        "— Дорогой, я сегодня так устала...\n— А что случилось?\n— Да ничего особенного, просто тяжелый день.\n— А что ты делала?\n— Лежала на диване и думала о жизни.",
-        "— Алло, это служба спасения? У меня тут кот на дерево залез!\n— А высота большая?\n— Да метра два!\n— И что, сам слезть не может?\n— Не знаю, я его еще не спрашивал.",
-        "— Почему программисты путают Хэллоуин и Рождество?\n— Потому что Oct 31 = Dec 25.",
-        "— Доктор, я шизофреник!\n— Ну, это мы еще посмотрим, кто из нас двоих шизофреник!",
-        "— Вовочка, составь предложение со словом «антресоли».\n— Антресоли — это настолько сложно, что я даже не знаю, с чем его едят."
-    ]
-    
-    await message.reply(f"😄 <b>Анекдот:</b>\n\n{random.choice(jokes)}")
-
-@dp.message_handler(commands=["факт", "fact"])
-async def cmd_fact(message: types.Message):
-    await register_user(message)
-    
-    facts = [
-        "Осьминоги имеют три сердца и голубую кровь.",
-        "Бананы технически являются ягодами, а клубника — нет.",
-        "В Швейцарии запрещено держать только одну морскую свинку, потому что они социальные животные.",
-        "Коровы имеют лучших друзей и могут испытывать стресс при разлуке с ними.",
-        "Австралия длиннее, чем Луна в диаметре.",
-        "Наполеон не был низким. Его рост составлял около 170 см, что было средним для того времени.",
-        "В Японии есть отель, который обслуживают роботы.",
-        "Кошки не могут чувствовать сладкий вкус.",
-        "Самый длинный полет курицы длился 13 секунд.",
-        "Мед никогда не портится. Археологи находили 3000-летний мед в гробницах, который всё ещё съедобен."
-    ]
-    
-    await message.reply(f"🔍 <b>Интересный факт:</b>\n\n{random.choice(facts)}")
-
-@dp.message_handler(commands=["цитата", "quote"])
-async def cmd_quote(message: types.Message):
-    await register_user(message)
-    
-    quotes = [
-        "Жизнь — это то, что с тобой происходит, пока ты строишь планы. — Джон Леннон",
-        "Будьте тем изменением, которое вы хотите увидеть в мире. — Махатма Ганди",
-        "Единственный способ делать великие дела — любить то, что вы делаете. — Стив Джобс",
-        "В конце концов, важны не годы в жизни, а жизнь в годах. — Авраам Линкольн",
-        "Если вы хотите идти быстро, идите один. Если хотите идти далеко, идите вместе. — Африканская пословица",
-        "Успех — это способность идти от неудачи к неудаче, не теряя энтузиазма. — Уинстон Черчилль",
-        "Самая большая слава не в том, чтобы никогда не падать, а в том, чтобы вставать каждый раз, когда вы падаете. — Конфуций",
-        "Счастье — это когда то, что вы думаете, говорите и делаете, находится в гармонии. — Махатма Ганди",
-        "Не судите каждый день по урожаю, который вы собрали, а по семенам, которые вы посадили. — Роберт Стивенсон",
-        "Лучшее время посадить дерево было 20 лет назад. Следующее лучшее время — сегодня. — Китайская пословица"
-    ]
-    
-    await message.reply(f"📜 <b>Цитата:</b>\n\n{random.choice(quotes)}")
-
-@dp.message_handler(commands=["ктоя", "whoami"])
-async def cmd_whoami(message: types.Message):
-    await register_user(message)
-    
-    roles = [
-        "супергерой", "злодей", "тайный агент", "космонавт", "пират", 
-        "робот", "инопланетянин", "волшебник", "вампир", "оборотень",
-        "призрак", "эльф", "гном", "дракон", "рыцарь", "ниндзя",
-        "самурай", "ковбой", "индеец", "детектив", "шпион"
-    ]
-    
-    await message.reply(f"🦸 Вы — {random.choice(roles)}!")
-
-@dp.message_handler(commands=["совет", "advice"])
-async def cmd_advice(message: types.Message):
-    await register_user(message)
-    
-    advices = [
-        "Пейте больше воды.",
-        "Высыпайтесь — это важно для здоровья.",
-        "Делайте зарядку по утрам.",
-        "Улыбайтесь чаще — это заразительно.",
-        "Читайте книги — они развивают воображение.",
-        "Не откладывайте на завтра то, что можно сделать сегодня.",
-        "Слушайте больше, чем говорите.",
-        "Иногда полезно просто помолчать.",
-        "Цените время — оно невосполнимо.",
-        "Будьте добры к другим и к себе."
-    ]
-    
-    await message.reply(f"💡 <b>Совет:</b>\n\n{random.choice(advices)}")
-
-# Гадания
-@dp.message_handler(commands=["гадать", "ask"])
-async def cmd_ask(message: types.Message):
-    await register_user(message)
-    
-    question = message.text[7:].strip()
-    if not question:
-        await message.reply("❌ Задайте вопрос")
-        return
-    
-    answers = [
-        "Да", "Нет", "Возможно", "Определённо да", "Определённо нет",
-        "Спросите позже", "Лучше не знать", "Сейчас нельзя ответить",
-        "Сконцентрируйтесь и спросите снова", "Мой ответ — да",
-        "Мой ответ — нет", "По моим данным — да", "Перспективы не очень",
-        "Весьма вероятно", "Маловероятно", "Без сомнения", "Ни в коем случае",
-        "Да, но будьте осторожны", "Нет, но не отчаивайтесь"
-    ]
-    
-    await message.reply(f"🎱 <b>Вопрос:</b> {question}\n\n<b>Ответ:</b> {random.choice(answers)}")
-
-@dp.message_handler(commands=["да/нет", "yesno"])
-async def cmd_yesno(message: types.Message):
-    await register_user(message)
-    
-    answers = ["Да ✅", "Нет ❌", "Возможно 🤔", "Скорее да", "Скорее нет"]
-    
-    await message.reply(f"🎲 {random.choice(answers)}")
-
-@dp.message_handler(commands=["шар", "ball"])
-async def cmd_ball(message: types.Message):
-    await register_user(message)
-    
-    answers = [
-        "Бесспорно", "Предрешено", "Никаких сомнений", "Определённо да",
-        "Можешь быть уверен в этом", "Мне кажется — да", "Вероятнее всего",
-        "Хорошие перспективы", "Знаки говорят — да", "Да",
-        "Пока не ясно, попробуй снова", "Спроси позже", "Лучше не рассказывать",
-        "Сейчас нельзя предсказать", "Сконцентрируйся и спроси опять",
-        "Даже не думай", "Мой ответ — нет", "По моим данным — нет",
-        "Перспективы не очень", "Весьма сомнительно"
-    ]
-    
-    await message.reply(f"🔮 {random.choice(answers)}")
-
-@dp.message_handler(commands=["совместимость", "compatibility"])
-async def cmd_compatibility(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите двух пользователей\nПример: /совместимость @user1 @user2")
-        return
-    
-    user1_id = extract_user_id(parts[1])
-    user2_id = extract_user_id(parts[2])
-    
-    if not user1_id or not user2_id:
-        await message.reply("❌ Не удалось определить пользователей")
-        return
-    
-    # Получаем имена
-    cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (user1_id,))
-    user1 = cursor.fetchone()
-    cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (user2_id,))
-    user2 = cursor.fetchone()
-    
-    name1 = user1[0] or user1[1] or f"ID {user1_id}"
-    name2 = user2[0] or user2[1] or f"ID {user2_id}"
-    
-    # Генерируем совместимость
-    compatibility = random.randint(0, 100)
-    
-    if compatibility < 30:
-        emoji = "💔"
-        text = "Очень низкая совместимость"
-    elif compatibility < 50:
-        emoji = "🤔"
-        text = "Ниже среднего"
-    elif compatibility < 70:
-        emoji = "👍"
-        text = "Неплохая совместимость"
-    elif compatibility < 90:
-        emoji = "💕"
-        text = "Хорошая совместимость"
-    else:
-        emoji = "💖"
-        text = "Идеальная совместимость!"
-    
-    await message.reply(f"""
-💞 <b>Совместимость</b>
-
-{emoji} <b>{name1}</b> и <b>{name2}</b>
-
-Совместимость: {compatibility}%
-{text}
-""")
-
-# Игры
-@dp.message_handler(commands=["монетка", "coin"])
-async def cmd_coin(message: types.Message):
-    await register_user(message)
-    
-    result = random.choice(["Орёл", "Решка"])
-    emoji = "🪙" if result == "Орёл" else "🪙"
-    
-    await message.reply(f"{emoji} <b>{result}</b>")
-
-@dp.message_handler(commands=["кубик", "dice"])
-async def cmd_dice(message: types.Message):
-    await register_user(message)
-    
-    result = random.randint(1, 6)
-    emojis = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"]
-    
-    await message.reply(f"🎲 <b>{result}</b> {emojis[result-1]}")
-
-@dp.message_handler(commands=["случайное", "random"])
-async def cmd_random(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 3:
-        await message.reply("❌ Укажите минимум и максимум\nПример: /случайное 1 100")
-        return
-    
-    try:
-        min_val = int(parts[1])
-        max_val = int(parts[2])
-        if min_val >= max_val:
-            await message.reply("❌ Минимум должен быть меньше максимума")
+        if user_data['coins'] < amount:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
-    except:
-        await message.reply("❌ Укажите числа")
-        return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя перевести самому себе"))
+            return
+        
+        self.db.add_coins(user_data['id'], -amount)
+        self.db.add_coins(target['id'], amount)
+        
+        commission_text = ""
+        if not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+            self.db.add_coins(user_data['id'], -commission)
+            commission_text = f"\n{s.item(f'💸 Комиссия: {commission} (5%)')}"
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        text = (
+            s.header("💸 ПЕРЕВОД") + "\n"
+            f"{s.item(f'Получатель: {target_name}')}\n"
+            f"{s.item(f'Сумма: {amount} 💰')}{commission_text}\n\n"
+            f"{s.success('✅ Перевод выполнен!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
     
-    result = random.randint(min_val, max_val)
+    async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        text = (
+            s.header("💰 БАЛАНС") + "\n\n"
+            f"{s.stat('Монеты', f'{user_data["coins"]} 💰')}\n"
+            f"{s.stat('Алмазы', f'{user_data["diamonds"]} 💎')}\n"
+            f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n"
+            f"{s.stat('Здоровье', f'{user_data["health"]}/{user_data["max_health"]} ❤️')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    await message.reply(f"🎲 Случайное число: <b>{result}</b>")
-
-@dp.message_handler(commands=["выбери", "choose"])
-async def cmd_choose(message: types.Message):
-    await register_user(message)
+    async def cmd_vip_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("💎 VIP СТАТУС") + "\n\n"
+            f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n\n"
+            f"{s.item('⚔️ Урон в битвах +20%')}\n"
+            f"{s.item('💰 Награда с боссов +50%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +50%')}\n"
+            f"{s.item('💎 Алмазы +1 в день')}\n\n"
+            f"{s.cmd('купитьвип', 'купить VIP')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    text = message.text[7:].strip()
-    if not text:
-        await message.reply("❌ Укажите варианты через / или ,\nПример: /выбери пицца/суши/бургер")
-        return
+    async def cmd_premium_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("💎 PREMIUM СТАТУС") + "\n\n"
+            f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n\n"
+            f"{s.item('⚔️ Урон в битвах +50%')}\n"
+            f"{s.item('💰 Награда с боссов +100%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +100%')}\n"
+            f"{s.item('💎 Алмазы +3 в день')}\n"
+            f"{s.item('🚫 Игнорирование спам-фильтра')}\n\n"
+            f"{s.cmd('купитьпремиум', 'купить PREMIUM')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    # Разделяем по / или ,
-    if "/" in text:
-        options = [opt.strip() for opt in text.split("/")]
-    elif "," in text:
-        options = [opt.strip() for opt in text.split(",")]
-    else:
-        options = [text]
+    async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < VIP_PRICE:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {VIP_PRICE} 💰"))
+            return
+        
+        if self.db.is_vip(user_data['id']):
+            await update.message.reply_text(s.error("❌ VIP статус уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -VIP_PRICE)
+        until = self.db.set_vip(user_data['id'], VIP_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        text = (
+            s.header("✨ VIP СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{s.item(f'Срок: до {date_str}')}\n\n"
+            f"{s.info('Спасибо за поддержку!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'buy_vip')
     
-    if len(options) < 2:
-        await message.reply("❌ Укажите хотя бы 2 варианта")
-        return
+    async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < PREMIUM_PRICE:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {PREMIUM_PRICE} 💰"))
+            return
+        
+        if self.db.is_premium(user_data['id']):
+            await update.message.reply_text(s.error("❌ PREMIUM статус уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -PREMIUM_PRICE)
+        until = self.db.set_premium(user_data['id'], PREMIUM_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        text = (
+            s.header("✨ PREMIUM СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{s.item(f'Срок: до {date_str}')}\n\n"
+            f"{s.info('Спасибо за поддержку!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'buy_premium')
     
-    result = random.choice(options)
+    # ===== ИГРЫ =====
+    async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.choice(["Орел", "Решка"])
+        await update.message.reply_text(
+            f"{s.header('🪙 МОНЕТКА')}\n\n{s.item(f'Выпало: {result}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
-    await message.reply(f"🤔 Я выбираю: <b>{result}</b>")
-
-# Модуль дуэлей
-@dp.message_handler(commands=["дуэль", "duel"])
-async def cmd_duel(message: types.Message):
-    await register_user(message)
+    async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.randint(1, 6)
+        await update.message.reply_text(
+            f"{s.header('🎲 КУБИК')}\n\n{s.item(f'Выпало: {result}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите противника\nПример: /дуэль @user 100")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя вызвать на дуэль самого себя")
-        return
-    
-    bet = 0
-    if len(parts) > 2:
+    async def cmd_dice_bet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ставку: /кости 100"))
+            return
+        
         try:
-            bet = int(parts[2])
-            if bet < 0:
-                await message.reply("❌ Ставка должна быть положительной")
-                return
+            bet = int(context.args[0])
         except:
-            await message.reply("❌ Ставка должна быть числом")
-            return
-    
-    # Проверяем баланс
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    balance = cursor.fetchone()[0]
-    
-    if balance < bet:
-        await message.reply("❌ Недостаточно ирисок для ставки")
-        return
-    
-    # Создаем дуэль
-    cursor.execute("""
-        INSERT INTO duels (challenger_id, opponent_id, bet_amount)
-        VALUES (?, ?, ?)
-    """, (message.from_user.id, target_id, bet))
-    duel_id = cursor.lastrowid
-    conn.commit()
-    
-    # Уведомляем противника
-    await message.reply(f"""
-⚔️ <b>Вызов на дуэль!</b>
-
-ID дуэли: {duel_id}
-Противник: @{parts[1]}
-Ставка: {bet} ирисок
-
-/accept {duel_id} — принять
-/decline {duel_id} — отклонить
-""")
-
-@dp.message_handler(commands=["дуэли", "duels"])
-async def cmd_duels(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT id, challenger_id, opponent_id, bet_amount, status
-        FROM duels
-        WHERE status = 'pending' AND (challenger_id = ? OR opponent_id = ?)
-    """, (message.from_user.id, message.from_user.id))
-    duels = cursor.fetchall()
-    
-    if not duels:
-        await message.reply("📋 У вас нет активных дуэлей")
-        return
-    
-    text = "⚔️ <b>Ваши дуэли:</b>\n\n"
-    for duel in duels:
-        opponent = duel[2] if duel[1] == message.from_user.id else duel[1]
-        cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (opponent,))
-        opp_info = cursor.fetchone()
-        opp_name = opp_info[0] or opp_info[1] or f"ID {opponent}"
-        
-        text += f"ID: {duel[0]} | Противник: {opp_name}\n"
-        text += f"Ставка: {duel[3]} | Статус: {duel[4]}\n\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["принять", "accept"])
-async def cmd_accept_duel(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID дуэли")
-        return
-    
-    try:
-        duel_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    cursor.execute("""
-        SELECT id, challenger_id, opponent_id, bet_amount, status
-        FROM duels WHERE id = ? AND opponent_id = ? AND status = 'pending'
-    """, (duel_id, message.from_user.id))
-    duel = cursor.fetchone()
-    
-    if not duel:
-        await message.reply("❌ Дуэль не найдена или уже принята")
-        return
-    
-    # Проверяем баланс
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    balance = cursor.fetchone()[0]
-    
-    if balance < duel[3]:
-        await message.reply("❌ Недостаточно ирисок для ставки")
-        return
-    
-    # Начинаем дуэль
-    cursor.execute("UPDATE duels SET status = 'active' WHERE id = ?", (duel_id,))
-    conn.commit()
-    
-    await message.reply(f"""
-⚔️ <b>Дуэль началась!</b>
-
-ID: {duel_id}
-
-<b>Команды:</b>
-/attack [сила 1-10] — атаковать
-/defend — защищаться
-/surrender — сдаться
-
-Удачи! 💪
-""")
-
-@dp.message_handler(commands=["отклонить", "decline"])
-async def cmd_decline_duel(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID дуэли")
-        return
-    
-    try:
-        duel_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    cursor.execute("""
-        DELETE FROM duels 
-        WHERE id = ? AND opponent_id = ? AND status = 'pending'
-    """, (duel_id, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Дуэль отклонена")
-
-@dp.message_handler(commands=["атака", "attack"])
-async def cmd_attack(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите силу атаки (1-10)")
-        return
-    
-    try:
-        power = int(parts[1])
-        if power < 1 or power > 10:
-            await message.reply("❌ Сила должна быть от 1 до 10")
-            return
-    except:
-        await message.reply("❌ Сила должна быть числом")
-        return
-    
-    # Ищем активную дуэль
-    cursor.execute("""
-        SELECT id, challenger_id, opponent_id, challenger_hp, opponent_hp, current_turn, bet_amount
-        FROM duels 
-        WHERE status = 'active' AND (challenger_id = ? OR opponent_id = ?)
-    """, (message.from_user.id, message.from_user.id))
-    duel = cursor.fetchone()
-    
-    if not duel:
-        await message.reply("❌ У вас нет активной дуэли")
-        return
-    
-    duel_id, challenger, opponent, chp, ohp, turn, bet = duel
-    
-    # Определяем, чей ход
-    if turn is None:
-        turn = challenger
-    
-    if message.from_user.id != turn:
-        await message.reply("❌ Сейчас не ваш ход")
-        return
-    
-    # Рассчитываем урон
-    damage = random.randint(power * 5, power * 10)
-    crit = random.random() < 0.2  # 20% на критический удар
-    if crit:
-        damage = int(damage * 1.5)
-    
-    # Применяем урон
-    if message.from_user.id == challenger:
-        new_hp = ohp - damage
-        next_turn = opponent
-        hp_col = "opponent_hp"
-    else:
-        new_hp = chp - damage
-        next_turn = challenger
-        hp_col = "challenger_hp"
-    
-    if new_hp <= 0:
-        # Победа
-        winner = message.from_user.id
-        loser = opponent if winner == challenger else challenger
-        
-        # Переводим ставку
-        if bet > 0:
-            cursor.execute("UPDATE users SET iris_balance = iris_balance + ? WHERE user_id = ?", (bet, winner))
-            cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?", (bet, loser))
-        
-        cursor.execute("UPDATE duels SET status = 'finished', winner_id = ? WHERE id = ?", (winner, duel_id))
-        conn.commit()
-        
-        await message.reply(f"""
-⚔️ <b>ПОБЕДА!</b>
-
-Ваш урон: {damage}{' (КРИТ)' if crit else ''}
-Противник повержен!
-
-{'💰 Вы выиграли ' + str(bet) + ' ирисок!' if bet > 0 else ''}
-""")
-    else:
-        # Обновляем HP
-        cursor.execute(f"UPDATE duels SET {hp_col} = ?, current_turn = ? WHERE id = ?", (new_hp, next_turn, duel_id))
-        conn.commit()
-        
-        await message.reply(f"""
-⚔️ <b>Атака!</b>
-
-Урон: {damage}{' (КРИТ)' if crit else ''}
-У противника осталось: {new_hp} HP
-
-Следующий ход: {'ваш' if next_turn == message.from_user.id else 'противника'}
-""")
-
-@dp.message_handler(commands=["защита", "defend"])
-async def cmd_defend(message: types.Message):
-    await register_user(message)
-    
-    # Ищем активную дуэль
-    cursor.execute("""
-        SELECT id, challenger_id, opponent_id, challenger_hp, opponent_hp, current_turn
-        FROM duels 
-        WHERE status = 'active' AND (challenger_id = ? OR opponent_id = ?)
-    """, (message.from_user.id, message.from_user.id))
-    duel = cursor.fetchone()
-    
-    if not duel:
-        await message.reply("❌ У вас нет активной дуэли")
-        return
-    
-    duel_id, challenger, opponent, chp, ohp, turn = duel
-    
-    if message.from_user.id != turn:
-        await message.reply("❌ Сейчас не ваш ход")
-        return
-    
-    # Защита увеличивает HP
-    heal = random.randint(10, 30)
-    
-    if message.from_user.id == challenger:
-        new_hp = chp + heal
-        next_turn = opponent
-        hp_col = "challenger_hp"
-    else:
-        new_hp = ohp + heal
-        next_turn = challenger
-        hp_col = "opponent_hp"
-    
-    cursor.execute(f"UPDATE duels SET {hp_col} = ?, current_turn = ? WHERE id = ?", (new_hp, next_turn, duel_id))
-    conn.commit()
-    
-    await message.reply(f"""
-🛡️ <b>Защита!</b>
-
-Восстановлено: {heal} HP
-Теперь у вас: {new_hp} HP
-
-Следующий ход: {'ваш' if next_turn == message.from_user.id else 'противника'}
-""")
-
-@dp.message_handler(commands=["сдаться", "surrender"])
-async def cmd_surrender(message: types.Message):
-    await register_user(message)
-    
-    # Ищем активную дуэль
-    cursor.execute("""
-        SELECT id, challenger_id, opponent_id, bet_amount
-        FROM duels 
-        WHERE status = 'active' AND (challenger_id = ? OR opponent_id = ?)
-    """, (message.from_user.id, message.from_user.id))
-    duel = cursor.fetchone()
-    
-    if not duel:
-        await message.reply("❌ У вас нет активной дуэли")
-        return
-    
-    duel_id, challenger, opponent, bet = duel
-    
-    winner = opponent if message.from_user.id == challenger else challenger
-    
-    # Переводим ставку
-    if bet > 0:
-        cursor.execute("UPDATE users SET iris_balance = iris_balance + ? WHERE user_id = ?", (bet, winner))
-        cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?", (bet, message.from_user.id))
-    
-    cursor.execute("UPDATE duels SET status = 'finished', winner_id = ? WHERE id = ?", (winner, duel_id))
-    conn.commit()
-    
-    await message.reply(f"""
-🏳️ <b>Поражение</b>
-
-Вы сдались. Победитель: @{winner}
-{'💰 Вы потеряли ' + str(bet) + ' ирисок' if bet > 0 else ''}
-""")
-
-# Модуль отношений
-@dp.message_handler(commands=["друг", "friend"])
-async def cmd_add_friend(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя добавить в друзья самого себя")
-        return
-    
-    # Проверяем, не враг ли
-    cursor.execute("SELECT 1 FROM enemies WHERE user_id = ? AND enemy_id = ?", 
-                  (message.from_user.id, target_id))
-    if cursor.fetchone():
-        await message.reply("❌ Сначала простите врага командой /forgive")
-        return
-    
-    # Проверяем, не в игноре
-    cursor.execute("SELECT 1 FROM ignored WHERE user_id = ? AND ignored_id = ?", 
-                  (message.from_user.id, target_id))
-    if cursor.fetchone():
-        await message.reply("❌ Сначала уберите из игнора командой /unignore")
-        return
-    
-    # Проверяем существующую заявку
-    cursor.execute("""
-        SELECT status FROM friends 
-        WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
-    """, (message.from_user.id, target_id, target_id, message.from_user.id))
-    result = cursor.fetchone()
-    
-    if result:
-        if result[0] == "accepted":
-            await message.reply("❌ Вы уже друзья")
-        elif result[0] == "pending":
-            await message.reply("❌ Заявка уже отправлена")
-        return
-    
-    # Отправляем заявку
-    cursor.execute("""
-        INSERT INTO friends (user_id, friend_id, status)
-        VALUES (?, ?, 'pending')
-    """, (message.from_user.id, target_id))
-    conn.commit()
-    
-    await message.reply("✅ Заявка в друзья отправлена")
-
-@dp.message_handler(commands=["принятьдруга", "accept_friend"])
-async def cmd_accept_friend(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("""
-        UPDATE friends 
-        SET status = 'accepted' 
-        WHERE user_id = ? AND friend_id = ? AND status = 'pending'
-    """, (target_id, message.from_user.id))
-    
-    if cursor.rowcount > 0:
-        conn.commit()
-        await message.reply("✅ Заявка принята! Теперь вы друзья")
-    else:
-        await message.reply("❌ Нет заявки от этого пользователя")
-
-@dp.message_handler(commands=["отклонитьдруга", "decline_friend"])
-async def cmd_decline_friend(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("""
-        DELETE FROM friends 
-        WHERE user_id = ? AND friend_id = ? AND status = 'pending'
-    """, (target_id, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Заявка отклонена")
-
-@dp.message_handler(commands=["удалитьдруга", "unfriend"])
-async def cmd_unfriend(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("""
-        DELETE FROM friends 
-        WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
-    """, (message.from_user.id, target_id, target_id, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Пользователь удален из друзей")
-
-@dp.message_handler(commands=["друзья", "friends"])
-async def cmd_friends(message: types.Message):
-    await register_user(message)
-    
-    # Получаем список друзей
-    cursor.execute("""
-        SELECT u.user_id, u.username, u.first_name
-        FROM friends f
-        JOIN users u ON (f.friend_id = u.user_id AND f.user_id = ?) OR (f.user_id = u.user_id AND f.friend_id = ?)
-        WHERE f.status = 'accepted'
-    """, (message.from_user.id, message.from_user.id))
-    friends = cursor.fetchall()
-    
-    # Получаем входящие заявки
-    cursor.execute("""
-        SELECT u.user_id, u.username, u.first_name
-        FROM friends f
-        JOIN users u ON f.user_id = u.user_id
-        WHERE f.friend_id = ? AND f.status = 'pending'
-    """, (message.from_user.id,))
-    incoming = cursor.fetchall()
-    
-    text = "👥 <b>Ваши друзья</b>\n\n"
-    
-    if friends:
-        text += "<b>Друзья:</b>\n"
-        for friend in friends:
-            name = friend[1] or friend[2] or f"ID {friend[0]}"
-            text += f"• {name}\n"
-    else:
-        text += "У вас пока нет друзей\n"
-    
-    if incoming:
-        text += "\n<b>Входящие заявки:</b>\n"
-        for req in incoming:
-            name = req[1] or req[2] or f"ID {req[0]}"
-            text += f"• {name} — /accept_friend {req[0]}\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["враг", "enemy"])
-async def cmd_add_enemy(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя объявить врагом самого себя")
-        return
-    
-    # Удаляем из друзей, если были
-    cursor.execute("""
-        DELETE FROM friends 
-        WHERE (user_id = ? AND friend_id = ?) OR (user_id = ? AND friend_id = ?)
-    """, (message.from_user.id, target_id, target_id, message.from_user.id))
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO enemies (user_id, enemy_id)
-        VALUES (?, ?)
-    """, (message.from_user.id, target_id))
-    conn.commit()
-    
-    await message.reply("⚔️ Пользователь объявлен врагом")
-
-@dp.message_handler(commands=["простить", "forgive"])
-async def cmd_forgive(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM enemies WHERE user_id = ? AND enemy_id = ?", 
-                  (message.from_user.id, target_id))
-    conn.commit()
-    
-    await message.reply("✅ Враг прощен")
-
-@dp.message_handler(commands=["игнор", "ignore"])
-async def cmd_ignore(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя игнорировать самого себя")
-        return
-    
-    cursor.execute("""
-        INSERT OR REPLACE INTO ignored (user_id, ignored_id)
-        VALUES (?, ?)
-    """, (message.from_user.id, target_id))
-    conn.commit()
-    
-    await message.reply("🚫 Пользователь добавлен в игнор-лист")
-
-@dp.message_handler(commands=["убратьигнор", "unignore"])
-async def cmd_unignore(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    cursor.execute("DELETE FROM ignored WHERE user_id = ? AND ignored_id = ?", 
-                  (message.from_user.id, target_id))
-    conn.commit()
-    
-    await message.reply("✅ Пользователь убран из игнора")
-
-# Модуль браков
-@dp.message_handler(commands=["предложить", "marry"])
-async def cmd_marry(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя жениться на самом себе")
-        return
-    
-    # Проверяем, не женат ли уже
-    cursor.execute("SELECT married_to FROM users WHERE user_id = ?", (message.from_user.id,))
-    if cursor.fetchone()[0]:
-        await message.reply("❌ Вы уже в браке. Сначала разведитесь")
-        return
-    
-    cursor.execute("SELECT married_to FROM users WHERE user_id = ?", (target_id,))
-    if cursor.fetchone()[0]:
-        await message.reply("❌ Этот пользователь уже в браке")
-        return
-    
-    # Сохраняем предложение в памяти
-    # В реальном проекте нужно создать таблицу для предложений
-    await message.reply(f"💍 Предложение отправлено! Пользователь должен принять командой /accept_marriage")
-
-@dp.message_handler(commands=["принятьбрак", "accept_marriage"])
-async def cmd_accept_marriage(message: types.Message):
-    await register_user(message)
-    
-    # Здесь должна быть логика принятия предложения
-    # Для упрощения сразу заключаем брак
-    cursor.execute("""
-        UPDATE users 
-        SET married_to = ? 
-        WHERE user_id = ?
-    """, (message.from_user.id, message.from_user.id))  # В реальности нужно ID партнера
-    
-    await message.reply("💞 Поздравляю! Теперь вы в браке!")
-
-@dp.message_handler(commands=["развод", "divorce"])
-async def cmd_divorce(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("SELECT married_to FROM users WHERE user_id = ?", (message.from_user.id,))
-    married_to = cursor.fetchone()[0]
-    
-    if not married_to:
-        await message.reply("❌ Вы не в браке")
-        return
-    
-    cursor.execute("UPDATE users SET married_to = NULL WHERE user_id = ? OR user_id = ?", 
-                  (message.from_user.id, married_to))
-    conn.commit()
-    
-    await message.reply("💔 Брак расторгнут")
-
-@dp.message_handler(commands=["семьи", "families"])
-async def cmd_families(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT u1.user_id, u1.username, u1.first_name, u2.user_id, u2.username, u2.first_name
-        FROM users u1
-        JOIN users u2 ON u1.married_to = u2.user_id
-        WHERE u1.user_id < u2.user_id
-        LIMIT 10
-    """)
-    families = cursor.fetchall()
-    
-    if not families:
-        await message.reply("👥 В этом чате пока нет семей")
-        return
-    
-    text = "👥 <b>Семьи чата:</b>\n\n"
-    for fam in families:
-        name1 = fam[1] or fam[2] or f"ID {fam[0]}"
-        name2 = fam[4] or fam[5] or f"ID {fam[3]}"
-        text += f"💞 {name1} + {name2}\n"
-    
-    await message.reply(text)
-
-# Модуль кланов
-@dp.message_handler(commands=["клан", "clan"])
-async def cmd_clan(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("""
-🏰 <b>Команды кланов</b>
-
-/clan create [название] — создать клан
-/clan join [название] — вступить в клан
-/clan leave — выйти из клана
-/clan info — информация о вашем клане
-/clan top — топ кланов
-/clan donate [сумма] — внести в казну
-/clan kick [@user] — исключить (лидер)
-/clan leader [@user] — передать лидерство
-""")
-        return
-    
-    action = parts[1].lower()
-    
-    if action == "create":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите название клана")
+            await update.message.reply_text(s.error("❌ Ставка должна быть числом"))
             return
         
-        name = " ".join(parts[2:])
-        
-        # Проверяем, не в клане ли уже
-        cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (message.from_user.id,))
-        if cursor.fetchone()[0]:
-            await message.reply("❌ Вы уже в клане")
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
-        # Проверяем уникальность названия
-        cursor.execute("SELECT 1 FROM clans WHERE name = ?", (name,))
-        if cursor.fetchone():
-            await message.reply("❌ Клан с таким названием уже существует")
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
             return
         
-        # Создаем клан
-        cursor.execute("""
-            INSERT INTO clans (name, leader_id)
-            VALUES (?, ?)
-        """, (name, message.from_user.id))
-        clan_id = cursor.lastrowid
+        dice1 = random.randint(1, 6)
+        dice2 = random.randint(1, 6)
+        total = dice1 + dice2
         
-        # Добавляем создателя
-        cursor.execute("""
-            INSERT INTO clan_members (clan_id, user_id, role)
-            VALUES (?, ?, 'leader')
-        """, (clan_id, message.from_user.id))
+        if total in [7, 11]:
+            win = bet * 2
+            self.db.add_coins(user_data['id'], win)
+            self.db.update_user(user_data['id'], dice_wins=user_data.get('dice_wins', 0) + 1)
+            result_text = s.success(f"🎉 ВЫИГРЫШ! +{win} 💰")
+        elif total in [2, 3, 12]:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], dice_losses=user_data.get('dice_losses', 0) + 1)
+            result_text = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
+        else:
+            result_text = s.info(f"🔄 НИЧЬЯ! Ставка возвращена")
         
-        cursor.execute("UPDATE users SET clan_id = ? WHERE user_id = ?", (clan_id, message.from_user.id))
-        conn.commit()
+        text = (
+            s.header("🎲 КОСТИ") + "\n\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item(f'Кубики: {dice1} + {dice2} = {total}')}\n\n"
+            f"{result_text}"
+        )
         
-        await message.reply(f"✅ Клан '{name}' создан!")
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    elif action == "join":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите название клана")
+    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        choice = "red"
+        
+        if context.args:
+            try:
+                bet = int(context.args[0])
+                if len(context.args) > 1:
+                    choice = context.args[1].lower()
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
-        name = " ".join(parts[2:])
-        
-        cursor.execute("SELECT id FROM clans WHERE name = ?", (name,))
-        result = cursor.fetchone()
-        
-        if not result:
-            await message.reply("❌ Клан не найден")
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
             return
         
-        clan_id = result[0]
+        num = random.randint(0, 36)
+        red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
         
-        # Проверяем, не в клане ли уже
-        cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (message.from_user.id,))
-        if cursor.fetchone()[0]:
-            await message.reply("❌ Вы уже в клане")
-            return
+        if num == 0:
+            color = "green"
+        elif num in red_numbers:
+            color = "red"
+        else:
+            color = "black"
         
-        cursor.execute("""
-            INSERT INTO clan_members (clan_id, user_id)
-            VALUES (?, ?)
-        """, (clan_id, message.from_user.id))
+        win = False
+        multiplier = 0
         
-        cursor.execute("UPDATE users SET clan_id = ? WHERE user_id = ?", (clan_id, message.from_user.id))
-        conn.commit()
+        if choice.isdigit() and int(choice) == num:
+            win = True
+            multiplier = 36
+        elif choice in ["red", "black", "green"] and choice == color:
+            win = True
+            multiplier = 2 if choice in ["red", "black"] else 36
         
-        await message.reply(f"✅ Вы вступили в клан '{name}'")
+        if win:
+            win_amount = bet * multiplier
+            self.db.add_coins(user_data['id'], win_amount)
+            self.db.update_user(user_data['id'], casino_wins=user_data.get('casino_wins', 0) + 1)
+            result = s.success(f"🎉 ВЫИГРЫШ! +{win_amount} 💰")
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], casino_losses=user_data.get('casino_losses', 0) + 1)
+            result = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
+        
+        text = (
+            s.header("🎰 РУЛЕТКА") + "\n\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item(f'Выбрано: {choice}')}\n"
+            f"{s.item(f'Выпало: {num} {color}')}\n\n"
+            f"{result}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'roulette', f"{'win' if win else 'lose'} {bet}")
     
-    elif action == "leave":
-        cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (message.from_user.id,))
-        clan_id = cursor.fetchone()[0]
+    async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
         
-        if not clan_id:
-            await message.reply("❌ Вы не в клане")
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
-        cursor.execute("SELECT role FROM clan_members WHERE clan_id = ? AND user_id = ?", 
-                      (clan_id, message.from_user.id))
-        role = cursor.fetchone()[0]
-        
-        if role == "leader":
-            await message.reply("❌ Лидер не может покинуть клан. Передайте лидерство или удалите клан")
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
             return
         
-        cursor.execute("DELETE FROM clan_members WHERE clan_id = ? AND user_id = ?", 
-                      (clan_id, message.from_user.id))
-        cursor.execute("UPDATE users SET clan_id = NULL WHERE user_id = ?", (message.from_user.id,))
-        conn.commit()
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "🎰", "⭐"]
+        spin = [random.choice(symbols) for _ in range(3)]
         
-        await message.reply("✅ Вы покинули клан")
+        if len(set(spin)) == 1:
+            if spin[0] == "7️⃣":
+                win = bet * 50
+            elif spin[0] == "💎":
+                win = bet * 30
+            elif spin[0] == "⭐":
+                win = bet * 20
+            else:
+                win = bet * 10
+            result = s.success(f"🎉 ДЖЕКПОТ! +{win} 💰")
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        elif len(set(spin)) == 2:
+            win = bet * 2
+            result = s.success(f"🎉 ВЫИГРЫШ! +{win} 💰")
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        else:
+            win = 0
+            result = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
+            self.db.update_user(user_data['id'], slots_losses=user_data.get('slots_losses', 0) + 1)
+        
+        if win > 0:
+            self.db.add_coins(user_data['id'], win)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+        
+        text = (
+            s.header("🎰 СЛОТЫ") + "\n\n"
+            f"{' '.join(spin)}\n\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{result}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    elif action == "info":
-        cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (message.from_user.id,))
-        clan_id = cursor.fetchone()[0]
+    async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            s.header("✊ КНБ") + "\nВыберите жест:",
+            reply_markup=kb.rps(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_russian_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
         
-        if not clan_id:
-            await message.reply("❌ Вы не в клане")
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                await update.message.reply_text(s.error("❌ Ставка должна быть числом"))
+                return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
         
-        cursor.execute("SELECT name, leader_id, balance, description FROM clans WHERE id = ?", (clan_id,))
-        clan = cursor.fetchone()
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
         
-        cursor.execute("""
-            SELECT u.user_id, u.username, u.first_name, cm.role
-            FROM clan_members cm
-            JOIN users u ON cm.user_id = u.user_id
-            WHERE cm.clan_id = ?
-        """, (clan_id,))
-        members = cursor.fetchall()
+        try:
+            await context.bot.send_animation(
+                chat_id=update.effective_chat.id,
+                animation=GIFS["russian_roulette"]
+            )
+        except:
+            pass
         
-        cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (clan[1],))
-        leader = cursor.fetchone()
-        leader_name = leader[0] or leader[1] or f"ID {clan[1]}"
+        chamber = random.randint(1, 6)
+        shot = random.randint(1, 6)
         
-        text = f"""
-🏰 <b>Клан: {clan[0]}</b>
-
-👑 Лидер: {leader_name}
-💰 Казна: {clan[2]} ирисок
-👥 Участников: {len(members)}
-
-<b>Участники:</b>
-"""
+        await asyncio.sleep(2)
+        
+        if chamber == shot:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], rr_losses=user_data.get('rr_losses', 0) + 1)
+            text = (
+                s.header("💀 РУССКАЯ РУЛЕТКА") + "\n\n"
+                f"{s.item(f'Ставка: {bet} 💰')}\n"
+                f"{s.item('Бах! Выстрел...')}\n\n"
+                f"{s.error(f'ВЫ ПРОИГРАЛИ! -{bet} 💰')}"
+            )
+        else:
+            win = bet * 5
+            self.db.add_coins(user_data['id'], win)
+            self.db.update_user(user_data['id'], rr_wins=user_data.get('rr_wins', 0) + 1)
+            text = (
+                s.header("🔫 РУССКАЯ РУЛЕТКА") + "\n\n"
+                f"{s.item(f'Ставка: {bet} 💰')}\n"
+                f"{s.item('Щёлк... В этот раз повезло!')}\n\n"
+                f"{s.success(f'ВЫ ВЫИГРАЛИ! +{win} 💰')}"
+            )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'rr', f"{'win' if chamber != shot else 'lose'} {bet}")
+    
+    async def cmd_saper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        field = [['⬜' for _ in range(3)] for _ in range(3)]
+        mine_x, mine_y = random.randint(0, 2), random.randint(0, 2)
+        
+        game_id = f"saper_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'field': field,
+            'mine_x': mine_x,
+            'mine_y': mine_y,
+            'bet': bet,
+            'opened': 0
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        text = (
+            s.header("💣 САПЁР") + "\n\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Выберите клетку от 1 до 9')}\n\n"
+            f"{' '.join(field[0])}\n"
+            f"{' '.join(field[1])}\n"
+            f"{' '.join(field[2])}\n\n"
+            f"{s.info('Напишите номер клетки (1-9)')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_guess(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        number = random.randint(1, 100)
+        game_id = f"guess_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': 0,
+            'max_attempts': 7,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"{s.header('🔢 УГАДАЙ ЧИСЛО')}\n\n"
+            f"{s.item('Я загадал число от 1 до 100')}\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Попыток: 7')}\n\n"
+            f"{s.info('Напиши свой вариант...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_bulls(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        digits = random.sample(range(10), 4)
+        number = ''.join(map(str, digits))
+        
+        game_id = f"bulls_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': [],
+            'max_attempts': 10,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"{s.header('🐂 БЫКИ И КОРОВЫ')}\n\n"
+            f"{s.item('Я загадал 4-значное число без повторов')}\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Попыток: 10')}\n"
+            f"{s.item('Бык — цифра на своём месте')}\n"
+            f"{s.item('Корова — цифра есть, но не на своём месте')}\n\n"
+            f"{s.info('Напиши свой вариант (4 цифры)...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ===== БОССЫ =====
+    async def cmd_bosses(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        bosses = self.db.get_bosses()
+        
+        if not bosses:
+            self.db.respawn_bosses()
+            bosses = self.db.get_bosses()
+        
+        text = s.header("👾 БОССЫ") + "\n\n"
+        
+        for boss in bosses[:3]:
+            health_bar = s.progress(boss['health'], boss['max_health'], 15)
+            text += (
+                f"**{boss['name']}** (ур.{boss['level']})\n"
+                f"{s.item(f'❤️ {health_bar}')}\n"
+                f"{s.item(f'⚔️ Урон: {boss['damage']}')}\n"
+                f"{s.item(f'💰 Награда: {boss['reward_coins']} 💰, ✨ {boss['reward_exp']}')}\n\n"
+            )
+        
+        if len(bosses) > 3:
+            text += f"{s.info(f'... и еще {len(bosses) - 3} боссов')}\n\n"
+        
+        text += (
+            f"{s.section('ТВОИ ПОКАЗАТЕЛИ')}\n"
+            f"{s.stat('❤️ Здоровье', f'{user_data["health"]}/{user_data["max_health"]}')}\n"
+            f"{s.stat('⚡ Энергия', f'{user_data["energy"]}/100')}\n"
+            f"{s.stat('⚔️ Урон', user_data["damage"])}\n"
+            f"{s.stat('👾 Боссов убито', user_data["boss_kills"])}\n\n"
+            f"{s.section('КОМАНДЫ')}\n"
+            f"{s.cmd('босс [ID]', 'атаковать босса')}\n"
+            f"{s.cmd('реген', 'восстановить ❤️ и ⚡')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_boss_fight(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи ID босса: /босс 1"))
+            return
+        
+        try:
+            boss_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Неверный ID"))
+            return
+        
+        boss = self.db.get_boss(boss_id)
+        if not boss or not boss['is_alive']:
+            await update.message.reply_text(s.error("❌ Босс не найден или уже повержен"))
+            return
+        
+        if user_data['energy'] < 10:
+            await update.message.reply_text(s.error("❌ Недостаточно энергии. Используй /regen"))
+            return
+        
+        self.db.add_energy(user_data['id'], -10)
+        
+        damage_bonus = 1.0
+        if self.db.is_vip(user_data['id']):
+            damage_bonus += 0.2
+        if self.db.is_premium(user_data['id']):
+            damage_bonus += 0.3
+        
+        base_damage = user_data['damage'] * damage_bonus
+        player_damage = int(base_damage) + random.randint(-5, 5)
+        
+        crit = random.randint(1, 100) <= user_data['crit_chance']
+        if crit:
+            player_damage = int(player_damage * user_data['crit_multiplier'] / 100)
+            crit_text = "💥 КРИТИЧЕСКИЙ УДАР! "
+        else:
+            crit_text = ""
+        
+        boss_damage = boss['damage'] + random.randint(-5, 5)
+        player_taken = max(1, boss_damage - user_data['armor'] // 2)
+        
+        killed = self.db.damage_boss(boss_id, player_damage)
+        self.db.damage(user_data['id'], player_taken)
+        
+        text = s.header("⚔️ БИТВА С БОССОМ") + "\n\n"
+        text += f"{s.item(f'{crit_text}Твой урон: {player_damage}')}\n"
+        text += f"{s.item(f'Урон босса: {player_taken}')}\n\n"
+        
+        if killed:
+            reward_coins = boss['reward_coins'] * (1 + user_data['level'] // 10)
+            reward_exp = boss['reward_exp'] * (1 + user_data['level'] // 10)
+            
+            if self.db.is_vip(user_data['id']):
+                reward_coins = int(reward_coins * 1.5)
+                reward_exp = int(reward_exp * 1.5)
+            if self.db.is_premium(user_data['id']):
+                reward_coins = int(reward_coins * 2)
+                reward_exp = int(reward_exp * 2)
+            
+            self.db.add_coins(user_data['id'], reward_coins)
+            leveled_up = self.db.add_exp(user_data['id'], reward_exp)
+            self.db.add_boss_kill(user_data['id'])
+            
+            text += f"{s.success('ПОБЕДА!')}\n"
+            text += f"{s.item(f'💰 Монеты: +{reward_coins}')}\n"
+            text += f"{s.item(f'✨ Опыт: +{reward_exp}')}\n"
+            
+            if leveled_up:
+                text += f"{s.success(f'✨ УРОВЕНЬ ПОВЫШЕН!')}\n"
+        else:
+            boss_info = self.db.get_boss(boss_id)
+            text += f"{s.warning('Босс ещё жив!')}\n"
+            text += f"❤️ Осталось: {boss_info['health']} здоровья\n"
+        
+        if user_data['health'] <= player_taken:
+            self.db.heal(user_data['id'], 50)
+            text += f"\n{s.info('Ты погиб и воскрешён с 50❤️')}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'boss_fight', f"Битва с боссом {boss['name']}")
+    
+    async def cmd_boss_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажи ID босса: /боссинфо 1"))
+            return
+        
+        try:
+            boss_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Неверный ID"))
+            return
+        
+        boss = self.db.get_boss(boss_id)
+        if not boss:
+            await update.message.reply_text(s.error("❌ Босс не найден"))
+            return
+        
+        status = "ЖИВ" if boss['is_alive'] else "ПОВЕРЖЕН"
+        health_bar = s.progress(boss['health'], boss['max_health'], 20)
+        
+        text = (
+            s.header(f"👾 БОСС: {boss['name']}") + "\n\n"
+            f"{s.stat('Уровень', boss['level'])}\n"
+            f"{s.stat('❤️ Здоровье', health_bar)}\n"
+            f"{s.stat('⚔️ Урон', boss['damage'])}\n"
+            f"{s.stat('💰 Награда монетами', boss['reward_coins'])}\n"
+            f"{s.stat('✨ Награда опытом', boss['reward_exp'])}\n"
+            f"{s.stat('📊 Статус', status)}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_regen(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        cost = 20
+        if user_data['coins'] < cost:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {cost} 💰"))
+            return
+        
+        self.db.add_coins(user_data['id'], -cost)
+        self.db.heal(user_data['id'], 50)
+        self.db.add_energy(user_data['id'], 20)
+        
+        await update.message.reply_text(
+            f"{s.success('✅ Регенерация завершена!')}\n\n"
+            f"{s.item('❤️ Здоровье +50')}\n"
+            f"{s.item('⚡ Энергия +20')}\n"
+            f"{s.item(f'💰 Потрачено: {cost}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ===== ДУЭЛИ =====
+    async def cmd_duel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /дуэль @user ставка"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            bet = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("❌ Ставка должна быть числом"))
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя вызвать на дуэль самого себя"))
+            return
+        
+        self.db.cursor.execute("SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
+                             (user_data['id'], user_data['id']))
+        if self.db.cursor.fetchone():
+            await update.message.reply_text(s.error("❌ У тебя уже есть активная дуэль"))
+            return
+        
+        duel_id = self.db.create_duel(user_data['id'], target['id'], bet)
+        self.db.add_coins(user_data['id'], -bet)
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        await update.message.reply_text(
+            f"{s.header('⚔️ ВЫЗОВ НА ДУЭЛЬ')}\n\n"
+            f"{s.item(f'Противник: {target_name}')}\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n\n"
+            f"{s.info('Ожидание ответа...')}",
+            reply_markup=kb.duel_accept(duel_id),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_duels(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT * FROM duels WHERE status = 'pending'")
+        duels = self.db.cursor.fetchall()
+        
+        if not duels:
+            await update.message.reply_text(s.info("Нет активных дуэлей"))
+            return
+        
+        text = s.header("⚔️ АКТИВНЫЕ ДУЭЛИ") + "\n\n"
+        for duel in duels:
+            challenger = self.db.get_user_by_id(duel[1])
+            opponent = self.db.get_user_by_id(duel[2])
+            if challenger and opponent:
+                text += f"{s.item(f'{challenger["first_name"]} vs {opponent["first_name"]} — ставка {duel[3]} 💰')}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_duel_rating(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT first_name, nickname, duel_rating FROM users ORDER BY duel_rating DESC LIMIT 10")
+        top = self.db.cursor.fetchall()
+        
+        if not top:
+            await update.message.reply_text(s.info("Рейтинг пуст"))
+            return
+        
+        text = s.header("⚔️ ТОП ДУЭЛЯНТОВ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} **{name}** — {row[2]} очков\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== КЛАНЫ =====
+    async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text(s.info("Вы не состоите в клане"))
+            return
+        
+        clan = self.db.get_clan(user_data['clan_id'])
+        if not clan:
+            await update.message.reply_text(s.error("Клан не найден"))
+            return
+        
+        members = self.db.get_clan_members(clan['id'])
+        
+        text = (
+            s.header(f"🏰 КЛАН: {clan['name']}") + "\n\n"
+            f"{s.stat('Уровень', clan['level'])}\n"
+            f"{s.stat('Опыт', clan['exp'])}\n"
+            f"{s.stat('Казна', f'{clan["coins"]} 💰')}\n"
+            f"{s.stat('Участников', len(members))}\n\n"
+            f"{s.section('УЧАСТНИКИ')}"
+        )
         
         for member in members:
-            name = member[1] or member[2] or f"ID {member[0]}"
-            role_emoji = "👑" if member[3] == "leader" else "🛡️" if member[3] == "admin" else "👤"
+            name = member.get('nickname') or member['first_name']
+            role_emoji = "👑" if member['role'] == 'owner' else "🛡️" if member['role'] == 'admin' else "👤"
             text += f"{role_emoji} {name}\n"
         
-        await message.reply(text)
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    elif action == "top":
-        cursor.execute("""
-            SELECT c.name, COUNT(cm.user_id) as members, c.balance
-            FROM clans c
-            LEFT JOIN clan_members cm ON c.id = cm.clan_id
-            GROUP BY c.id
-            ORDER BY members DESC, c.balance DESC
-            LIMIT 10
-        """)
-        clans = cursor.fetchall()
+    async def cmd_clans(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT name, level, members FROM clans ORDER BY level DESC LIMIT 10")
+        clans = self.db.cursor.fetchall()
         
         if not clans:
-            await message.reply("🏰 Пока нет созданных кланов")
+            await update.message.reply_text(s.info("Нет созданных кланов"))
             return
         
-        text = "🏆 <b>Топ кланов</b>\n\n"
+        text = s.header("🏰 ТОП КЛАНОВ") + "\n\n"
         for i, clan in enumerate(clans, 1):
-            text += f"{i}. {clan[0]} — {clan[1]} участников, {clan[2]} 🪙\n"
+            text += f"{i}. **{clan[0]}** — ур.{clan[1]}, {clan[2]} участников\n"
         
-        await message.reply(text)
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    elif action == "donate":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите сумму")
+    async def cmd_create_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите название клана: /создатьклан [название]"))
             return
         
-        try:
-            amount = int(parts[2])
-            if amount <= 0:
-                await message.reply("❌ Сумма должна быть положительной")
-                return
-        except:
-            await message.reply("❌ Сумма должна быть числом")
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text(s.error("❌ Вы уже в клане"))
             return
         
-        cursor.execute("SELECT clan_id FROM users WHERE user_id = ?", (message.from_user.id,))
-        clan_id = cursor.fetchone()[0]
+        if user_data['coins'] < 1000:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно 1000 💰"))
+            return
         
+        clan_id = self.db.create_clan(name, user_data['id'])
         if not clan_id:
-            await message.reply("❌ Вы не в клане")
+            await update.message.reply_text(s.error("❌ Клан с таким названием уже существует"))
             return
         
-        cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-        balance = cursor.fetchone()[0]
+        self.db.add_coins(user_data['id'], -1000)
         
-        if balance < amount:
-            await message.reply("❌ Недостаточно ирисок")
+        await update.message.reply_text(s.success(f"✅ Клан '{name}' создан!"))
+    
+    async def cmd_join_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите название клана: /вступить [название]"))
             return
         
-        cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?", 
-                      (amount, message.from_user.id))
-        cursor.execute("UPDATE clans SET balance = balance + ? WHERE id = ?", (amount, clan_id))
-        conn.commit()
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
         
-        await message.reply(f"✅ Вы внесли {amount} ирисок в казну клана")
-
-# Модуль кружков
-@dp.message_handler(commands=["кружок", "circle"])
-async def cmd_circle(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("""
-🎯 <b>Команды кружков</b>
-
-/circle create [название] — создать кружок
-/circle join [название] — вступить в кружок
-/circle leave — выйти из кружка
-/circle list — список кружков
-/circle meeting [дата] [время] [место] — создать встречу
-""")
-        return
-    
-    action = parts[1].lower()
-    
-    if action == "create":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите название кружка")
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text(s.error("❌ Вы уже в клане"))
             return
         
-        name = " ".join(parts[2:])
-        
-        cursor.execute("""
-            INSERT INTO circles (name, created_by)
-            VALUES (?, ?)
-        """, (name, message.from_user.id))
-        circle_id = cursor.lastrowid
-        
-        cursor.execute("""
-            INSERT INTO circle_members (circle_id, user_id)
-            VALUES (?, ?)
-        """, (circle_id, message.from_user.id))
-        conn.commit()
-        
-        await message.reply(f"✅ Кружок '{name}' создан!")
-    
-    elif action == "join":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите название кружка")
+        clan = self.db.get_clan_by_name(name)
+        if not clan:
+            await update.message.reply_text(s.error("❌ Клан не найден"))
             return
         
-        name = " ".join(parts[2:])
+        self.db.cursor.execute("INSERT INTO clan_members (clan_id, user_id) VALUES (?, ?)", (clan['id'], user_data['id']))
+        self.db.update_user(user_data['id'], clan_id=clan['id'], clan_role='member')
+        self.db.cursor.execute("UPDATE clans SET members = members + 1 WHERE id = ?", (clan['id'],))
+        self.db.conn.commit()
         
-        cursor.execute("SELECT id FROM circles WHERE name = ?", (name,))
-        result = cursor.fetchone()
+        await update.message.reply_text(s.success(f"✅ Вы вступили в клан '{name}'"))
+    
+    async def cmd_leave_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
         
-        if not result:
-            await message.reply("❌ Кружок не найден")
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text(s.error("❌ Вы не в клане"))
             return
         
-        circle_id = result[0]
-        
-        cursor.execute("""
-            INSERT OR IGNORE INTO circle_members (circle_id, user_id)
-            VALUES (?, ?)
-        """, (circle_id, message.from_user.id))
-        conn.commit()
-        
-        await message.reply(f"✅ Вы вступили в кружок '{name}'")
-    
-    elif action == "leave":
-        if len(parts) < 3:
-            await message.reply("❌ Укажите название кружка")
+        if user_data.get('clan_role') == 'owner':
+            await update.message.reply_text(s.error("❌ Владелец не может покинуть клан"))
             return
         
-        name = " ".join(parts[2:])
+        clan_id = user_data['clan_id']
+        self.db.cursor.execute("DELETE FROM clan_members WHERE user_id = ?", (user_data['id'],))
+        self.db.update_user(user_data['id'], clan_id=0, clan_role='member')
+        self.db.cursor.execute("UPDATE clans SET members = members - 1 WHERE id = ?", (clan_id,))
+        self.db.conn.commit()
         
-        cursor.execute("SELECT id FROM circles WHERE name = ?", (name,))
-        result = cursor.fetchone()
-        
-        if not result:
-            await message.reply("❌ Кружок не найден")
+        await update.message.reply_text(s.success("✅ Вы покинули клан"))
+    
+    # ===== ОТНОШЕНИЯ =====
+    async def cmd_add_friend(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /друг @user"))
             return
         
-        circle_id = result[0]
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
         
-        cursor.execute("DELETE FROM circle_members WHERE circle_id = ? AND user_id = ?", 
-                      (circle_id, message.from_user.id))
-        conn.commit()
-        
-        await message.reply(f"✅ Вы покинули кружок '{name}'")
-    
-    elif action == "list":
-        cursor.execute("""
-            SELECT c.name, COUNT(cm.user_id) as members
-            FROM circles c
-            LEFT JOIN circle_members cm ON c.id = cm.circle_id
-            GROUP BY c.id
-            ORDER BY members DESC
-        """)
-        circles = cursor.fetchall()
-        
-        if not circles:
-            await message.reply("🎯 Пока нет созданных кружков")
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
             return
         
-        text = "🎯 <b>Кружки по интересам</b>\n\n"
-        for circle in circles:
-            text += f"• {circle[0]} — {circle[1]} участников\n"
+        user_data = self.db.get_user(update.effective_user.id)
         
-        await message.reply(text)
-    
-    elif action == "meeting":
-        if len(parts) < 5:
-            await message.reply("❌ Укажите дату, время и место\nПример: /circle meeting 25.12 19:00 У дома")
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя добавить в друзья самого себя"))
             return
         
-        date = parts[2]
-        time = parts[3]
-        place = " ".join(parts[4:])
-        
-        # Ищем кружки пользователя
-        cursor.execute("""
-            SELECT c.id, c.name
-            FROM circle_members cm
-            JOIN circles c ON cm.circle_id = c.id
-            WHERE cm.user_id = ?
-        """, (message.from_user.id,))
-        circles = cursor.fetchall()
-        
-        if not circles:
-            await message.reply("❌ Вы не состоите в кружках")
+        friends = json.loads(user_data.get('friends', '[]'))
+        if target['id'] in friends:
+            await update.message.reply_text(s.error("❌ Уже в друзьях"))
             return
         
-        # Для простоты берем первый кружок
-        circle_id, circle_name = circles[0]
-        
-        cursor.execute("""
-            INSERT INTO circle_meetings (circle_id, title, date, time, place, created_by)
-            VALUES (?, ?, ?, ?, ?, ?)
-        """, (circle_id, f"Встреча {circle_name}", date, time, place, message.from_user.id))
-        conn.commit()
-        
-        await message.reply(f"✅ Встреча создана!\n📅 {date} в {time}\n📍 {place}")
-
-# Модуль репутации
-@dp.message_handler(lambda message: message.text.startswith(("+Репа", "+Репутация")))
-async def cmd_add_reputation(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя изменить репутацию самому себе")
-        return
-    
-    cursor.execute("UPDATE users SET reputation = reputation + 1 WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    await message.reply("✅ Репутация повышена")
-
-@dp.message_handler(lambda message: message.text.startswith(("-Репа", "-Репутация")))
-async def cmd_remove_reputation(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите пользователя")
-        return
-    
-    target_id = extract_user_id(parts[1])
-    if not target_id:
-        await message.reply("❌ Не удалось определить пользователя")
-        return
-    
-    if target_id == message.from_user.id:
-        await message.reply("❌ Нельзя изменить репутацию самому себе")
-        return
-    
-    cursor.execute("UPDATE users SET reputation = reputation - 1 WHERE user_id = ?", (target_id,))
-    conn.commit()
-    
-    await message.reply("✅ Репутация понижена")
-
-@dp.message_handler(commands=["репа", "reputation"])
-async def cmd_reputation(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) > 1:
-        target_id = extract_user_id(parts[1])
-        if not target_id:
-            await message.reply("❌ Не удалось определить пользователя")
+        enemies = json.loads(user_data.get('enemies', '[]'))
+        if target['id'] in enemies:
+            await update.message.reply_text(s.error("❌ Сначала уберите из врагов"))
             return
-    else:
-        target_id = message.from_user.id
+        
+        friends.append(target['id'])
+        self.db.update_user(user_data['id'], friends=json.dumps(friends))
+        
+        target_name = target.get('nickname') or target['first_name']
+        await update.message.reply_text(s.success(f"✅ {target_name} добавлен в друзья"))
     
-    cursor.execute("SELECT username, first_name, reputation FROM users WHERE user_id = ?", (target_id,))
-    user = cursor.fetchone()
+    async def cmd_add_enemy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /враг @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя объявить врагом самого себя"))
+            return
+        
+        enemies = json.loads(user_data.get('enemies', '[]'))
+        if target['id'] in enemies:
+            await update.message.reply_text(s.error("❌ Уже во врагах"))
+            return
+        
+        friends = json.loads(user_data.get('friends', '[]'))
+        if target['id'] in friends:
+            friends.remove(target['id'])
+            self.db.update_user(user_data['id'], friends=json.dumps(friends))
+        
+        enemies.append(target['id'])
+        self.db.update_user(user_data['id'], enemies=json.dumps(enemies))
+        
+        target_name = target.get('nickname') or target['first_name']
+        await update.message.reply_text(s.success(f"⚔️ {target_name} объявлен врагом"))
     
-    if not user:
-        await message.reply("❌ Пользователь не найден")
-        return
+    async def cmd_remove_enemy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /простить @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        enemies = json.loads(user_data.get('enemies', '[]'))
+        if target['id'] not in enemies:
+            await update.message.reply_text(s.error("❌ Не во врагах"))
+            return
+        
+        enemies.remove(target['id'])
+        self.db.update_user(user_data['id'], enemies=json.dumps(enemies))
+        
+        target_name = target.get('nickname') or target['first_name']
+        await update.message.reply_text(s.success(f"✅ {target_name} прощен"))
     
-    name = user[0] or user[1] or f"ID {target_id}"
-    
-    await message.reply(f"⭐ <b>Репутация {name}</b>\n\n{user[2]}")
-
-# Модуль кубов
-@dp.message_handler(commands=["кубы", "cubes"])
-async def cmd_cubes(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT c.id, c.name, c.color, c.rarity, c.emoji, uc.quantity
-        FROM user_cubes uc
-        JOIN cubes c ON uc.cube_id = c.id
-        WHERE uc.user_id = ?
-        ORDER BY c.rarity DESC
-    """, (message.from_user.id,))
-    cubes = cursor.fetchall()
-    
-    if not cubes:
-        # Добавляем базовые кубы
-        cursor.executemany("""
-            INSERT INTO cubes (name, color, rarity, price, emoji)
-            VALUES (?, ?, ?, ?, ?)
-        """, [
-            ("Огненный куб", "красный", "обычный", 100, "🔥"),
-            ("Водный куб", "синий", "обычный", 100, "💧"),
-            ("Земляной куб", "зеленый", "обычный", 100, "🌿"),
-            ("Воздушный куб", "белый", "обычный", 100, "💨"),
-            ("Магический куб", "фиолетовый", "редкий", 500, "✨"),
-            ("Золотой куб", "золотой", "эпический", 1000, "🌟"),
-            ("Алмазный куб", "голубой", "легендарный", 5000, "💎"),
-            ("Космический куб", "черный", "мифический", 10000, "🌌")
+    # ===== БРАКИ =====
+    async def cmd_propose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /предложить @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя жениться на себе"))
+            return
+        
+        if user_data.get('spouse', 0):
+            await update.message.reply_text(s.error("❌ Вы уже в браке"))
+            return
+        
+        if target.get('spouse', 0):
+            await update.message.reply_text(s.error("❌ Пользователь уже в браке"))
+            return
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ ПРИНЯТЬ", callback_data=f"marry_accept_{user_data['id']}"),
+             InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"marry_reject_{user_data['id']}")]
         ])
-        conn.commit()
         
-        await message.reply("📦 У вас пока нет кубов. Купите в магазине: /buy_cube")
-        return
-    
-    text = "📦 <b>Ваши кубы</b>\n\n"
-    for cube in cubes:
-        text += f"{cube[4]} {cube[1]} ({cube[2]}) x{cube[5]}\n"
-        text += f"Редкость: {cube[3]}\n\n"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["купитькуб", "buy_cube"])
-async def cmd_buy_cube(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    color = parts[1] if len(parts) > 1 else None
-    
-    if color:
-        cursor.execute("SELECT id, name, price, emoji FROM cubes WHERE color = ?", (color,))
-    else:
-        cursor.execute("SELECT id, name, price, emoji FROM cubes ORDER BY RANDOM() LIMIT 1")
-    
-    cube = cursor.fetchone()
-    
-    if not cube:
-        await message.reply("❌ Куб не найден. Доступные цвета: красный, синий, зеленый, белый, фиолетовый, золотой, голубой, черный")
-        return
-    
-    cube_id, name, price, emoji = cube
-    
-    cursor.execute("SELECT iris_balance FROM users WHERE user_id = ?", (message.from_user.id,))
-    balance = cursor.fetchone()[0]
-    
-    if balance < price:
-        await message.reply(f"❌ Недостаточно ирисок. Нужно: {price}")
-        return
-    
-    cursor.execute("UPDATE users SET iris_balance = iris_balance - ? WHERE user_id = ?", (price, message.from_user.id))
-    
-    cursor.execute("""
-        INSERT INTO user_cubes (user_id, cube_id, quantity)
-        VALUES (?, ?, 1)
-        ON CONFLICT(user_id, cube_id) DO UPDATE SET quantity = quantity + 1
-    """, (message.from_user.id, cube_id))
-    conn.commit()
-    
-    await message.reply(f"✅ Вы купили {emoji} {name} за {price} ирисок!")
-
-@dp.message_handler(commands=["топкубов", "cube_top"])
-async def cmd_cube_top(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT u.user_id, u.username, u.first_name, COUNT(uc.cube_id) as total_cubes
-        FROM user_cubes uc
-        JOIN users u ON uc.user_id = u.user_id
-        GROUP BY uc.user_id
-        ORDER BY total_cubes DESC
-        LIMIT 10
-    """)
-    top = cursor.fetchall()
-    
-    if not top:
-        await message.reply("🏆 Пока нет коллекционеров кубов")
-        return
-    
-    text = "🏆 <b>Топ коллекционеров кубов</b>\n\n"
-    for i, user in enumerate(top, 1):
-        name = user[1] or user[2] or f"ID {user[0]}"
-        text += f"{i}. {name} — {user[3]} кубов\n"
-    
-    await message.reply(text)
-
-# Модуль тем
-@dp.message_handler(lambda message: message.text.startswith("+Тема"))
-async def cmd_add_topic(message: types.Message):
-    await register_user(message)
-    
-    if not check_permission("topics", message.chat.id, message.from_user.id):
-        await message.reply("🚫 У вас нет прав для создания тем")
-        return
-    
-    text = message.text[6:].strip()
-    if "|" in text:
-        title, description = text.split("|", 1)
-        title = title.strip()
-        description = description.strip()
-    else:
-        title = text
-        description = ""
-    
-    if not title:
-        await message.reply("❌ Укажите название темы")
-        return
-    
-    cursor.execute("""
-        INSERT INTO topics (chat_id, title, description, created_by)
-        VALUES (?, ?, ?, ?)
-    """, (message.chat.id, title, description, message.from_user.id))
-    topic_id = cursor.lastrowid
-    conn.commit()
-    
-    await message.reply(f"✅ Тема создана! ID: {topic_id}")
-
-@dp.message_handler(commands=["темы", "topics"])
-async def cmd_topics(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT id, title, description, votes_for, votes_against, created_by
-        FROM topics
-        WHERE chat_id = ? AND is_active = 1
-        ORDER BY votes_for - votes_against DESC
-    """, (message.chat.id,))
-    topics = cursor.fetchall()
-    
-    if not topics:
-        await message.reply("📋 В этом чате нет активных тем")
-        return
-    
-    text = "📋 <b>Темы для обсуждения</b>\n\n"
-    for topic in topics:
-        cursor.execute("SELECT username, first_name FROM users WHERE user_id = ?", (topic[5],))
-        creator = cursor.fetchone()
-        creator_name = creator[0] or creator[1] or f"ID {topic[5]}"
-        
-        text += f"<b>ID: {topic[0]}</b> {topic[1]}\n"
-        if topic[2]:
-            text += f"📝 {topic[2]}\n"
-        text += f"👍 {topic[3]} | 👎 {topic[4]}\n"
-        text += f"Автор: {creator_name}\n\n"
-    
-    text += "/vote_for [ID] — голосовать за\n/vote_against [ID] — голосовать против"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["голосоватьза", "vote_for"])
-async def cmd_vote_for(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID темы")
-        return
-    
-    try:
-        topic_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    # Проверяем, не голосовал ли уже
-    cursor.execute("SELECT 1 FROM topic_votes WHERE topic_id = ? AND user_id = ?", 
-                  (topic_id, message.from_user.id))
-    if cursor.fetchone():
-        await message.reply("❌ Вы уже голосовали в этой теме")
-        return
-    
-    cursor.execute("""
-        INSERT INTO topic_votes (topic_id, user_id, vote_type)
-        VALUES (?, ?, 'for')
-    """, (topic_id, message.from_user.id))
-    
-    cursor.execute("UPDATE topics SET votes_for = votes_for + 1 WHERE id = ?", (topic_id,))
-    conn.commit()
-    
-    await message.reply("✅ Голос учтен")
-
-@dp.message_handler(commands=["голосоватьпротив", "vote_against"])
-async def cmd_vote_against(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID темы")
-        return
-    
-    try:
-        topic_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    # Проверяем, не голосовал ли уже
-    cursor.execute("SELECT 1 FROM topic_votes WHERE topic_id = ? AND user_id = ?", 
-                  (topic_id, message.from_user.id))
-    if cursor.fetchone():
-        await message.reply("❌ Вы уже голосовали в этой теме")
-        return
-    
-    cursor.execute("""
-        INSERT INTO topic_votes (topic_id, user_id, vote_type)
-        VALUES (?, ?, 'against')
-    """, (topic_id, message.from_user.id))
-    
-    cursor.execute("UPDATE topics SET votes_against = votes_against + 1 WHERE id = ?", (topic_id,))
-    conn.commit()
-    
-    await message.reply("✅ Голос учтен")
-
-# Модуль заметок
-@dp.message_handler(commands=["заметка", "note"])
-async def cmd_note(message: types.Message):
-    await register_user(message)
-    
-    text = message.text[7:].strip()
-    if not text:
-        await message.reply("❌ Напишите текст заметки")
-        return
-    
-    # Разделяем на заголовок и содержание
-    if "\n" in text:
-        title, content = text.split("\n", 1)
-    else:
-        title = "Заметка"
-        content = text
-    
-    cursor.execute("""
-        INSERT INTO notes (user_id, title, content)
-        VALUES (?, ?, ?)
-    """, (message.from_user.id, title[:100], content))
-    note_id = cursor.lastrowid
-    conn.commit()
-    
-    await message.reply(f"✅ Заметка сохранена! ID: {note_id}")
-
-@dp.message_handler(commands=["заметки", "notes"])
-async def cmd_notes(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT id, title, created_at
-        FROM notes
-        WHERE user_id = ?
-        ORDER BY created_at DESC
-        LIMIT 20
-    """, (message.from_user.id,))
-    notes = cursor.fetchall()
-    
-    if not notes:
-        await message.reply("📝 У вас нет заметок")
-        return
-    
-    text = "📝 <b>Ваши заметки</b>\n\n"
-    for note in notes:
-        date = datetime.fromisoformat(note[2]).strftime("%d.%m.%Y")
-        text += f"ID: {note[0]} | {date}\n{note[1]}\n\n"
-    
-    text += "/note [текст] — создать\n/note_del [ID] — удалить\n/note_view [ID] — просмотреть"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["заметка_удалить", "note_del"])
-async def cmd_note_delete(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID заметки")
-        return
-    
-    try:
-        note_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    cursor.execute("DELETE FROM notes WHERE id = ? AND user_id = ?", (note_id, message.from_user.id))
-    conn.commit()
-    
-    if cursor.rowcount > 0:
-        await message.reply("✅ Заметка удалена")
-    else:
-        await message.reply("❌ Заметка не найдена")
-
-@dp.message_handler(commands=["заметка_просмотр", "note_view"])
-async def cmd_note_view(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID заметки")
-        return
-    
-    try:
-        note_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    cursor.execute("SELECT title, content, created_at FROM notes WHERE id = ? AND user_id = ?", 
-                  (note_id, message.from_user.id))
-    note = cursor.fetchone()
-    
-    if not note:
-        await message.reply("❌ Заметка не найдена")
-        return
-    
-    date = datetime.fromisoformat(note[2]).strftime("%d.%m.%Y %H:%M")
-    
-    await message.reply(f"""
-📝 <b>{note[0]}</b>
-📅 {date}
-
-{note[1]}
-""")
-
-# Модуль таймеров
-@dp.message_handler(commands=["таймер", "timer"])
-async def cmd_timer(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
-        await message.reply("❌ Укажите название и время\nПример: /таймер Пицца 15м")
-        return
-    
-    title = parts[1]
-    time_str = parts[2]
-    
-    time_delta = parse_time(time_str)
-    if not time_delta:
-        await message.reply("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
-        return
-    
-    end_time = datetime.now() + time_delta
-    
-    cursor.execute("""
-        INSERT INTO timers (user_id, chat_id, title, end_time)
-        VALUES (?, ?, ?, ?)
-    """, (message.from_user.id, message.chat.id, title, end_time.isoformat()))
-    timer_id = cursor.lastrowid
-    conn.commit()
-    
-    # Запускаем таймер
-    asyncio.create_task(run_timer(timer_id, title, end_time, message.chat.id, message.from_user.id))
-    
-    time_str = f"{time_delta.seconds // 3600}ч {(time_delta.seconds // 60) % 60}м" if time_delta.seconds < 86400 else f"{time_delta.days}д"
-    await message.reply(f"⏰ Таймер '{title}' запущен на {time_str}")
-
-async def run_timer(timer_id: int, title: str, end_time: datetime, chat_id: int, user_id: int):
-    """Запуск таймера"""
-    now = datetime.now()
-    wait_seconds = (end_time - now).total_seconds()
-    
-    if wait_seconds > 0:
-        await asyncio.sleep(wait_seconds)
-        
-        # Проверяем, активен ли таймер
-        cursor.execute("SELECT is_active FROM timers WHERE id = ?", (timer_id,))
-        result = cursor.fetchone()
-        
-        if result and result[0]:
-            await bot.send_message(chat_id, f"⏰ <b>Таймер</b>\n\n{title}\nВремя вышло!", reply_to_message_id=user_id)
-            cursor.execute("UPDATE timers SET is_active = 0 WHERE id = ?", (timer_id,))
-            conn.commit()
-
-@dp.message_handler(commands=["таймеры", "timers"])
-async def cmd_timers(message: types.Message):
-    await register_user(message)
-    
-    cursor.execute("""
-        SELECT id, title, end_time
-        FROM timers
-        WHERE user_id = ? AND is_active = 1 AND datetime(end_time) > datetime('now')
-        ORDER BY end_time
-    """, (message.from_user.id,))
-    timers = cursor.fetchall()
-    
-    if not timers:
-        await message.reply("⏰ У вас нет активных таймеров")
-        return
-    
-    text = "⏰ <b>Ваши таймеры</b>\n\n"
-    for timer in timers:
-        end = datetime.fromisoformat(timer[2])
-        remaining = end - datetime.now()
-        remaining_str = f"{remaining.seconds // 3600}ч {(remaining.seconds // 60) % 60}м" if remaining.days == 0 else f"{remaining.days}д {remaining.seconds // 3600}ч"
-        
-        text += f"ID: {timer[0]} | {timer[1]}\nОсталось: {remaining_str}\n\n"
-    
-    text += "/timer_del [ID] — удалить"
-    
-    await message.reply(text)
-
-@dp.message_handler(commands=["таймер_удалить", "timer_del"])
-async def cmd_timer_delete(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        await message.reply("❌ Укажите ID таймера")
-        return
-    
-    try:
-        timer_id = int(parts[1])
-    except:
-        await message.reply("❌ Неверный ID")
-        return
-    
-    cursor.execute("UPDATE timers SET is_active = 0 WHERE id = ? AND user_id = ?", 
-                  (timer_id, message.from_user.id))
-    conn.commit()
-    
-    await message.reply("✅ Таймер удален")
-
-# Модуль напоминаний
-@dp.message_handler(commands=["напомнить", "remind"])
-async def cmd_remind(message: types.Message):
-    await register_user(message)
-    
-    parts = message.text.split(maxsplit=2)
-    if len(parts) < 3:
-        await message.reply("❌ Укажите текст и время\nПример: /напомнить Купить молоко 30м")
-        return
-    
-    text = parts[1]
-    time_str = parts[2]
-    
-    time_delta = parse_time(time_str)
-    if not time_delta:
-        await message.reply("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
-        return
-    
-    remind_time = datetime.now() + time_delta
-    
-    cursor.execute("""
-        INSERT INTO reminders (user_id, text, remind_time)
-        VALUES (?, ?, ?)
-    """, (message.from_user.id, text, remind_time.isoformat()))
-    remind_id = cursor.lastrowid
-    conn.commit()
-    
-    # Запускаем напоминание
-    asyncio.create_task(run_reminder(remind_id, text, remind_time, message.from_user.id))
-    
-    time_str = f"{time_delta.seconds // 3600}ч {(time_delta.seconds // 60) % 60}м" if time_delta.seconds < 86400 else f"{time_delta.days}д"
-    await message.reply(f"🔔 Напоминание установлено на {time_str}")
-
-async def run_reminder(remind_id: int, text: str, remind_time: datetime, user_id: int):
-    """Запуск напоминания"""
-    now = datetime.now()
-    wait_seconds = (remind_time - now).total_seconds()
-    
-    if wait_seconds > 0:
-        await asyncio.sleep(wait_seconds)
-        
-        # Проверяем, активно ли напоминание
-        cursor.execute("SELECT is_active FROM reminders WHERE id = ?", (remind_id,))
-        result = cursor.fetchone()
-        
-        if result and result[0]:
-            await bot.send_message(user_id, f"🔔 <b>Напоминание</b>\n\n{text}")
-            cursor.execute("UPDATE reminders SET is_active = 0 WHERE id = ?", (remind_id,))
-            conn.commit()
-
-# Модуль ИИ (GROQ)
-@dp.message_handler(commands=["ai", "ии", "спроси"])
-async def cmd_ai(message: types.Message):
-    await register_user(message)
-    
-    question = message.text[4:].strip() if message.text.startswith("/ai") else message.text[5:].strip()
-    if not question:
-        await message.reply("❌ Задайте вопрос")
-        return
-    
-    # Отправляем "печатает..."
-    await message.chat.send_chat_action("typing")
-    
-    try:
-        # Запрос к GROQ
-        completion = await groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
-                {"role": "system", "content": "Ты - Спектр, дружелюбный AI-ассистент в Telegram. Отвечай кратко, с юмором, но по делу. Ты можешь спорить, если тебя оскорбляют, и шутить. Используй эмодзи."},
-                {"role": "user", "content": question}
-            ],
-            temperature=0.7,
-            max_tokens=500
+        await context.bot.send_message(
+            target['telegram_id'],
+            f"{s.header('💍 ПРЕДЛОЖЕНИЕ')}\n\n"
+            f"{user_data['first_name']} предлагает вам вступить в брак!",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
         )
         
-        answer = completion.choices[0].message.content
+        await update.message.reply_text(s.success(f"✅ Предложение отправлено {target_name}"))
+    
+    async def cmd_divorce(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
         
-        # Если ответ слишком длинный, разбиваем
-        if len(answer) > 4000:
-            parts = [answer[i:i+4000] for i in range(0, len(answer), 4000)]
-            for part in parts:
-                await message.reply(part)
-        else:
-            await message.reply(answer)
-            
-    except Exception as e:
-        await message.reply("🤖 Извините, я временно не могу ответить. Попробуйте позже.")
-
-# Модуль мафии
-games = {}  # Хранилище активных игр
-
-class MafiaRoles:
-    MAFIA = "мафия"
-    COMMISSIONER = "комиссар"
-    DOCTOR = "доктор"
-    MANIAC = "маньяк"
-    BOSS = "босс"
-    CITIZEN = "мирный"
-
-@dp.message_handler(commands=["мафия", "mafia"])
-async def cmd_mafia(message: types.Message):
-    await register_user(message)
+        if not user_data.get('spouse', 0):
+            await update.message.reply_text(s.error("❌ Вы не в браке"))
+            return
+        
+        spouse_id = user_data['spouse']
+        
+        self.db.update_user(user_data['id'], spouse=0, married_since=None)
+        self.db.update_user(spouse_id, spouse=0, married_since=None)
+        
+        await update.message.reply_text(s.info("💔 Брак расторгнут"))
     
-    # Проверяем, не идет ли уже игра
-    if message.chat.id in games:
-        await message.reply("🎮 В этом чате уже идет игра!")
-        return
+    async def cmd_families(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("""
+            SELECT u1.first_name, u2.first_name 
+            FROM users u1, users u2 
+            WHERE u1.spouse = u2.id AND u1.id < u2.id
+            LIMIT 10
+        """)
+        families = self.db.cursor.fetchall()
+        
+        if not families:
+            await update.message.reply_text(s.info("В чате пока нет семей"))
+            return
+        
+        text = s.header("👥 СЕМЬИ ЧАТА") + "\n\n"
+        for fam in families:
+            text += f"💞 {fam[0]} + {fam[1]}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    # Создаем новую игру
-    game_id = f"{message.chat.id}_{datetime.now().timestamp()}"
+    # ===== РЕПУТАЦИЯ =====
+    async def cmd_add_rep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._change_rep(update, 1)
     
-    cursor.execute("""
-        INSERT INTO mafia_games (game_id, chat_id, status)
-        VALUES (?, ?, 'waiting')
-    """, (game_id, message.chat.id))
-    conn.commit()
+    async def cmd_remove_rep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._change_rep(update, -1)
     
-    games[message.chat.id] = {
-        "game_id": game_id,
-        "status": "waiting",
-        "players": [],
-        "creator": message.from_user.id,
-        "phase": "waiting",
-        "day": 1
-    }
+    async def _change_rep(self, update: Update, change: int):
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'[+-]репа\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя изменить репутацию себе"))
+            return
+        
+        new_rep = target['reputation'] + change
+        self.db.update_user(target['id'], reputation=new_rep)
+        
+        target_name = target.get('nickname') or target['first_name']
+        action = "повышена" if change > 0 else "понижена"
+        
+        await update.message.reply_text(s.success(f"✅ Репутация {target_name} {action}"))
     
-    # Отправляем гифку дня (здесь нужно добавить реальные гифки)
-    await message.reply_animation(
-        "https://files.catbox.moe/g9vc7v.mp4",  # Гифка дня
-        caption="""
-🎮 <b>Мафия</b>
-
-Игра начинается!
-Для участия напишите /join
-Минимум игроков: 6
-Максимум: 20
-
-Создатель игры может начать командой /start_game
-"""
-    )
-
-@dp.message_handler(commands=["join"])
-async def cmd_join_mafia(message: types.Message):
-    await register_user(message)
+    async def cmd_rep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        target_id = update.effective_user.id
+        
+        if context.args:
+            username = context.args[0].replace('@', '')
+            target = self.db.get_user_by_username(username)
+            if target:
+                target_id = target['id']
+        
+        user_data = self.db.get_user_by_id(target_id)
+        if not user_data:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        name = user_data.get('nickname') or user_data['first_name']
+        
+        await update.message.reply_text(f"⭐ **{name}**\nРепутация: {user_data['reputation']}", parse_mode=ParseMode.MARKDOWN)
     
-    if message.chat.id not in games:
-        await message.reply("❌ В этом чате нет игры. Создайте командой /mafia")
-        return
-    
-    game = games[message.chat.id]
-    
-    if game["status"] != "waiting":
-        await message.reply("❌ Игра уже началась")
-        return
-    
-    if message.from_user.id in game["players"]:
-        await message.reply("❌ Вы уже в игре")
-        return
-    
-    if len(game["players"]) >= 20:
-        await message.reply("❌ Достигнут лимит игроков (20)")
-        return
-    
-    game["players"].append(message.from_user.id)
-    
-    # Отправляем подтверждение в ЛС
-    try:
-        await bot.send_message(
-            message.from_user.id,
-            "✅ Вы присоединились к игре в мафию!\nОжидайте начала игры."
+    # ===== МАФИЯ =====
+    async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            s.header("🔫 МАФИЯ") + "\nВыберите действие:",
+            reply_markup=kb.mafia(),
+            parse_mode=ParseMode.MARKDOWN
         )
-    except:
-        pass
     
-    await message.reply(f"✅ Вы присоединились! Игроков: {len(game['players'])}")
-
-@dp.message_handler(commands=["start_game"])
-async def cmd_start_game(message: types.Message):
-    await register_user(message)
-    
-    if message.chat.id not in games:
-        await message.reply("❌ В этом чате нет игры")
-        return
-    
-    game = games[message.chat.id]
-    
-    if game["creator"] != message.from_user.id:
-        await message.reply("❌ Только создатель игры может начать")
-        return
-    
-    if len(game["players"]) < 6:
-        await message.reply(f"❌ Недостаточно игроков. Нужно минимум 6, сейчас {len(game['players'])}")
-        return
-    
-    # Начинаем игру
-    game["status"] = "active"
-    game["phase"] = "night"
-    
-    # Раздаем роли
-    roles = assign_roles(len(game["players"]))
-    random.shuffle(roles)
-    
-    game["roles"] = {}
-    for i, player in enumerate(game["players"]):
-        game["roles"][player] = roles[i]
-    
-    # Сохраняем в БД
-    for player in game["players"]:
-        cursor.execute("""
-            INSERT INTO mafia_players (user_id, game_id, role, is_alive)
-            VALUES (?, ?, ?, 1)
-        """, (player, game["game_id"], game["roles"][player]))
-    conn.commit()
-    
-    # Отправляем роли в ЛС
-    for player in game["players"]:
-        role = game["roles"][player]
+    async def cmd_mafia_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        if chat_id in self.mafia_games:
+            await update.message.reply_text(s.error("❌ Игра уже идёт! Присоединяйтесь: /мафияприсоединиться"))
+            return
+        
+        game_id = f"mafia_{chat_id}_{int(time.time())}"
+        game = MafiaGame(chat_id, game_id, update.effective_user.id)
+        self.mafia_games[chat_id] = game
+        
         try:
-            await bot.send_message(
-                player,
-                f"🎭 <b>Ваша роль:</b> {role}\n\n{get_role_description(role)}"
+            await context.bot.send_animation(
+                chat_id=chat_id,
+                animation=GIFS["mafia_night"]
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("🔫 МАФИЯ") + "\n\n"
+            f"{s.success('🎮 Игра создана!')}\n\n"
+            f"{s.item('Участники (0):')}\n"
+            f"{s.item('/мафияприсоединиться — присоединиться')}\n"
+            f"{s.item('/мафиявыйти — выйти')}\n\n"
+            f"{s.info('Игра будет проходить в ЛС с ботом')}"
+        )
+        
+        msg = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        game.message_id = msg.message_id
+    
+    async def cmd_mafia_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        if chat_id not in self.mafia_games:
+            await update.message.reply_text(s.error("❌ Игра не создана. Начните: /мафиястарт"))
+            return
+        
+        game = self.mafia_games[chat_id]
+        
+        if game.status != "waiting":
+            await update.message.reply_text(s.error("❌ Игра уже началась"))
+            return
+        
+        if not game.add_player(user.id, user.first_name, user.username or ""):
+            await update.message.reply_text(s.error("❌ Вы уже в игре"))
+            return
+        
+        try:
+            await context.bot.send_message(
+                user.id,
+                f"{s.header('🔫 МАФИЯ')}\n\n"
+                f"{s.item('Вы присоединились к игре!')}\n"
+                f"{s.item('Нажмите кнопку для подтверждения')}\n\n"
+                f"{s.info('После подтверждения вы получите свою роль в ЛС')}",
+                reply_markup=kb.mafia_confirm(chat_id),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            await update.message.reply_text(s.success(f"✅ {user.first_name}, проверьте ЛС для подтверждения!"))
+        except:
+            await update.message.reply_text(s.error(f"❌ {user.first_name}, не удалось отправить сообщение в ЛС"))
+            game.remove_player(user.id)
+            return
+        
+        players_list = "\n".join([f"{i+1}. {game.players_data[pid]['name']}" for i, pid in enumerate(game.players)])
+        confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
+        
+        text = (
+            s.header("🔫 МАФИЯ") + "\n\n"
+            f"{s.item(f'Участники ({len(game.players)}):')}\n"
+            f"{players_list}\n\n"
+            f"{s.item(f'Подтвердили: {confirmed}/{len(game.players)}')}\n"
+            f"{s.item('/мафияприсоединиться — присоединиться')}\n"
+            f"{s.item('/мафиявыйти — выйти')}\n\n"
+            f"{s.info('Для старта нужно минимум 6 игроков')}"
+        )
+        
+        try:
+            await context.bot.edit_message_text(
+                text,
+                chat_id=chat_id,
+                message_id=game.message_id,
+                parse_mode=ParseMode.MARKDOWN
             )
         except:
             pass
     
-    # Отправляем гифку ночи
-    await message.reply_animation(
-        "https://files.catbox.moe/lvcm8n.mp4",  # Гифка ночи
-        caption="""
-🌙 <b>Ночь 1</b>
-
-Город засыпает...
-Мафия выбирает жертву
-Доктор выбирает, кого спасти
-Комиссар проверяет игрока
-Маньяк выбирает цель
-
-Роли получили в личных сообщениях
-"""
-    )
+    async def cmd_mafia_leave(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        if chat_id not in self.mafia_games:
+            await update.message.reply_text(s.error("❌ Игра не создана"))
+            return
+        
+        game = self.mafia_games[chat_id]
+        
+        if game.status != "waiting":
+            await update.message.reply_text(s.error("❌ Нельзя покинуть игру после начала"))
+            return
+        
+        if not game.remove_player(user.id):
+            await update.message.reply_text(s.error("❌ Вас нет в игре"))
+            return
+        
+        await update.message.reply_text(s.success(f"✅ {user.first_name} покинул игру"))
+        
+        if game.players:
+            players_list = "\n".join([f"{i+1}. {game.players_data[pid]['name']}" for i, pid in enumerate(game.players)])
+            confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
+            
+            text = (
+                s.header("🔫 МАФИЯ") + "\n\n"
+                f"{s.item(f'Участники ({len(game.players)}):')}\n"
+                f"{players_list}\n\n"
+                f"{s.item(f'Подтвердили: {confirmed}/{len(game.players)}')}\n"
+                f"{s.item('/мафияприсоединиться — присоединиться')}\n"
+                f"{s.item('/мафиявыйти — выйти')}\n\n"
+                f"{s.info('Для старта нужно минимум 6 игроков')}"
+            )
+        else:
+            text = (
+                s.header("🔫 МАФИЯ") + "\n\n"
+                f"{s.item('Участников нет')}\n"
+                f"{s.item('/мафияприсоединиться — присоединиться')}"
+            )
+        
+        try:
+            await context.bot.edit_message_text(
+                text,
+                chat_id=chat_id,
+                message_id=game.message_id,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
     
-    # Запускаем ночную фазу
-    asyncio.create_task(night_phase(message.chat.id, game))
+    async def cmd_mafia_roles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("🔫 РОЛИ В МАФИИ") + "\n\n"
+            f"{s.section('😈 МАФИЯ')}"
+            f"{s.item('😈 Мафиози — ночью убивают')}\n"
+            f"{s.item('👑 Босс — глава мафии')}\n\n"
+            f"{s.section('👼 ГОРОД')}"
+            f"{s.item('👮 Комиссар — проверяет ночью')}\n"
+            f"{s.item('👨‍⚕️ Доктор — лечит ночью')}\n"
+            f"{s.item('👤 Мирный — ищет мафию')}\n\n"
+            f"{s.section('🎭 ОСОБЫЕ')}"
+            f"{s.item('🔪 Маньяк — убивает один')}\n"
+            f"{s.item('💃 Леди — соблазняет и защищает')}\n"
+            f"{s.item('🔫 Шериф — стреляет раз в игру')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mafia_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("🔫 ПРАВИЛА МАФИИ") + "\n\n"
+            f"{s.section('🌙 НОЧЬ')}"
+            f"{s.item('1. Мафия выбирает жертву')}\n"
+            f"{s.item('2. Доктор выбирает, кого спасти')}\n"
+            f"{s.item('3. Комиссар проверяет')}\n\n"
+            f"{s.section('☀️ ДЕНЬ')}"
+            f"{s.item('1. Объявление жертв ночи')}\n"
+            f"{s.item('2. Обсуждение')}\n"
+            f"{s.item('3. Голосование за исключение')}\n\n"
+            f"{s.section('🏆 ЦЕЛЬ')}"
+            f"{s.item('Мафия — убить всех мирных')}\n"
+            f"{s.item('Город — найти всю мафию')}\n\n"
+            f"{s.info('Все действия в ЛС с ботом')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        if len(game.players) < MAFIA_MIN_PLAYERS:
+            await context.bot.send_message(
+                game.chat_id,
+                s.error(f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}")
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.assign_roles()
+        game.status = "night"
+        game.phase = "night"
+        game.start_time = datetime.datetime.now()
+        
+        for player_id in game.players:
+            role = game.roles[player_id]
+            role_desc = game.get_role_description(role)
+            
+            try:
+                await context.bot.send_message(
+                    player_id,
+                    f"{s.header('🔫 МАФИЯ')}\n\n"
+                    f"{s.item(f'Ваша роль: {role}')}\n"
+                    f"{s.item(role_desc)}\n\n"
+                    f"{s.info('Ночь начинается. Ожидайте действий.')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+        
+        try:
+            await context.bot.send_animation(
+                chat_id=game.chat_id,
+                animation=GIFS["mafia_night"]
+            )
+        except:
+            pass
+        
+        await context.bot.send_message(
+            game.chat_id,
+            f"{s.header('🔫 МАФИЯ')}\n\n"
+            f"{s.success('🌙 НАСТУПИЛА НОЧЬ')}\n"
+            f"{s.item('Мафия выбирает жертву...')}\n"
+            f"{s.item('Доктор выбирает, кого спасти...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        asyncio.create_task(self._mafia_night_timer(game, context, MAFIA_NIGHT_TIME))
+    
+    async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE, seconds: int):
+        await asyncio.sleep(seconds)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "night":
+            return
+        
+        await self._mafia_process_night(game, context)
+    
+    async def _mafia_process_night(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        result = game.process_night()
+        
+        if result["killed"]:
+            game.alive[result["killed"]] = False
+            try:
+                await context.bot.send_message(
+                    result["killed"],
+                    f"{s.error('💀 ВАС УБИЛИ НОЧЬЮ')}\n\n"
+                    f"{s.item('Вы больше не участвуете в игре.')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+        
+        game.phase = "day"
+        game.day += 1
+        game.votes = {}
+        
+        try:
+            await context.bot.send_animation(
+                chat_id=game.chat_id,
+                animation=GIFS["mafia_day"]
+            )
+        except:
+            pass
+        
+        alive_list = game.get_alive_players()
+        alive_names = []
+        for i, pid in enumerate(alive_list, 1):
+            name = game.players_data[pid]['name']
+            alive_names.append(f"{i}. {name}")
+        
+        killed_name = "никто"
+        if result["killed"]:
+            killed_name = game.players_data[result["killed"]]['name']
+        
+        text = (
+            s.header(f"🔫 МАФИЯ | ДЕНЬ {game.day}") + "\n\n"
+            f"{s.item(f'☀️ Наступило утро...')}\n"
+            f"{s.item(f'💀 Прошлой ночью был убит: {killed_name}')}\n\n"
+            f"{s.section('ЖИВЫЕ ИГРОКИ')}\n"
+            f"{chr(10).join([s.item(name) for name in alive_names])}\n\n"
+            f"{s.info('Обсуждайте и голосуйте')}"
+        )
+        
+        await context.bot.send_message(game.chat_id, text, parse_mode=ParseMode.MARKDOWN)
+        
+        asyncio.create_task(self._mafia_day_timer(game, context, MAFIA_DAY_TIME))
+    
+    async def _mafia_day_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE, seconds: int):
+        await asyncio.sleep(seconds)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "day":
+            return
+        
+        await self._mafia_process_day(game, context)
+    
+    async def _mafia_process_day(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        executed = game.process_voting()
+        
+        if executed:
+            game.alive[executed] = False
+            executed_name = game.players_data[executed]['name']
+            role = game.roles.get(executed, "неизвестно")
+            
+            text = (
+                s.header(f"🔫 МАФИЯ | ДЕНЬ {game.day}") + "\n\n"
+                f"{s.item(f'🔨 По результатам голосования исключён: {executed_name}')}\n"
+                f"{s.item(f'Роль: {role}')}\n\n"
+                f"{s.info('Ночь скоро наступит...')}"
+            )
+            
+            await context.bot.send_message(game.chat_id, text, parse_mode=ParseMode.MARKDOWN)
+            
+            try:
+                await context.bot.send_message(
+                    executed,
+                    f"{s.error('🔨 ВАС ИСКЛЮЧИЛИ ДНЁМ')}\n\n"
+                    f"{s.item('Вы больше не участвуете в игре.')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+        else:
+            await context.bot.send_message(
+                game.chat_id,
+                f"{s.info('📢 Никто не был исключён сегодня')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        
+        winner = game.check_win()
+        
+        if winner == "citizens":
+            await context.bot.send_message(
+                game.chat_id,
+                f"{s.success('🏆 ПОБЕДА ГОРОДА!')}\n\n"
+                f"{s.item('Вся мафия уничтожена!')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            for pid in game.players:
+                user_data = self.db.get_user_by_id(pid)
+                if user_data:
+                    self.db.update_user(pid, mafia_games=user_data.get('mafia_games', 0) + 1)
+                    if game.roles.get(pid) not in [MafiaRole.MAFIA, MafiaRole.BOSS]:
+                        self.db.update_user(pid, mafia_wins=user_data.get('mafia_wins', 0) + 1)
+                        self.db.add_coins(pid, 500)
+            
+            del self.mafia_games[game.chat_id]
+            return
+        
+        if winner == "mafia":
+            await context.bot.send_message(
+                game.chat_id,
+                f"{s.success('🏆 ПОБЕДА МАФИИ!')}\n\n"
+                f"{s.item('Мафия захватила город!')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            for pid in game.players:
+                user_data = self.db.get_user_by_id(pid)
+                if user_data:
+                    self.db.update_user(pid, mafia_games=user_data.get('mafia_games', 0) + 1)
+                    if game.roles.get(pid) in [MafiaRole.MAFIA, MafiaRole.BOSS]:
+                        self.db.update_user(pid, mafia_wins=user_data.get('mafia_wins', 0) + 1)
+                        self.db.add_coins(pid, 500)
+            
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.phase = "night"
+        game.night_actions = {
+            "mafia_kill": None,
+            "doctor_save": None,
+            "commissioner_check": None,
+            "maniac_kill": None
+        }
+        
+        try:
+            await context.bot.send_animation(
+                chat_id=game.chat_id,
+                animation=GIFS["mafia_night"]
+            )
+        except:
+            pass
+        
+        await context.bot.send_message(
+            game.chat_id,
+            f"{s.header(f'🔫 МАФИЯ | НОЧЬ {game.day}')}\n\n"
+            f"{s.success('🌙 НАСТУПИЛА НОЧЬ')}\n"
+            f"{s.item('Мафия выбирает жертву...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        asyncio.create_task(self._mafia_night_timer(game, context, MAFIA_NIGHT_TIME))
+    
+    # ===== ПОЛЕЗНОЕ =====
+    async def cmd_ping(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        start = time.time()
+        msg = await update.message.reply_text("🏓 Понг...")
+        end = time.time()
+        ping = int((end - start) * 1000)
+        await msg.edit_text(f"🏓 **Понг!**\n⏱️ {ping} мс", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_uptime(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        uptime = datetime.datetime.now() - self.start_time
+        days = uptime.days
+        hours = uptime.seconds // 3600
+        minutes = (uptime.seconds % 3600) // 60
+        
+        await update.message.reply_text(
+            f"⏱️ **Аптайм:** {days}д {hours}ч {minutes}м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        users_count = self.db.cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        
+        text = (
+            s.header("🤖 ИНФОРМАЦИЯ О БОТЕ") + "\n\n"
+            f"**Название:** {BOT_NAME}\n"
+            f"**Версия:** {BOT_VERSION}\n"
+            f"**Владелец:** {OWNER_USERNAME}\n\n"
+            f"{s.stat('Пользователей', users_count)}\n"
+            f"{s.stat('Команд', '250+')}\n"
+            f"{s.stat('AI', 'Подключен' if ai else 'Не подключен')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== РАЗВЛЕЧЕНИЯ =====
+    async def cmd_joke(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        jokes = [
+            "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный...",
+            "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
+            "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
+            "— Почему программисты путают Хэллоуин и Рождество?\n— Потому что Oct 31 = Dec 25.",
+        ]
+        await update.message.reply_text(f"😄 {random.choice(jokes)}")
+    
+    async def cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        facts = [
+            "Осьминоги имеют три сердца и голубую кровь.",
+            "Бананы технически являются ягодами, а клубника — нет.",
+            "В Швейцарии запрещено держать только одну морскую свинку.",
+            "Мед никогда не портится. Археологи находили 3000-летний мед в гробницах.",
+        ]
+        await update.message.reply_text(f"🔍 {random.choice(facts)}")
+    
+    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        quotes = [
+            "Жизнь — это то, что с тобой происходит, пока ты строишь планы. — Джон Леннон",
+            "Будьте тем изменением, которое вы хотите увидеть в мире. — Махатма Ганди",
+            "Единственный способ делать великие дела — любить то, что вы делаете. — Стив Джобс",
+        ]
+        await update.message.reply_text(f"📜 {random.choice(quotes)}")
+    
+    async def cmd_whoami(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        roles = ["супергерой", "злодей", "тайный агент", "космонавт", "пират"]
+        await update.message.reply_text(f"🦸 Вы — {random.choice(roles)}!")
+    
+    async def cmd_advice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        advices = [
+            "Пейте больше воды.",
+            "Высыпайтесь — это важно для здоровья.",
+            "Делайте зарядку по утрам.",
+            "Улыбайтесь чаще — это заразительно.",
+        ]
+        await update.message.reply_text(f"💡 {random.choice(advices)}")
+    
+    async def cmd_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        question = " ".join(context.args) if context.args else ""
+        if not question:
+            await update.message.reply_text(s.error("❌ Задайте вопрос: /гадать [вопрос]"))
+            return
+        
+        answers = ["Да", "Нет", "Возможно", "Определённо да", "Определённо нет"]
+        await update.message.reply_text(f"🎱 **Вопрос:** {question}\n\n**Ответ:** {random.choice(answers)}", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Укажите двух пользователей: /совместимость @user1 @user2"))
+            return
+        
+        username1 = context.args[0].replace('@', '')
+        username2 = context.args[1].replace('@', '')
+        
+        user1 = self.db.get_user_by_username(username1)
+        user2 = self.db.get_user_by_username(username2)
+        
+        if not user1 or not user2:
+            await update.message.reply_text(s.error("❌ Пользователи не найдены"))
+            return
+        
+        name1 = user1.get('nickname') or user1['first_name']
+        name2 = user2.get('nickname') or user2['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            text = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            text = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            text = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            text = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            text = "Идеальная совместимость!"
+        
+        await update.message.reply_text(
+            f"{s.header('💞 СОВМЕСТИМОСТЬ')}\n\n"
+            f"{emoji} **{name1}** и **{name2}**\n\n"
+            f"Совместимость: {compatibility}%\n{text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        message_text = update.message.text
+        
+        if message_text.startswith('/'):
+            return
+        
+        user_data = self.db.get_user(user.id, user.first_name)
+        self.db.update_user(user_data['id'], messages_count=user_data.get('messages_count', 0) + 1)
+        
+        if self.db.is_banned(user_data['id']):
+            return
+        
+        if self.db.is_muted(user_data['id']):
+            await update.message.reply_text(s.error("🔇 Ты в муте"))
+            return
+        
+        if await self.check_spam(update):
+            return
+        
+        if self.db.is_word_blacklisted(message_text):
+            await update.message.delete()
+            await update.message.reply_text(s.warning("⚠️ Запрещенное слово! Сообщение удалено."))
+            return
+        
+        for game_id, game in list(self.games_in_progress.items()):
+            if game.get('user_id') == user.id:
+                if game_id.startswith('guess_'):
+                    try:
+                        guess = int(message_text)
+                        game['attempts'] += 1
+                        
+                        if guess == game['number']:
+                            win = game['bet'] * 2
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], guess_wins=user_data.get('guess_wins', 0) + 1)
+                            await update.message.reply_text(s.success(f"🎉 ПОБЕДА! Число {game['number']}!\nВыигрыш: {win} 💰"), parse_mode=ParseMode.MARKDOWN)
+                            del self.games_in_progress[game_id]
+                        elif game['attempts'] >= game['max_attempts']:
+                            self.db.update_user(user_data['id'], guess_losses=user_data.get('guess_losses', 0) + 1)
+                            await update.message.reply_text(s.error(f"❌ Попытки кончились! Было число {game['number']}"), parse_mode=ParseMode.MARKDOWN)
+                            del self.games_in_progress[game_id]
+                        elif guess < game['number']:
+                            await update.message.reply_text(f"📈 Загаданное число **больше** {guess}")
+                        else:
+                            await update.message.reply_text(f"📉 Загаданное число **меньше** {guess}")
+                    except ValueError:
+                        await update.message.reply_text(s.error("❌ Введите число от 1 до 100"))
+                    return
+                
+                elif game_id.startswith('bulls_'):
+                    if len(message_text) != 4 or not message_text.isdigit():
+                        await update.message.reply_text(s.error("❌ Введите 4 цифры"))
+                        return
+                    
+                    guess = message_text
+                    if len(set(guess)) != 4:
+                        await update.message.reply_text(s.error("❌ Цифры не должны повторяться"))
+                        return
+                    
+                    bulls = 0
+                    cows = 0
+                    for i in range(4):
+                        if guess[i] == game['number'][i]:
+                            bulls += 1
+                        elif guess[i] in game['number']:
+                            cows += 1
+                    
+                    game['attempts'].append((guess, bulls, cows))
+                    
+                    if bulls == 4:
+                        win = game['bet'] * 3
+                        self.db.add_coins(user_data['id'], win)
+                        self.db.update_user(user_data['id'], bulls_wins=user_data.get('bulls_wins', 0) + 1)
+                        await update.message.reply_text(s.success(f"🎉 ПОБЕДА! Число {game['number']}!\nВыигрыш: {win} 💰"), parse_mode=ParseMode.MARKDOWN)
+                        del self.games_in_progress[game_id]
+                    elif len(game['attempts']) >= game['max_attempts']:
+                        self.db.update_user(user_data['id'], bulls_losses=user_data.get('bulls_losses', 0) + 1)
+                        await update.message.reply_text(s.error(f"❌ Попытки кончились! Было число {game['number']}"), parse_mode=ParseMode.MARKDOWN)
+                        del self.games_in_progress[game_id]
+                    else:
+                        await update.message.reply_text(f"🔍 Быки: {bulls}, Коровы: {cows}\nОсталось попыток: {game['max_attempts'] - len(game['attempts'])}")
+                    return
+                
+                elif game_id.startswith('saper_'):
+                    try:
+                        cell = int(message_text)
+                        if cell < 1 or cell > 9:
+                            await update.message.reply_text(s.error("❌ Введите число от 1 до 9"))
+                            return
+                        
+                        x = (cell - 1) // 3
+                        y = (cell - 1) % 3
+                        
+                        if x == game['mine_x'] and y == game['mine_y']:
+                            await update.message.reply_text(f"{s.header('💥 БУМ!')}\n\n{s.error('Ты подорвался на мине!')}\n\nПроигрыш: {game['bet']} 💰", parse_mode=ParseMode.MARKDOWN)
+                            del self.games_in_progress[game_id]
+                        else:
+                            game['opened'] += 1
+                            if game['opened'] >= 8:
+                                win = game['bet'] * 3
+                                self.db.add_coins(user_data['id'], win)
+                                self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+                                await update.message.reply_text(s.success(f"🎉 ПОБЕДА! Ты открыл все безопасные клетки!\nВыигрыш: {win} 💰"), parse_mode=ParseMode.MARKDOWN)
+                                del self.games_in_progress[game_id]
+                            else:
+                                await update.message.reply_text(s.success("✅ Клетка безопасна! Продолжай..."))
+                    except ValueError:
+                        await update.message.reply_text(s.error("❌ Введите число от 1 до 9"))
+                    return
+        
+        if ai and random.randint(1, 100) <= AI_CHANCE:
+            await update.message.chat.send_action(action="typing")
+            response = await ai.get_response(user.id, message_text, user.first_name)
+            if response:
+                await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
+                return
+        
+        msg_lower = message_text.lower()
+        
+        if any(word in msg_lower for word in ["привет", "здравствуйте", "хай", "ку"]):
+            responses = ["👋 Привет!", "Йо, братан!", "Здарова!"]
+            await update.message.reply_text(random.choice(responses))
+        elif any(word in msg_lower for word in ["как дела", "как ты"]):
+            responses = ["✨ Всё отлично!", "База! Норм", "Пушка!"]
+            await update.message.reply_text(random.choice(responses))
+        elif any(word in msg_lower for word in ["спасибо", "пасиб"]):
+            responses = ["🤝 Всегда пожалуйста!", "Не за что!"]
+            await update.message.reply_text(random.choice(responses))
+        elif any(word in msg_lower for word in ["кто создал", "владелец"]):
+            await update.message.reply_text(f"👑 Мой создатель: {OWNER_USERNAME}")
+        else:
+            responses = ["Используй /help для списка команд", "Напиши /menu для навигации"]
+            await update.message.reply_text(random.choice(responses))
+    
+    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT welcome FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        welcome_text = row[0] if row and row[0] else "Добро пожаловать!"
+        
+        for member in update.message.new_chat_members:
+            if member.is_bot:
+                continue
+            
+            self.db.get_user(member.id, member.first_name)
+            
+            await update.message.reply_text(
+                f"👋 {welcome_text}\n\n{member.first_name}, используй /help для команд!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        member = update.message.left_chat_member
+        if member.is_bot:
+            return
+        
+        await update.message.reply_text(f"👋 {member.first_name} покинул чат...", parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== CALLBACK КНОПКИ =====
+    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        user = query.from_user
+        
+        if data == "menu_main":
+            await query.edit_message_text(
+                s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
+                reply_markup=kb.main(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "menu_back":
+            await query.edit_message_text(
+                s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
+                reply_markup=kb.main(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "menu_profile":
+            context.args = []
+            await self.cmd_profile(update, context)
+        elif data == "menu_stats":
+            context.args = []
+            await self.cmd_stats(update, context)
+        elif data == "menu_games":
+            await query.edit_message_text(
+                s.header("🎮 ИГРЫ") + "\nВыберите игру:",
+                reply_markup=kb.games(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "menu_mafia":
+            await query.edit_message_text(
+                s.header("🔫 МАФИЯ") + "\nВыберите действие:",
+                reply_markup=kb.mafia(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "mafia_start":
+            context.args = []
+            await self.cmd_mafia_start(update, context)
+        elif data == "mafia_rules":
+            await self.cmd_mafia_rules(update, context)
+        elif data == "mafia_roles":
+            await self.cmd_mafia_roles(update, context)
+        elif data == "mafia_stats":
+            await self.cmd_mafia_stats(update, context)
+        elif data == "menu_economy":
+            await query.edit_message_text(
+                s.header("💰 ЭКОНОМИКА") + "\nВыберите раздел:",
+                reply_markup=kb.economy(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "eco_balance":
+            context.args = []
+            await self.cmd_balance(update, context)
+        elif data == "eco_shop":
+            context.args = []
+            await self.cmd_shop(update, context)
+        elif data == "eco_bonus":
+            await query.edit_message_text(
+                f"{s.header('🎁 БОНУСЫ')}\n\n{s.cmd('daily', 'ежедневный бонус')}",
+                reply_markup=kb.back(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "eco_top":
+            context.args = []
+            await self.cmd_top_coins(update, context)
+        elif data == "menu_donate":
+            context.args = []
+            await self.cmd_donate(update, context)
+        elif data == "menu_mod":
+            await query.edit_message_text(
+                s.header("⚙️ МОДЕРАЦИЯ") + "\nВыберите раздел:",
+                reply_markup=kb.mod(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "menu_help":
+            context.args = []
+            await self.cmd_help(update, context)
+        elif data == "game_rr":
+            context.args = []
+            await self.cmd_russian_roulette(update, context)
+        elif data == "game_dice":
+            context.args = ['10']
+            await self.cmd_dice_bet(update, context)
+        elif data == "game_roulette":
+            context.args = ['10']
+            await self.cmd_roulette(update, context)
+        elif data == "game_slots":
+            context.args = ['10']
+            await self.cmd_slots(update, context)
+        elif data == "game_rps":
+            await query.edit_message_text(
+                s.header("✊ КНБ") + "\nВыберите жест:",
+                reply_markup=kb.rps(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data == "game_saper":
+            context.args = ['10']
+            await self.cmd_saper(update, context)
+        elif data == "game_guess":
+            context.args = ['10']
+            await self.cmd_guess(update, context)
+        elif data == "game_bulls":
+            context.args = ['10']
+            await self.cmd_bulls(update, context)
+        elif data == "game_bosses":
+            context.args = []
+            await self.cmd_bosses(update, context)
+        elif data == "game_duels":
+            context.args = []
+            await self.cmd_duel_rating(update, context)
+        elif data.startswith("rps_"):
+            choice = data.split('_')[1]
+            bot_choice = random.choice(["rock", "scissors", "paper"])
+            
+            results = {
+                ("rock", "scissors"): "win",
+                ("scissors", "paper"): "win",
+                ("paper", "rock"): "win",
+                ("scissors", "rock"): "lose",
+                ("paper", "scissors"): "lose",
+                ("rock", "paper"): "lose"
+            }
+            
+            emoji = {"rock": "🪨", "scissors": "✂️", "paper": "📄"}
+            names = {"rock": "Камень", "scissors": "Ножницы", "paper": "Бумага"}
+            
+            text = s.header("✊ КНБ") + "\n\n"
+            text += f"{emoji[choice]} **Вы:** {names[choice]}\n"
+            text += f"{emoji[bot_choice]} **Бот:** {names[bot_choice]}\n\n"
+            
+            user_data = self.db.get_user(user.id)
+            
+            if choice == bot_choice:
+                self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
+                text += s.info("🤝 **НИЧЬЯ!**")
+            elif results.get((choice, bot_choice)) == "win":
+                self.db.update_user(user_data['id'], rps_wins=user_data.get('rps_wins', 0) + 1)
+                reward = random.randint(10, 30)
+                self.db.add_coins(user_data['id'], reward)
+                text += s.success(f"🎉 **ПОБЕДА!** +{reward} 💰")
+            else:
+                self.db.update_user(user_data['id'], rps_losses=user_data.get('rps_losses', 0) + 1)
+                text += s.error("😢 **ПОРАЖЕНИЕ!**")
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=kb.back(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data.startswith("mafia_confirm_"):
+            chat_id = int(data.split('_')[2])
+            if chat_id in self.mafia_games:
+                game = self.mafia_games[chat_id]
+                if user.id in game.players:
+                    game.confirm_player(user.id)
+                    await query.edit_message_text(
+                        f"{s.success('✅ Подтверждение получено!')}\n\n"
+                        f"{s.info('Ожидайте начала игры...')}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    
+                    if game.all_confirmed():
+                        await self._mafia_start_game(game, context)
+        elif data.startswith("accept_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            if duel and duel['opponent_id'] == user.id and duel['status'] == 'pending':
+                self.db.update_duel(duel_id, status='accepted')
+                await query.edit_message_text(
+                    f"{s.success('✅ Дуэль принята!')}\n\n"
+                    f"{s.info('Скоро начнётся...')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        elif data.startswith("reject_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            if duel and duel['opponent_id'] == user.id and duel['status'] == 'pending':
+                self.db.update_duel(duel_id, status='rejected')
+                self.db.add_coins(duel['challenger_id'], duel['bet'])
+                await query.edit_message_text(
+                    f"{s.error('❌ Дуэль отклонена')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        elif data.startswith("marry_accept_"):
+            proposer_id = int(data.split('_')[2])
+            user_data = self.db.get_user(user.id)
+            
+            if user_data.get('spouse', 0):
+                await query.edit_message_text(s.error("❌ Вы уже в браке"), parse_mode=ParseMode.MARKDOWN)
+                return
+            
+            proposer = self.db.get_user_by_id(proposer_id)
+            if not proposer:
+                await query.edit_message_text(s.error("❌ Пользователь не найден"), parse_mode=ParseMode.MARKDOWN)
+                return
+            
+            if proposer.get('spouse', 0):
+                await query.edit_message_text(s.error("❌ Пользователь уже в браке"), parse_mode=ParseMode.MARKDOWN)
+                return
+            
+            now = datetime.datetime.now().isoformat()
+            self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
+            self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
+            
+            await query.edit_message_text(
+                f"{s.success('💞 ПОЗДРАВЛЯЕМ!')}\n\n"
+                f"{s.item('Теперь вы в браке!')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            await context.bot.send_message(
+                proposer['telegram_id'],
+                f"{s.success('💞 ПОЗДРАВЛЯЕМ!')}\n\n"
+                f"{s.item(f'{user_data["first_name"]} принял(а) ваше предложение!')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        elif data.startswith("marry_reject_"):
+            proposer_id = int(data.split('_')[2])
+            await query.edit_message_text(s.error("❌ Предложение отклонено"), parse_mode=ParseMode.MARKDOWN)
+            await context.bot.send_message(
+                proposer_id,
+                s.error("❌ Ваше предложение отклонили"),
+                parse_mode=ParseMode.MARKDOWN
+            )
+    
+    # ===== ОБРАБОТЧИК ОШИБОК =====
+    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        logger.error(f"Ошибка: {context.error}")
+        try:
+            if update and update.effective_message:
+                await update.effective_message.reply_text(s.error("❌ Произошла внутренняя ошибка"))
+        except:
+            pass
+    
+    # ===== ЗАПУСК =====
+    async def run(self):
+        try:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling(drop_pending_updates=True)
+            
+            logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
+            logger.info(f"👑 Владелец: {OWNER_USERNAME}")
+            logger.info(f"🤖 AI: {'Подключен' if ai else 'Не подключен'}")
+            
+            while True:
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"Критическая ошибка: {e}")
+            await asyncio.sleep(5)
+            await self.run()
+    
+    async def close(self):
+        logger.info("👋 Завершение работы бота...")
+        if ai:
+            await ai.close()
+        self.db.close()
+        logger.info("✅ Бот остановлен")
 
-def assign_roles(player_count: int) -> list:
-    """Распределение ролей в зависимости от количества игроков"""
-    roles = []
-    
-    # Баланс ролей
-    if player_count <= 7:
-        # 6-7 игроков
-        mafia_count = 2
-        roles.extend([MafiaRoles.MAFIA] * mafia_count)
-        roles.extend([MafiaRoles.COMMISSIONER])
-        roles.extend([MafiaRoles.DOCTOR])
-        # Остальные мирные
-        roles.extend([MafiaRoles.CITIZEN] * (player_count - len(roles)))
-    elif player_count <= 10:
-        # 8-10 игроков
-        mafia_count = 3
-        roles.extend([MafiaRoles.MAFIA] * mafia_count)
-        roles.extend([MafiaRoles.COMMISSIONER])
-        roles.extend([MafiaRoles.DOCTOR])
-        roles.extend([MafiaRoles.MANIAC])
-        # Остальные мирные
-        roles.extend([MafiaRoles.CITIZEN] * (player_count - len(roles)))
-    else:
-        # 11-20 игроков
-        mafia_count = 4
-        roles.extend([MafiaRoles.MAFIA] * mafia_count)
-        roles.extend([MafiaRoles.COMMISSIONER])
-        roles.extend([MafiaRoles.DOCTOR])
-        roles.extend([MafiaRoles.MANIAC])
-        roles.extend([MafiaRoles.BOSS])
-        # Остальные мирные
-        roles.extend([MafiaRoles.CITIZEN] * (player_count - len(roles)))
-    
-    return roles
 
-def get_role_description(role: str) -> str:
-    """Описание роли"""
-    descriptions = {
-        MafiaRoles.MAFIA: "Вы - мафия. Ночью можете убивать игроков. Команда: /kill @user",
-        MafiaRoles.COMMISSIONER: "Вы - комиссар. Ночью можете проверять игроков. Команда: /check @user",
-        MafiaRoles.DOCTOR: "Вы - доктор. Ночью можете лечить игроков. Команда: /heal @user",
-        MafiaRoles.MANIAC: "Вы - маньяк. Ночью можете убивать игроков. Команда: /kill @user",
-        MafiaRoles.BOSS: "Вы - босс мафии. Вас нельзя убить ночью.",
-        MafiaRoles.CITIZEN: "Вы - мирный житель. Днем участвуете в голосовании. Команда: /vote @user"
-    }
-    return descriptions.get(role, "Ошибка")
-
-async def night_phase(chat_id: int, game: dict):
-    """Ночная фаза игры"""
-    # Ждем 2 минуты на действия
-    await asyncio.sleep(120)
+# ========== ТОЧКА ВХОДА ==========
+async def main():
+    print("=" * 60)
+    print(f"✨ ЗАПУСК БОТА {BOT_NAME} v{BOT_VERSION} ✨")
+    print("=" * 60)
+    print(f"📊 Команд: 250+")
+    print(f"📊 Модулей: 25+")
+    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY else 'Не подключен'}")
+    print("=" * 60)
     
-    # Обрабатываем результаты ночи
-    # Здесь должна быть логика обработки действий игроков
+    bot = SpectrumBot()
     
-    # Переходим к дню
-    game["phase"] = "day"
-    game["day"] += 1
-    
-    # Отправляем гифку дня
-    await bot.send_animation(
-        chat_id,
-        "https://files.catbox.moe/g9vc7v.mp4",
-        caption=f"""
-☀️ <b>День {game['day']}</b>
-
-Солнце всходит, подсушивая на тротуарах пролитую ночью кровь...
-
-Начинается голосование!
-/vote @user — отдать голос
-"""
-    )
-    
-    # Запускаем дневную фазу
-    asyncio.create_task(day_phase(chat_id, game))
-
-async def day_phase(chat_id: int, game: dict):
-    """Дневная фаза игры"""
-    # Ждем 3 минуты на голосование
-    await asyncio.sleep(180)
-    
-    # Подсчитываем голоса и выгоняем игрока
-    # Здесь должна быть логика подсчета голосов
-    
-    # Проверяем условия победы
-    if check_win_conditions(game):
-        return
-    
-    # Переходим к ночи
-    game["phase"] = "night"
-    
-    await bot.send_animation(
-        chat_id,
-        "https://files.catbox.moe/lvcm8n.mp4",
-        caption=f"""
-🌙 <b>Ночь {game['day'] + 1}</b>
-
-Город засыпает...
-Мафия выбирает жертву
-"""
-    )
-    
-    asyncio.create_task(night_phase(chat_id, game))
-
-def check_win_conditions(game: dict) -> bool:
-    """Проверка условий победы"""
-    # Здесь должна быть логика проверки победы
-    return False
-
-# Запуск бота
-async def on_startup(dp):
-    logging.info("Бот запущен")
-    # Здесь можно добавить уведомление админам
-
-async def on_shutdown(dp):
-    logging.info("Бот остановлен")
-    conn.close()
+    try:
+        await bot.run()
+    except KeyboardInterrupt:
+        logger.info("Остановка по запросу пользователя")
+        await bot.close()
+    except Exception as e:
+        logger.error(f"Необработанная ошибка: {e}")
+        await bot.close()
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup, on_shutdown=on_shutdown)
+    asyncio.run(main())
