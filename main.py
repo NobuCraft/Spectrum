@@ -1207,6 +1207,105 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
         
         # ===== МОДЕРАЦИЯ =====
+        self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
+        
+        # ===== ПРЕДУПРЕЖДЕНИЯ =====
+        self.app.add_handler(CommandHandler("warns", self.cmd_warns))
+        self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
+        
+        # ===== МУТЫ =====
+        self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
+        
+        # ===== БАНЫ =====
+        self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
+        
+        # ===== ТРИГГЕРЫ =====
+        self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
+        
+        # ===== НАСТРОЙКИ ЧАТА =====
+        self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
+        
+        # ===== ЭКОНОМИКА =====
+        self.app.add_handler(CommandHandler("balance", self.cmd_balance))
+        self.app.add_handler(CommandHandler("coins", self.cmd_balance))
+        self.app.add_handler(CommandHandler("pay", self.cmd_pay))
+        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
+        self.app.add_handler(CommandHandler("daily", self.cmd_daily))
+        self.app.add_handler(CommandHandler("streak", self.cmd_streak))
+        self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
+        self.app.add_handler(CommandHandler("buyvip", self.cmd_buy_vip))
+        self.app.add_handler(CommandHandler("premium", self.cmd_premium_info))
+        self.app.add_handler(CommandHandler("buypremium", self.cmd_buy_premium))
+        self.app.add_handler(CommandHandler("shop", self.cmd_shop))
+        self.app.add_handler(CommandHandler("buy", self.cmd_buy))
+        
+        # ===== РАЗВЛЕЧЕНИЯ =====
+        self.app.add_handler(CommandHandler("joke", self.cmd_joke))
+        self.app.add_handler(CommandHandler("fact", self.cmd_fact))
+        self.app.add_handler(CommandHandler("quote", self.cmd_quote))
+        self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
+        self.app.add_handler(CommandHandler("advice", self.cmd_advice))
+        self.app.add_handler(CommandHandler("ask", self.cmd_ask))
+        self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
+        
+        # ===== ИГРЫ =====
+        self.app.add_handler(CommandHandler("games", self.cmd_games))
+        self.app.add_handler(CommandHandler("coin", self.cmd_coin))
+        self.app.add_handler(CommandHandler("dice", self.cmd_dice))
+        self.app.add_handler(CommandHandler("dicebet", self.cmd_dice_bet))
+        self.app.add_handler(CommandHandler("rps", self.cmd_rps))
+        self.app.add_handler(CommandHandler("rr", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("roulette", self.cmd_roulette))
+        self.app.add_handler(CommandHandler("slots", self.cmd_slots))
+        self.app.add_handler(CommandHandler("saper", self.cmd_saper))
+        self.app.add_handler(CommandHandler("guess", self.cmd_guess))
+        self.app.add_handler(CommandHandler("bulls", self.cmd_bulls))
+        
+        # ===== БОССЫ =====
+        self.app.add_handler(CommandHandler("bosses", self.cmd_bosses))
+        self.app.add_handler(CommandHandler("boss", self.cmd_boss_fight))
+        self.app.add_handler(CommandHandler("bossinfo", self.cmd_boss_info))
+        self.app.add_handler(CommandHandler("regen", self.cmd_regen))
+        
+        # ===== ДУЭЛИ =====
+        self.app.add_handler(CommandHandler("duel", self.cmd_duel))
+        self.app.add_handler(CommandHandler("duels", self.cmd_duels))
+        self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
+        
+        # ===== КЛАНЫ =====
+        self.app.add_handler(CommandHandler("clan", self.cmd_clan))
+        self.app.add_handler(CommandHandler("clans", self.cmd_clans))
+        self.app.add_handler(CommandHandler("createclan", self.cmd_create_clan))
+        self.app.add_handler(CommandHandler("joinclan", self.cmd_join_clan))
+        self.app.add_handler(CommandHandler("leaveclan", self.cmd_leave_clan))
+        
+        # ===== ОТНОШЕНИЯ =====
+        self.app.add_handler(CommandHandler("friend", self.cmd_add_friend))
+        self.app.add_handler(CommandHandler("enemy", self.cmd_add_enemy))
+        self.app.add_handler(CommandHandler("forgive", self.cmd_remove_enemy))
+        
+        # ===== БРАКИ =====
+        self.app.add_handler(CommandHandler("propose", self.cmd_propose))
+        self.app.add_handler(CommandHandler("divorce", self.cmd_divorce))
+        self.app.add_handler(CommandHandler("families", self.cmd_families))
+        
+        # ===== РЕПУТАЦИЯ =====
+        self.app.add_handler(CommandHandler("rep", self.cmd_rep))
+        
+        # ===== МАФИЯ =====
+        self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
+        self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
+        self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
+        self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
+        self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
+        self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
+        
+        # ===== ПОЛЕЗНОЕ =====
+        self.app.add_handler(CommandHandler("ping", self.cmd_ping))
+        self.app.add_handler(CommandHandler("uptime", self.cmd_uptime))
+        self.app.add_handler(CommandHandler("info", self.cmd_info))
+        
+        # ===== Message handlers (с русскими текстовыми командами) =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2'), self.cmd_set_rank2))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3'), self.cmd_set_rank3))
@@ -1216,128 +1315,27 @@ class SpectrumBot:
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять вышедших'), self.cmd_remove_left))
         self.app.add_handler(MessageHandler(filters.Regex(r'^!снять всех'), self.cmd_remove_all_ranks))
-        self.app.add_handler(CommandHandler("админы", self.cmd_who_admins))
-        
-        # ===== ПРЕДУПРЕЖДЕНИЯ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^варны'), self.cmd_warns))
-        self.app.add_handler(CommandHandler("моиварны", self.cmd_my_warns))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн'), self.cmd_unwarn))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять все варны'), self.cmd_unwarn_all))
-        
-        # ===== МУТЫ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
-        self.app.add_handler(CommandHandler("мутлист", self.cmd_mutelist))
         self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
-        
-        # ===== БАНЫ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
-        self.app.add_handler(CommandHandler("банлист", self.cmd_banlist))
         self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
         self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
-        
-        # ===== ТРИГГЕРЫ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+триггер'), self.cmd_add_trigger))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-триггер'), self.cmd_remove_trigger))
-        self.app.add_handler(CommandHandler("триггеры", self.cmd_list_triggers))
-        
-        # ===== АВТОМОДЕРАЦИЯ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^антимат'), self.cmd_set_antimat))
         self.app.add_handler(MessageHandler(filters.Regex(r'^антиссылки'), self.cmd_set_antilink))
         self.app.add_handler(MessageHandler(filters.Regex(r'^антифлуд'), self.cmd_set_antiflood))
-        
-        # ===== ЧИСТКА =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^чистка'), self.cmd_clear))
         self.app.add_handler(MessageHandler(filters.Regex(r'^чистка от'), self.cmd_clear_user))
-        
-        # ===== НАСТРОЙКИ ЧАТА =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
-        self.app.add_handler(CommandHandler("правила", self.cmd_show_rules))
         self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
-        
-        # ===== ЭКОНОМИКА =====
-        self.app.add_handler(CommandHandler("ириски", self.cmd_balance))
-        self.app.add_handler(CommandHandler("баланс", self.cmd_balance))
-        self.app.add_handler(CommandHandler("передать", self.cmd_pay))
-        self.app.add_handler(CommandHandler("топирисок", self.cmd_top_coins))
-        self.app.add_handler(CommandHandler("бонус", self.cmd_daily))
-        self.app.add_handler(CommandHandler("стрик", self.cmd_streak))
-        self.app.add_handler(CommandHandler("вип", self.cmd_vip_info))
-        self.app.add_handler(CommandHandler("купитьвип", self.cmd_buy_vip))
-        self.app.add_handler(CommandHandler("премиум", self.cmd_premium_info))
-        self.app.add_handler(CommandHandler("купитьпремиум", self.cmd_buy_premium))
-        self.app.add_handler(CommandHandler("магазин", self.cmd_shop))
-        self.app.add_handler(CommandHandler("купить", self.cmd_buy))
-        
-        # ===== РАЗВЛЕЧЕНИЯ =====
-        self.app.add_handler(CommandHandler("анекдот", self.cmd_joke))
-        self.app.add_handler(CommandHandler("факт", self.cmd_fact))
-        self.app.add_handler(CommandHandler("цитата", self.cmd_quote))
-        self.app.add_handler(CommandHandler("ктоя", self.cmd_whoami))
-        self.app.add_handler(CommandHandler("совет", self.cmd_advice))
-        self.app.add_handler(CommandHandler("гадать", self.cmd_ask))
-        self.app.add_handler(CommandHandler("совместимость", self.cmd_compatibility))
-        
-        # ===== ИГРЫ =====
-        self.app.add_handler(CommandHandler("монетка", self.cmd_coin))
-        self.app.add_handler(CommandHandler("кубик", self.cmd_dice))
-        self.app.add_handler(CommandHandler("кости", self.cmd_dice_bet))
-        self.app.add_handler(CommandHandler("кнб", self.cmd_rps))
-        self.app.add_handler(CommandHandler("рр", self.cmd_russian_roulette))
-        self.app.add_handler(CommandHandler("русская", self.cmd_russian_roulette))
-        self.app.add_handler(CommandHandler("рулетка", self.cmd_roulette))
-        self.app.add_handler(CommandHandler("слоты", self.cmd_slots))
-        self.app.add_handler(CommandHandler("сапёр", self.cmd_saper))
-        self.app.add_handler(CommandHandler("угадай", self.cmd_guess))
-        self.app.add_handler(CommandHandler("быки", self.cmd_bulls))
-        
-        # ===== БОССЫ =====
-        self.app.add_handler(CommandHandler("боссы", self.cmd_bosses))
-        self.app.add_handler(CommandHandler("босс", self.cmd_boss_fight))
-        self.app.add_handler(CommandHandler("боссинфо", self.cmd_boss_info))
-        self.app.add_handler(CommandHandler("реген", self.cmd_regen))
-        
-        # ===== ДУЭЛИ =====
-        self.app.add_handler(CommandHandler("дуэль", self.cmd_duel))
-        self.app.add_handler(CommandHandler("дуэли", self.cmd_duels))
-        self.app.add_handler(CommandHandler("рейтинг", self.cmd_duel_rating))
-        
-        # ===== КЛАНЫ =====
-        self.app.add_handler(CommandHandler("клан", self.cmd_clan))
-        self.app.add_handler(CommandHandler("кланы", self.cmd_clans))
-        self.app.add_handler(CommandHandler("создатьклан", self.cmd_create_clan))
-        self.app.add_handler(CommandHandler("вступить", self.cmd_join_clan))
-        self.app.add_handler(CommandHandler("выйти", self.cmd_leave_clan))
-        
-        # ===== ОТНОШЕНИЯ =====
-        self.app.add_handler(CommandHandler("друг", self.cmd_add_friend))
-        self.app.add_handler(CommandHandler("враг", self.cmd_add_enemy))
-        self.app.add_handler(CommandHandler("простить", self.cmd_remove_enemy))
-        
-        # ===== БРАКИ =====
-        self.app.add_handler(CommandHandler("предложить", self.cmd_propose))
-        self.app.add_handler(CommandHandler("развод", self.cmd_divorce))
-        self.app.add_handler(CommandHandler("семьи", self.cmd_families))
-        
-        # ===== РЕПУТАЦИЯ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+репа'), self.cmd_add_rep))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-репа'), self.cmd_remove_rep))
-        self.app.add_handler(CommandHandler("репа", self.cmd_rep))
-        
-        # ===== МАФИЯ =====
-        self.app.add_handler(CommandHandler("мафия", self.cmd_mafia))
-        self.app.add_handler(CommandHandler("мафиястарт", self.cmd_mafia_start))
-        self.app.add_handler(CommandHandler("мафияприсоединиться", self.cmd_mafia_join))
-        self.app.add_handler(CommandHandler("мафиявыйти", self.cmd_mafia_leave))
-        self.app.add_handler(CommandHandler("мафияроли", self.cmd_mafia_roles))
-        self.app.add_handler(CommandHandler("мафияправила", self.cmd_mafia_rules))
-        
-        # ===== ПОЛЕЗНОЕ =====
-        self.app.add_handler(CommandHandler("пинг", self.cmd_ping))
-        self.app.add_handler(CommandHandler("аптайм", self.cmd_uptime))
-        self.app.add_handler(CommandHandler("инфо", self.cmd_info))
-        
+
         # ===== CALLBACK =====
         self.app.add_handler(CallbackQueryHandler(self.button_callback))
         
@@ -1386,8 +1384,8 @@ class SpectrumBot:
             f"{s.item('💰 Экономика, VIP')}\n\n"
             f"{s.section('БЫСТРЫЙ СТАРТ')}"
             f"{s.cmd('profile', 'профиль')}\n"
-            f"{s.cmd('мафия', 'игра в мафию')}\n"
-            f"{s.cmd('бонус', 'ежедневный бонус')}\n"
+            f"{s.cmd('mafia', 'игра в мафию')}\n"
+            f"{s.cmd('daily', 'ежедневный бонус')}\n"
             f"{s.cmd('help', 'все команды')}\n\n"
             f"👑 **Владелец:** {OWNER_USERNAME}"
         )
@@ -1414,21 +1412,21 @@ class SpectrumBot:
             f"{s.cmd('бан @user [причина]', 'заблокировать')}\n\n"
             
             f"{s.section('💰 ЭКОНОМИКА')}"
-            f"{s.cmd('ириски', 'баланс')}\n"
-            f"{s.cmd('передать @user сумма', 'перевести')}\n"
-            f"{s.cmd('бонус', 'ежедневный бонус')}\n"
-            f"{s.cmd('магазин', 'список товаров')}\n\n"
+            f"{s.cmd('balance', 'баланс')}\n"
+            f"{s.cmd('pay @user сумма', 'перевести')}\n"
+            f"{s.cmd('daily', 'ежедневный бонус')}\n"
+            f"{s.cmd('shop', 'список товаров')}\n\n"
             
             f"{s.section('🔫 МАФИЯ')}"
-            f"{s.cmd('мафия', 'меню мафии')}\n"
-            f"{s.cmd('мафиястарт', 'начать игру')}\n"
-            f"{s.cmd('мафияприсоединиться', 'присоединиться')}\n\n"
+            f"{s.cmd('mafia', 'меню мафии')}\n"
+            f"{s.cmd('mafiastart', 'начать игру')}\n"
+            f"{s.cmd('mafiajoin', 'присоединиться')}\n\n"
             
             f"{s.section('🎮 ИГРЫ')}"
-            f"{s.cmd('рр [ставка]', 'русская рулетка')}\n"
-            f"{s.cmd('кости [ставка]', 'игра в кости')}\n"
-            f"{s.cmd('боссы', 'список боссов')}\n"
-            f"{s.cmd('дуэль @user [ставка]', 'вызвать на дуэль')}"
+            f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
+            f"{s.cmd('dicebet [ставка]', 'игра в кости')}\n"
+            f"{s.cmd('bosses', 'список боссов')}\n"
+            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}"
         )
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
@@ -1898,7 +1896,7 @@ class SpectrumBot:
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /варны @user"))
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /warns @user"))
             return
         
         username = context.args[0].replace('@', '')
@@ -2704,7 +2702,7 @@ class SpectrumBot:
             f"{s.item('💰 Награда с боссов +50%')}\n"
             f"{s.item('🎁 Ежедневный бонус +50%')}\n"
             f"{s.item('💎 Алмазы +1 в день')}\n\n"
-            f"{s.cmd('купитьвип', 'купить VIP')}"
+            f"{s.cmd('buyvip', 'купить VIP')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -2718,7 +2716,7 @@ class SpectrumBot:
             f"{s.item('🎁 Ежедневный бонус +100%')}\n"
             f"{s.item('💎 Алмазы +3 в день')}\n"
             f"{s.item('🚫 Игнорирование спам-фильтра')}\n\n"
-            f"{s.cmd('купитьпремиум', 'купить PREMIUM')}"
+            f"{s.cmd('buypremium', 'купить PREMIUM')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -2791,7 +2789,7 @@ class SpectrumBot:
         user_data = self.db.get_user(user.id)
         
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите ставку: /кости 100"))
+            await update.message.reply_text(s.error("❌ Укажите ставку: /dicebet 100"))
             return
         
         try:
@@ -3165,8 +3163,8 @@ class SpectrumBot:
             f"{s.stat('⚔️ Урон', user_data["damage"])}\n"
             f"{s.stat('👾 Боссов убито', user_data["boss_kills"])}\n\n"
             f"{s.section('КОМАНДЫ')}\n"
-            f"{s.cmd('босс [ID]', 'атаковать босса')}\n"
-            f"{s.cmd('реген', 'восстановить ❤️ и ⚡')}"
+            f"{s.cmd('boss [ID]', 'атаковать босса')}\n"
+            f"{s.cmd('regen', 'восстановить ❤️ и ⚡')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3176,7 +3174,7 @@ class SpectrumBot:
         user_data = self.db.get_user(user.id)
         
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажи ID босса: /босс 1"))
+            await update.message.reply_text(s.error("❌ Укажи ID босса: /boss 1"))
             return
         
         try:
@@ -3257,7 +3255,7 @@ class SpectrumBot:
     
     async def cmd_boss_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажи ID босса: /боссинфо 1"))
+            await update.message.reply_text(s.error("❌ Укажи ID босса: /bossinfo 1"))
             return
         
         try:
@@ -3312,7 +3310,7 @@ class SpectrumBot:
         user_data = self.db.get_user(user.id)
         
         if len(context.args) < 2:
-            await update.message.reply_text(s.error("❌ Использование: /дуэль @user ставка"))
+            await update.message.reply_text(s.error("❌ Использование: /duel @user ставка"))
             return
         
         username = context.args[0].replace('@', '')
@@ -3439,7 +3437,7 @@ class SpectrumBot:
     
     async def cmd_create_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите название клана: /создатьклан [название]"))
+            await update.message.reply_text(s.error("❌ Укажите название клана: /createclan [название]"))
             return
         
         name = " ".join(context.args)
@@ -3464,7 +3462,7 @@ class SpectrumBot:
     
     async def cmd_join_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите название клана: /вступить [название]"))
+            await update.message.reply_text(s.error("❌ Укажите название клана: /joinclan [название]"))
             return
         
         name = " ".join(context.args)
@@ -3508,7 +3506,7 @@ class SpectrumBot:
     # ===== ОТНОШЕНИЯ =====
     async def cmd_add_friend(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /друг @user"))
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /friend @user"))
             return
         
         username = context.args[0].replace('@', '')
@@ -3542,7 +3540,7 @@ class SpectrumBot:
     
     async def cmd_add_enemy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /враг @user"))
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /enemy @user"))
             return
         
         username = context.args[0].replace('@', '')
@@ -3576,7 +3574,7 @@ class SpectrumBot:
     
     async def cmd_remove_enemy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /простить @user"))
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /forgive @user"))
             return
         
         username = context.args[0].replace('@', '')
@@ -3602,7 +3600,7 @@ class SpectrumBot:
     # ===== БРАКИ =====
     async def cmd_propose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
-            await update.message.reply_text(s.error("❌ Укажите пользователя: /предложить @user"))
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /propose @user"))
             return
         
         username = context.args[0].replace('@', '')
@@ -3741,7 +3739,7 @@ class SpectrumBot:
         chat_id = update.effective_chat.id
         
         if chat_id in self.mafia_games:
-            await update.message.reply_text(s.error("❌ Игра уже идёт! Присоединяйтесь: /мафияприсоединиться"))
+            await update.message.reply_text(s.error("❌ Игра уже идёт! Присоединяйтесь: /mafiajoin"))
             return
         
         game_id = f"mafia_{chat_id}_{int(time.time())}"
@@ -3760,8 +3758,8 @@ class SpectrumBot:
             s.header("🔫 МАФИЯ") + "\n\n"
             f"{s.success('🎮 Игра создана!')}\n\n"
             f"{s.item('Участники (0):')}\n"
-            f"{s.item('/мафияприсоединиться — присоединиться')}\n"
-            f"{s.item('/мафиявыйти — выйти')}\n\n"
+            f"{s.item('/mafiajoin — присоединиться')}\n"
+            f"{s.item('/mafialeave — выйти')}\n\n"
             f"{s.info('Игра будет проходить в ЛС с ботом')}"
         )
         
@@ -3773,7 +3771,7 @@ class SpectrumBot:
         user = update.effective_user
         
         if chat_id not in self.mafia_games:
-            await update.message.reply_text(s.error("❌ Игра не создана. Начните: /мафиястарт"))
+            await update.message.reply_text(s.error("❌ Игра не создана. Начните: /mafiastart"))
             return
         
         game = self.mafia_games[chat_id]
@@ -3811,8 +3809,8 @@ class SpectrumBot:
             f"{s.item(f'Участники ({len(game.players)}):')}\n"
             f"{players_list}\n\n"
             f"{s.item(f'Подтвердили: {confirmed}/{len(game.players)}')}\n"
-            f"{s.item('/мафияприсоединиться — присоединиться')}\n"
-            f"{s.item('/мафиявыйти — выйти')}\n\n"
+            f"{s.item('/mafiajoin — присоединиться')}\n"
+            f"{s.item('/mafialeave — выйти')}\n\n"
             f"{s.info('Для старта нужно минимум 6 игроков')}"
         )
         
@@ -3855,15 +3853,15 @@ class SpectrumBot:
                 f"{s.item(f'Участники ({len(game.players)}):')}\n"
                 f"{players_list}\n\n"
                 f"{s.item(f'Подтвердили: {confirmed}/{len(game.players)}')}\n"
-                f"{s.item('/мафияприсоединиться — присоединиться')}\n"
-                f"{s.item('/мафиявыйти — выйти')}\n\n"
+                f"{s.item('/mafiajoin — присоединиться')}\n"
+                f"{s.item('/mafialeave — выйти')}\n\n"
                 f"{s.info('Для старта нужно минимум 6 игроков')}"
             )
         else:
             text = (
                 s.header("🔫 МАФИЯ") + "\n\n"
                 f"{s.item('Участников нет')}\n"
-                f"{s.item('/мафияприсоединиться — присоединиться')}"
+                f"{s.item('/mafiajoin — присоединиться')}"
             )
         
         try:
@@ -4204,7 +4202,7 @@ class SpectrumBot:
     async def cmd_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         question = " ".join(context.args) if context.args else ""
         if not question:
-            await update.message.reply_text(s.error("❌ Задайте вопрос: /гадать [вопрос]"))
+            await update.message.reply_text(s.error("❌ Задайте вопрос: /ask [вопрос]"))
             return
         
         answers = ["Да", "Нет", "Возможно", "Определённо да", "Определённо нет"]
@@ -4212,7 +4210,7 @@ class SpectrumBot:
     
     async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
-            await update.message.reply_text(s.error("❌ Укажите двух пользователей: /совместимость @user1 @user2"))
+            await update.message.reply_text(s.error("❌ Укажите двух пользователей: /compatibility @user1 @user2"))
             return
         
         username1 = context.args[0].replace('@', '')
