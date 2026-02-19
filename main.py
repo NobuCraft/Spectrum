@@ -1179,7 +1179,7 @@ class SpectrumBot:
         return False
     
     def setup_handlers(self):
-    """Регистрация всех обработчиков (250+ команд)"""
+    """Регистрация всех обработчиков (более 250 команд)"""
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     self.app.add_handler(CommandHandler("start", self.cmd_start))
