@@ -1,5 +1,5 @@
 # Основные библиотеки
-python-telegram-bot==20.7
+python-telegram-bot==21.10
 aiohttp==3.9.0
 groq==0.5.0
 
