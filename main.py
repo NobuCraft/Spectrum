@@ -4407,6 +4407,7 @@ class SpectrumBot:
         )
     
     # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
+        # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         message_text = update.message.text
@@ -4432,6 +4433,7 @@ class SpectrumBot:
             await update.message.reply_text(s.warning("⚠️ Запрещенное слово! Сообщение удалено."))
             return
         
+        # Проверка на активные игры
         for game_id, game in list(self.games_in_progress.items()):
             if game.get('user_id') == user.id:
                 if game_id.startswith('guess_'):
@@ -4518,13 +4520,20 @@ class SpectrumBot:
                         await update.message.reply_text(s.error("❌ Введите число от 1 до 9"))
                     return
         
-        if self.ai and self.ai.is_available and random.randint(1, 100) <= AI_CHANCE:
-            await update.message.chat.send_action(action="typing")
-            response = await self.ai.get_response(user.id, message_text, user.first_name)
-            if response:
-                await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
-                return
+        # AI отвечает на ВСЕ сообщения (убрал random)
+        if self.ai and self.ai.is_available:
+            try:
+                await update.message.chat.send_action(action="typing")
+                response = await self.ai.get_response(user.id, message_text, user.first_name)
+                if response:
+                    await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
+                    return
+            except Exception as e:
+                logger.error(f"AI response error: {e}")
+                # Если AI ошибся, используем простые ответы
+                pass
         
+        # Простые ответы если AI не сработал (только как fallback)
         msg_lower = message_text.lower()
         
         if any(word in msg_lower for word in ["привет", "здравствуйте", "хай", "ку"]):
@@ -4538,9 +4547,7 @@ class SpectrumBot:
             await update.message.reply_text(random.choice(responses))
         elif any(word in msg_lower for word in ["кто создал", "владелец"]):
             await update.message.reply_text(f"👑 Мой создатель: {OWNER_USERNAME}")
-        else:
-            responses = ["Используй /help для списка команд", "Напиши /menu для навигации"]
-            await update.message.reply_text(random.choice(responses))
+        # Убрал else с "Используй /help", чтобы AI отвечал на всё
     
     async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
