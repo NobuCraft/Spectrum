@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-СПЕКТР v2.0 ULTIMATE - 
+СПЕКТР v2.0 ULTIMATE
 
 """
 
@@ -21,9 +21,15 @@ import math
 from typing import Optional, Dict, Any, List, Tuple, Union
 from collections import defaultdict, deque
 from enum import Enum
+from io import BytesIO
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
 
 import aiohttp
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler,
     MessageHandler, filters, ContextTypes
@@ -51,7 +57,7 @@ if not TOKEN:
 
 # ========== КОНСТАНТЫ ==========
 BOT_NAME = "Спектр"
-BOT_VERSION = "6.0 ULTIMATE"
+BOT_VERSION = "7.0 ULTIMATE"
 
 # Настройки модерации
 RANKS = {
@@ -63,19 +69,11 @@ RANKS = {
     5: {"name": "Создатель", "emoji": "👑"}
 }
 
-# Гифки
-GIFS = {
-    "mafia_day": "https://files.catbox.moe/g9vc7v.mp4",
-    "mafia_night": "https://files.catbox.moe/lvcm8n.mp4",
-    "russian_roulette": "https://files.catbox.moe/pj64wq.gif"
-}
-
 # Настройки игр
 MAFIA_MIN_PLAYERS = 6
 MAFIA_MAX_PLAYERS = 20
 MAFIA_NIGHT_TIME = 60  # секунд
 MAFIA_DAY_TIME = 120   # секунд
-MAFIA_VOTE_TIME = 60   # секунд
 
 # Экономика
 DAILY_COOLDOWN = 86400  # 24 часа
@@ -90,7 +88,6 @@ SPAM_WINDOW = 3
 SPAM_MUTE_TIME = 10
 
 # AI
-AI_CHANCE = 30
 AI_COOLDOWN = 2
 
 # Лимиты
@@ -128,7 +125,6 @@ class GroqAI:
         self.system_prompt = """Ты — Спектр, дружелюбный и умный ИИ-ассистент в Telegram. 
 Ты помогаешь пользователям, отвечаешь на вопросы, шутишь и поддерживаешь беседу.
 Твой характер: дружелюбный, отзывчивый, с чувством юмора.
-Знаешь всё про игры (мафия, русская рулетка, дуэли), экономику, модерацию (5 рангов).
 Отвечай кратко, по делу, используй эмодзи умеренно."""
     
     async def get_response(self, user_id: int, message: str, username: str = "Пользователь") -> Optional[str]:
@@ -141,7 +137,6 @@ class GroqAI:
         self.user_last_ai[user_id] = now
         
         try:
-            # Используем asyncio.to_thread для синхронного вызова Groq
             loop = asyncio.get_event_loop()
             
             history = list(self.contexts[user_id])
@@ -171,6 +166,9 @@ class GroqAI:
         except Exception as e:
             logger.error(f"Groq error: {e}")
             return None
+    
+    async def close(self):
+        pass
 
 # Инициализация AI
 ai = None
@@ -192,16 +190,13 @@ class MafiaRole(str, Enum):
     MANIAC = "🔪 Маньяк"
     BOSS = "👑 Босс"
     CITIZEN = "👤 Мирный"
-    LADY = "💃 Леди"
-    SHERIFF = "🔫 Шериф"
-    TERRORIST = "💣 Террорист"
 
 class MafiaGame:
     def __init__(self, chat_id: int, game_id: str, creator_id: int):
         self.chat_id = chat_id
         self.game_id = game_id
         self.creator_id = creator_id
-        self.status = "waiting"  # waiting, night, day, voting, ended
+        self.status = "waiting"
         self.players: List[int] = []
         self.players_data: Dict[int, Dict[str, Any]] = {}
         self.roles: Dict[int, str] = {}
@@ -217,10 +212,6 @@ class MafiaGame:
         }
         self.message_id: Optional[int] = None
         self.start_time: Optional[datetime.datetime] = None
-        
-        # Для TrueMafia стиля
-        self.mafia_chat_id: Optional[int] = None
-        self.kill_history: List[str] = []
     
     def add_player(self, user_id: int, name: str, username: str = "") -> bool:
         if user_id in self.players:
@@ -255,21 +246,14 @@ class MafiaGame:
         
         if num_players <= 7:
             num_mafia = 2
-            extra_roles = []
         elif num_players <= 10:
             num_mafia = 3
-            extra_roles = [MafiaRole.MANIAC]
-        elif num_players <= 13:
-            num_mafia = 4
-            extra_roles = [MafiaRole.MANIAC, MafiaRole.LADY]
         else:
             num_mafia = 4
-            extra_roles = [MafiaRole.MANIAC, MafiaRole.LADY, MafiaRole.SHERIFF]
         
         roles = [MafiaRole.MAFIA] * num_mafia
         roles.append(MafiaRole.COMMISSIONER)
         roles.append(MafiaRole.DOCTOR)
-        roles.extend(extra_roles)
         
         remaining = num_players - len(roles)
         roles.extend([MafiaRole.CITIZEN] * remaining)
@@ -282,26 +266,17 @@ class MafiaGame:
     
     def get_role_description(self, role: str) -> str:
         descriptions = {
-            MafiaRole.MAFIA: "Ночью вы можете убивать мирных жителей. Общайтесь с другими мафиози в ЛС.",
-            MafiaRole.COMMISSIONER: "Ночью вы можете проверять игроков, узнавая их роль.",
-            MafiaRole.DOCTOR: "Ночью вы можете спасать одного игрока от смерти.",
-            MafiaRole.MANIAC: "Ночью вы можете убивать. Вы ни с кем не связаны.",
-            MafiaRole.BOSS: "Вы - глава мафии. Вас нельзя убить ночью.",
-            MafiaRole.CITIZEN: "У вас нет особых способностей. Ищите мафию днём.",
-            MafiaRole.LADY: "Ночью вы можете соблазнить игрока - он не умрёт, но пропустит день.",
-            MafiaRole.SHERIFF: "Вы можете застрелить игрока раз за игру.",
-            MafiaRole.TERRORIST: "Если вас убьют, вы забираете с собой одного случайного игрока."
+            MafiaRole.MAFIA: "Ночью вы можете убивать мирных жителей.",
+            MafiaRole.COMMISSIONER: "Ночью вы можете проверять игроков.",
+            MafiaRole.DOCTOR: "Ночью вы можете спасать одного игрока.",
+            MafiaRole.MANIAC: "Ночью вы можете убивать.",
+            MafiaRole.BOSS: "Вы - глава мафии.",
+            MafiaRole.CITIZEN: "У вас нет особых способностей."
         }
         return descriptions.get(role, "Ошибка")
     
     def get_alive_players(self) -> List[int]:
         return [pid for pid in self.players if self.alive.get(pid, False)]
-    
-    def get_alive_count(self) -> Dict[str, int]:
-        alive = self.get_alive_players()
-        mafia = sum(1 for pid in alive if self.roles[pid] in [MafiaRole.MAFIA, MafiaRole.BOSS])
-        citizens = len(alive) - mafia
-        return {"mafia": mafia, "citizens": citizens, "total": len(alive)}
     
     def check_win(self) -> Optional[str]:
         alive = self.get_alive_players()
@@ -327,22 +302,12 @@ class MafiaGame:
     def process_night(self) -> Dict[str, Any]:
         killed = self.night_actions.get("mafia_kill")
         saved = self.night_actions.get("doctor_save")
-        maniac_kill = self.night_actions.get("maniac_kill")
-        checked = self.night_actions.get("commissioner_check")
         
         if saved and saved == killed:
             killed = None
         
-        if maniac_kill and maniac_kill != saved:
-            if killed:
-                pass
-            else:
-                killed = maniac_kill
-        
         result = {
             "killed": killed,
-            "checked": checked,
-            "check_result": self.roles.get(checked) if checked else None
         }
         
         self.night_actions = {
@@ -442,7 +407,7 @@ class Keyboard:
         return InlineKeyboardMarkup(keyboard)
     
     @classmethod
-    def main(cls):
+    def main_inline(cls):
         return cls.make([
             [("👤 ПРОФИЛЬ", "menu_profile"), ("📊 СТАТИСТИКА", "menu_stats")],
             [("🔫 МАФИЯ", "menu_mafia"), ("💰 ЭКОНОМИКА", "menu_economy")],
@@ -451,7 +416,17 @@ class Keyboard:
         ])
     
     @classmethod
-    def games(cls):
+    def reply_main(cls):
+        return ReplyKeyboardMarkup([
+            [KeyboardButton("🏠 ГЛАВНОЕ МЕНЮ"), KeyboardButton("👤 ПРОФИЛЬ")],
+            [KeyboardButton("📊 СТАТИСТИКА"), KeyboardButton("💰 БАЛАНС")],
+            [KeyboardButton("🎮 ИГРЫ"), KeyboardButton("📈 МОЙ ГРАФИК")],
+            [KeyboardButton("👾 БОССЫ"), KeyboardButton("⚔️ ДУЭЛИ")],
+            [KeyboardButton("❓ ПОМОЩЬ"), KeyboardButton("🎁 DAILY")]
+        ], resize_keyboard=True)
+    
+    @classmethod
+    def games_inline(cls):
         return cls.make([
             [("🔫 РУССКАЯ РУЛЕТКА", "game_rr"), ("🎲 КОСТИ", "game_dice")],
             [("🎰 РУЛЕТКА", "game_roulette"), ("🎰 СЛОТЫ", "game_slots")],
@@ -461,7 +436,15 @@ class Keyboard:
         ])
     
     @classmethod
-    def mafia(cls):
+    def bosses_inline(cls, boss_id: int):
+        return cls.make([
+            [("⚔️ АТАКОВАТЬ", f"boss_attack_{boss_id}"), ("💊 РЕГЕН", f"boss_regen")],
+            [("🛒 КУПИТЬ ОРУЖИЕ", "boss_shop"), ("📊 ИНФО", f"boss_info_{boss_id}")],
+            [("🔙 НАЗАД", "menu_games")]
+        ])
+    
+    @classmethod
+    def mafia_inline(cls):
         return cls.make([
             [("🎮 НАЧАТЬ ИГРУ", "mafia_start"), ("📋 ПРАВИЛА", "mafia_rules")],
             [("👥 РОЛИ", "mafia_roles"), ("📊 СТАТИСТИКА", "mafia_stats")],
@@ -473,21 +456,10 @@ class Keyboard:
         return cls.make([[(f"✅ ПОДТВЕРДИТЬ", f"mafia_confirm_{chat_id}")]])
     
     @classmethod
-    def economy(cls):
+    def duel_accept(cls, duel_id: int):
         return cls.make([
-            [("💰 БАЛАНС", "eco_balance"), ("📦 МАГАЗИН", "eco_shop")],
-            [("🎁 БОНУСЫ", "eco_bonus"), ("💳 ПЕРЕВОД", "eco_pay")],
-            [("💎 ПРИВИЛЕГИИ", "menu_donate"), ("📊 ТОП", "eco_top")],
-            [("👾 БОССЫ", "game_bosses"), ("🔙 НАЗАД", "menu_back")]
-        ])
-    
-    @classmethod
-    def mod(cls):
-        return cls.make([
-            [("⚠️ ВАРНЫ", "mod_warns"), ("🔇 МУТЫ", "mod_mutes")],
-            [("🔨 БАНЫ", "mod_bans"), ("📋 ЧЕРНЫЙ СПИСОК", "mod_blacklist")],
-            [("👥 АДМИНЫ", "mod_admins"), ("⚙️ НАСТРОЙКИ", "mod_settings")],
-            [("🔙 НАЗАД", "menu_back")]
+            [("✅ ПРИНЯТЬ", f"accept_duel_{duel_id}"),
+             ("❌ ОТКЛОНИТЬ", f"reject_duel_{duel_id}")]
         ])
     
     @classmethod
@@ -495,17 +467,16 @@ class Keyboard:
         return cls.make([[("◀ НАЗАД", "menu_back")]])
     
     @classmethod
+    def back_main(cls):
+        return cls.make([
+            [("◀ НАЗАД", "menu_back"), ("🏠 ГЛАВНАЯ", "menu_main")]
+        ])
+    
+    @classmethod
     def rps(cls):
         return cls.make([
             [("🪨 КАМЕНЬ", "rps_rock"), ("✂️ НОЖНИЦЫ", "rps_scissors"), ("📄 БУМАГА", "rps_paper")],
             [("🔙 НАЗАД", "menu_back")]
-        ])
-    
-    @classmethod
-    def duel_accept(cls, duel_id: int):
-        return cls.make([
-            [("✅ ПРИНЯТЬ", f"accept_duel_{duel_id}"),
-             ("❌ ОТКЛОНИТЬ", f"reject_duel_{duel_id}")]
         ])
 
 kb = Keyboard()
@@ -521,6 +492,7 @@ class Database:
         logger.info("✅ База данных инициализирована")
     
     def create_tables(self):
+        # Таблица пользователей
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -528,7 +500,6 @@ class Database:
                 username TEXT,
                 first_name TEXT,
                 last_name TEXT,
-                language TEXT DEFAULT 'ru',
                 coins INTEGER DEFAULT 1000,
                 diamonds INTEGER DEFAULT 0,
                 energy INTEGER DEFAULT 100,
@@ -567,17 +538,11 @@ class Database:
                 mafia_losses INTEGER DEFAULT 0,
                 clan_id INTEGER DEFAULT 0,
                 clan_role TEXT DEFAULT 'member',
-                circles TEXT DEFAULT '[]',
                 friends TEXT DEFAULT '[]',
                 enemies TEXT DEFAULT '[]',
-                crush INTEGER DEFAULT 0,
                 spouse INTEGER DEFAULT 0,
                 married_since TEXT,
                 reputation INTEGER DEFAULT 0,
-                achievements TEXT DEFAULT '[]',
-                bookmarks TEXT DEFAULT '[]',
-                notes TEXT DEFAULT '[]',
-                timers TEXT DEFAULT '[]',
                 nickname TEXT,
                 title TEXT DEFAULT '',
                 motto TEXT DEFAULT 'Нет девиза',
@@ -594,26 +559,31 @@ class Database:
                 warns_list TEXT DEFAULT '[]',
                 mute_until TEXT,
                 banned INTEGER DEFAULT 0,
-                ban_reason TEXT,
-                ban_date TEXT,
-                ban_admin INTEGER,
                 vip_until TEXT,
                 premium_until TEXT,
                 daily_streak INTEGER DEFAULT 0,
                 last_daily TEXT,
-                last_weekly TEXT,
-                last_monthly TEXT,
-                last_work TEXT,
                 last_seen TEXT,
-                notifications INTEGER DEFAULT 1,
                 registered TEXT DEFAULT CURRENT_TIMESTAMP,
                 referrer_id INTEGER
             )
         ''')
         
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_telegram_id ON users(telegram_id)')
-        self.cursor.execute('CREATE INDEX IF NOT EXISTS idx_username ON users(username)')
+        # Таблица сообщений
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                message_text TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                chat_id INTEGER,
+                chat_title TEXT
+            )
+        ''')
         
+        # Таблица логов
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -625,6 +595,7 @@ class Database:
             )
         ''')
         
+        # Таблица чёрного списка
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS blacklist (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -634,6 +605,7 @@ class Database:
             )
         ''')
         
+        # Таблица настроек чатов
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS chat_settings (
                 chat_id INTEGER PRIMARY KEY,
@@ -643,11 +615,11 @@ class Database:
                 antispam INTEGER DEFAULT 1,
                 antilink INTEGER DEFAULT 0,
                 captcha INTEGER DEFAULT 0,
-                log_chat INTEGER,
                 lang TEXT DEFAULT 'ru'
             )
         ''')
         
+        # Таблица боссов
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS bosses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -658,36 +630,11 @@ class Database:
                 damage INTEGER,
                 reward_coins INTEGER,
                 reward_exp INTEGER,
-                image_url TEXT,
                 is_alive INTEGER DEFAULT 1
             )
         ''')
         
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS clans (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT UNIQUE,
-                owner_id INTEGER,
-                level INTEGER DEFAULT 1,
-                exp INTEGER DEFAULT 0,
-                coins INTEGER DEFAULT 0,
-                members INTEGER DEFAULT 1,
-                rating INTEGER DEFAULT 1000,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS clan_members (
-                clan_id INTEGER,
-                user_id INTEGER UNIQUE,
-                role TEXT DEFAULT 'member',
-                joined_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (clan_id) REFERENCES clans(id),
-                FOREIGN KEY (user_id) REFERENCES users(id)
-            )
-        ''')
-        
+        # Таблица дуэлей
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS duels (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -700,6 +647,7 @@ class Database:
             )
         ''')
         
+        # Таблица триггеров
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS triggers (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -712,45 +660,19 @@ class Database:
             )
         ''')
         
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS topics (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chat_id INTEGER,
-                title TEXT,
-                description TEXT,
-                created_by INTEGER,
-                votes_for TEXT DEFAULT '[]',
-                votes_against TEXT DEFAULT '[]',
-                status TEXT DEFAULT 'active',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS suggestions (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                command TEXT,
-                description TEXT,
-                votes_for TEXT DEFAULT '[]',
-                votes_against TEXT DEFAULT '[]',
-                status TEXT DEFAULT 'pending',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
         self.conn.commit()
     
     def init_data(self):
+        # Инициализация боссов
         self.cursor.execute("SELECT COUNT(*) FROM bosses")
         if self.cursor.fetchone()[0] == 0:
             bosses = [
-                ("Ядовитый комар", 5, 500, 500, 15, 250, 50),
-                ("Лесной тролль", 10, 1000, 1000, 25, 500, 100),
-                ("Огненный дракон", 15, 2000, 2000, 40, 1000, 200),
-                ("Ледяной великан", 20, 3500, 3500, 60, 2000, 350),
-                ("Король демонов", 25, 5000, 5000, 85, 3500, 500),
-                ("Бог разрушения", 30, 10000, 10000, 150, 5000, 1000)
+                ("👾 Ядовитый комар", 5, 500, 500, 15, 250, 50),
+                ("👾 Лесной тролль", 10, 1000, 1000, 25, 500, 100),
+                ("👾 Огненный дракон", 15, 2000, 2000, 40, 1000, 200),
+                ("👾 Ледяной великан", 20, 3500, 3500, 60, 2000, 350),
+                ("👾 Король демонов", 25, 5000, 5000, 85, 3500, 500),
+                ("👾 Бог разрушения", 30, 10000, 10000, 150, 5000, 1000)
             ]
             for boss in bosses:
                 self.cursor.execute('''
@@ -803,16 +725,64 @@ class Database:
         self.conn.commit()
         return True
     
+    def save_message(self, user_id: int, username: str, first_name: str, text: str, chat_id: int, chat_title: str):
+        """Сохраняет сообщение в БД"""
+        self.cursor.execute('''
+            INSERT INTO messages (user_id, username, first_name, message_text, chat_id, chat_title)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, username, first_name, text, chat_id, chat_title))
+        
+        self.cursor.execute('''
+            INSERT INTO users (user_id, username, first_name, last_seen, total_messages)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1)
+            ON CONFLICT(telegram_id) DO UPDATE SET
+                last_seen = CURRENT_TIMESTAMP,
+                total_messages = total_messages + 1,
+                username = excluded.username,
+                first_name = excluded.first_name
+        ''', (user_id, username, first_name))
+        
+        self.conn.commit()
+    
+    def get_user_stats(self, user_id: int) -> Optional[Dict]:
+        """Получает статистику пользователя для графика"""
+        self.cursor.execute('''
+            SELECT total_messages, registered, last_seen
+            FROM users WHERE telegram_id = ?
+        ''', (user_id,))
+        user_data = self.cursor.fetchone()
+        
+        if not user_data:
+            return None
+        
+        total_messages, registered, last_seen = user_data
+        registered = datetime.datetime.fromisoformat(registered)
+        last_seen = datetime.datetime.fromisoformat(last_seen)
+        
+        # Получаем активность по дням за последние 365 дней
+        self.cursor.execute('''
+            SELECT DATE(timestamp) as date, COUNT(*) as count
+            FROM messages
+            WHERE user_id = ? AND timestamp >= DATE('now', '-365 days')
+            GROUP BY DATE(timestamp)
+            ORDER BY date
+        ''', (user_id,))
+        
+        daily_activity = self.cursor.fetchall()
+        
+        activity_dict = {row[0]: row[1] for row in daily_activity}
+        
+        return {
+            'total_messages': total_messages,
+            'first_seen': registered,
+            'last_seen': last_seen,
+            'daily_activity': activity_dict
+        }
+    
     def add_coins(self, user_id: int, amount: int) -> int:
         self.cursor.execute("UPDATE users SET coins = coins + ? WHERE id = ?", (amount, user_id))
         self.conn.commit()
         self.cursor.execute("SELECT coins FROM users WHERE id = ?", (user_id,))
-        return self.cursor.fetchone()[0]
-    
-    def add_diamonds(self, user_id: int, amount: int) -> int:
-        self.cursor.execute("UPDATE users SET diamonds = diamonds + ? WHERE id = ?", (amount, user_id))
-        self.conn.commit()
-        self.cursor.execute("SELECT diamonds FROM users WHERE id = ?", (user_id,))
         return self.cursor.fetchone()[0]
     
     def add_exp(self, user_id: int, amount: int) -> bool:
@@ -1072,36 +1042,6 @@ class Database:
             self.cursor.execute(f"UPDATE duels SET {key} = ? WHERE id = ?", (value, duel_id))
         self.conn.commit()
     
-    def create_clan(self, name: str, owner_id: int) -> Optional[int]:
-        try:
-            self.cursor.execute("INSERT INTO clans (name, owner_id) VALUES (?, ?)", (name, owner_id))
-            clan_id = self.cursor.lastrowid
-            self.cursor.execute("INSERT INTO clan_members (clan_id, user_id, role) VALUES (?, ?, 'owner')", (clan_id, owner_id))
-            self.cursor.execute("UPDATE users SET clan_id = ?, clan_role = 'owner' WHERE id = ?", (clan_id, owner_id))
-            self.conn.commit()
-            return clan_id
-        except:
-            return None
-    
-    def get_clan(self, clan_id: int) -> Optional[Dict]:
-        self.cursor.execute("SELECT * FROM clans WHERE id = ?", (clan_id,))
-        row = self.cursor.fetchone()
-        return dict(row) if row else None
-    
-    def get_clan_by_name(self, name: str) -> Optional[Dict]:
-        self.cursor.execute("SELECT * FROM clans WHERE name = ?", (name,))
-        row = self.cursor.fetchone()
-        return dict(row) if row else None
-    
-    def get_clan_members(self, clan_id: int) -> List[Dict]:
-        self.cursor.execute('''
-            SELECT u.id, u.first_name, u.username, u.nickname, cm.role, cm.joined_at
-            FROM clan_members cm
-            JOIN users u ON cm.user_id = u.id
-            WHERE cm.clan_id = ?
-        ''', (clan_id,))
-        return [dict(row) for row in self.cursor.fetchall()]
-    
     def log_action(self, user_id: int, action: str, details: str = "", chat_id: int = None):
         self.cursor.execute('''
             INSERT INTO logs (user_id, action, details, chat_id, timestamp)
@@ -1202,9 +1142,6 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         self.app.add_handler(CommandHandler("menu", self.cmd_menu))
         
-        # ===== AI КОМАНДЫ (только для создателя) =====
-        self.app.add_handler(CommandHandler("aitest", self.cmd_ai_test))
-        
         # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
         self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
@@ -1253,7 +1190,6 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("quote", self.cmd_quote))
         self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
         self.app.add_handler(CommandHandler("advice", self.cmd_advice))
-        self.app.add_handler(CommandHandler("ask", self.cmd_ask))
         self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
         
         # ===== ИГРЫ =====
@@ -1313,6 +1249,7 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("ping", self.cmd_ping))
         self.app.add_handler(CommandHandler("uptime", self.cmd_uptime))
         self.app.add_handler(CommandHandler("info", self.cmd_info))
+        self.app.add_handler(CommandHandler("chart", self.cmd_chart))
         
         # ===== Message handlers (русские текстовые команды) =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить'), self.cmd_set_rank))
@@ -1408,9 +1345,9 @@ class SpectrumBot:
             f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n\n"
             f"{s.section('ЧТО Я УМЕЮ')}"
             f"{s.item('🤖 AI: ' + ai_status)}\n"
-            f"{s.item('🔫 Мафия как TrueMafia')}\n"
+            f"{s.item('🔫 Мафия')}\n"
             f"{s.item('🎲 Русская рулетка, кости')}\n"
-            f"{s.item('👾 Боссы, дуэли, кланы')}\n"
+            f"{s.item('👾 Боссы, дуэли')}\n"
             f"{s.item('⚙️ Модерация (5 рангов)')}\n"
             f"{s.item('💰 Экономика, VIP')}\n\n"
             f"{s.section('БЫСТРЫЙ СТАРТ')}"
@@ -1421,8 +1358,28 @@ class SpectrumBot:
             f"👑 **Владелец:** {OWNER_USERNAME}"
         )
         
-        await update.message.reply_text(text, reply_markup=kb.main(), parse_mode=ParseMode.MARKDOWN)
+        # Отправляем reply-клавиатуру
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(
+            "📌 **Меню быстрого доступа:**",
+            reply_markup=kb.reply_main(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await update.message.reply_text(
+            "🔹 **Или выбери раздел:**",
+            reply_markup=kb.main_inline(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
         self.db.log_action(user_data['id'], 'start')
+    
+    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда /menu"""
+        await update.message.reply_text(
+            s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
+            reply_markup=kb.main_inline(),
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = (
@@ -1434,154 +1391,45 @@ class SpectrumBot:
             f"{s.cmd('id', 'узнать свой ID')}\n\n"
             
             f"{s.section('🤖 ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ')}"
-            f"{s.cmd('ask [вопрос]', 'задать вопрос AI')}\n\n"
+            f"{s.cmd('Спектр [вопрос]', 'задать вопрос AI (в группах)')}\n"
+            f"{s.cmd('[любое сообщение]', 'AI отвечает в личке')}\n\n"
             
-            f"{s.section('⚙️ МОДЕРАЦИЯ (5 РАНГОВ)')}"
-            f"{s.cmd('+Модер @user', '1 ранг (Младший модератор)')}\n"
-            f"{s.cmd('+Модер 2 @user', '2 ранг (Старший модератор)')}\n"
-            f"{s.cmd('+Модер 3 @user', '3 ранг (Младший админ)')}\n"
-            f"{s.cmd('+Модер 4 @user', '4 ранг (Старший админ)')}\n"
-            f"{s.cmd('+Модер 5 @user', '5 ранг (Создатель)')}\n"
-            f"{s.cmd('повысить @user', 'повысить на 1 ранг')}\n"
-            f"{s.cmd('понизить @user', 'понизить на 1 ранг')}\n"
-            f"{s.cmd('снять @user', 'снять модератора')}\n"
-            f"{s.cmd('снять вышедших', 'снять всех вышедших')}\n"
-            f"{s.cmd('!снять всех', 'снять всех модераторов')}\n"
-            f"{s.cmd('админы', 'список администрации')}\n\n"
-            
-            f"{s.section('🔨 БАНЫ И ПРЕДУПРЕЖДЕНИЯ')}"
-            f"{s.cmd('варн @user [причина]', 'выдать предупреждение')}\n"
-            f"{s.cmd('варны @user', 'список предупреждений')}\n"
-            f"{s.cmd('моиварны', 'свои предупреждения')}\n"
-            f"{s.cmd('снять варн @user', 'снять последнее предупреждение')}\n"
-            f"{s.cmd('снять все варны @user', 'снять все предупреждения')}\n"
+            f"{s.section('⚙️ МОДЕРАЦИЯ')}"
+            f"{s.cmd('+Модер @user', '1 ранг')}\n"
+            f"{s.cmd('варн @user [причина]', 'предупреждение')}\n"
             f"{s.cmd('мут @user 30м [причина]', 'заглушить')}\n"
-            f"{s.cmd('мутлист', 'список замученных')}\n"
-            f"{s.cmd('размут @user', 'снять мут')}\n"
             f"{s.cmd('бан @user [причина]', 'заблокировать')}\n"
-            f"{s.cmd('банлист', 'список забаненных')}\n"
-            f"{s.cmd('разбан @user', 'разблокировать')}\n"
-            f"{s.cmd('кик @user', 'исключить из чата')}\n\n"
-            
-            f"{s.section('🤖 ТРИГГЕРЫ')}"
-            f"{s.cmd('+триггер слово = действие', 'создать триггер')}\n"
-            f"{s.cmd('-триггер ID', 'удалить триггер')}\n"
-            f"{s.cmd('триггеры', 'список триггеров')}\n"
-            f"{s.cmd('антимат on/off', 'фильтр мата')}\n"
-            f"{s.cmd('антиссылки on/off', 'запрет ссылок')}\n"
-            f"{s.cmd('антифлуд on/off', 'защита от флуда')}\n\n"
-            
-            f"{s.section('🧹 ЧИСТКА ЧАТА')}"
-            f"{s.cmd('чистка 50', 'удалить 50 сообщений')}\n"
-            f"{s.cmd('чистка от @user', 'удалить сообщения пользователя')}\n\n"
-            
-            f"{s.section('⚙️ НАСТРОЙКИ ЧАТА')}"
-            f"{s.cmd('+приветствие Текст', 'установить приветствие')}\n"
-            f"{s.cmd('+правила Текст', 'установить правила')}\n"
-            f"{s.cmd('правила', 'показать правила')}\n"
-            f"{s.cmd('капча on/off', 'включить капчу')}\n\n"
-            
-            f"{s.section('👤 ПРОФИЛЬ')}"
-            f"{s.cmd('nick [ник]', 'установить ник')}\n"
-            f"{s.cmd('title [титул]', 'установить титул')}\n"
-            f"{s.cmd('motto [девиз]', 'установить девиз')}\n"
-            f"{s.cmd('bio [текст]', 'информация о себе')}\n"
-            f"{s.cmd('gender [м/ж]', 'установить пол')}\n"
-            f"{s.cmd('city [город]', 'установить город')}\n"
-            f"{s.cmd('country [страна]', 'установить страну')}\n"
-            f"{s.cmd('birth [ДД.ММ.ГГГГ]', 'дата рождения')}\n"
-            f"{s.cmd('age [число]', 'установить возраст')}\n\n"
-            
-            f"{s.section('📊 СТАТИСТИКА')}"
-            f"{s.cmd('stats', 'статистика чата')}\n"
-            f"{s.cmd('mystats', 'моя статистика')}\n"
-            f"{s.cmd('top', 'топ игроков')}\n"
-            f"{s.cmd('topcoins', 'топ по монетам')}\n"
-            f"{s.cmd('toplevel', 'топ по уровню')}\n\n"
+            f"{s.cmd('админы', 'список администрации')}\n\n"
             
             f"{s.section('💰 ЭКОНОМИКА')}"
             f"{s.cmd('balance', 'баланс')}\n"
-            f"{s.cmd('pay @user сумма', 'перевести монеты')}\n"
             f"{s.cmd('daily', 'ежедневный бонус')}\n"
-            f"{s.cmd('streak', 'текущий стрик')}\n"
-            f"{s.cmd('vip', 'информация о VIP')}\n"
-            f"{s.cmd('buyvip', 'купить VIP')}\n"
-            f"{s.cmd('premium', 'информация о PREMIUM')}\n"
-            f"{s.cmd('buypremium', 'купить PREMIUM')}\n"
-            f"{s.cmd('shop', 'список товаров')}\n"
-            f"{s.cmd('buy [товар]', 'купить товар')}\n\n"
+            f"{s.cmd('shop', 'магазин')}\n\n"
             
             f"{s.section('🎮 ИГРЫ')}"
             f"{s.cmd('games', 'меню игр')}\n"
-            f"{s.cmd('coin', 'подбросить монету')}\n"
-            f"{s.cmd('dice', 'бросить кубик')}\n"
-            f"{s.cmd('dicebet [ставка]', 'игра в кости')}\n"
-            f"{s.cmd('rps', 'камень-ножницы-бумага')}\n"
             f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
-            f"{s.cmd('roulette [ставка] [цвет]', 'рулетка')}\n"
-            f"{s.cmd('slots [ставка]', 'слоты')}\n"
-            f"{s.cmd('saper [ставка]', 'сапёр')}\n"
-            f"{s.cmd('guess [ставка]', 'угадай число')}\n"
-            f"{s.cmd('bulls [ставка]', 'быки и коровы')}\n\n"
+            f"{s.cmd('bosses', 'список боссов')}\n"
+            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n\n"
             
             f"{s.section('👾 БОССЫ')}"
             f"{s.cmd('bosses', 'список боссов')}\n"
             f"{s.cmd('boss [ID]', 'атаковать босса')}\n"
-            f"{s.cmd('bossinfo [ID]', 'информация о боссе')}\n"
             f"{s.cmd('regen', 'восстановить энергию')}\n\n"
-            
-            f"{s.section('⚔️ ДУЭЛИ')}"
-            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n"
-            f"{s.cmd('duels', 'список дуэлей')}\n"
-            f"{s.cmd('duelrating', 'рейтинг дуэлянтов')}\n\n"
-            
-            f"{s.section('🏰 КЛАНЫ')}"
-            f"{s.cmd('clan', 'информация о клане')}\n"
-            f"{s.cmd('clans', 'список кланов')}\n"
-            f"{s.cmd('createclan [название]', 'создать клан')}\n"
-            f"{s.cmd('joinclan [название]', 'вступить в клан')}\n"
-            f"{s.cmd('leaveclan', 'покинуть клан')}\n\n"
-            
-            f"{s.section('💕 ОТНОШЕНИЯ')}"
-            f"{s.cmd('friend @user', 'добавить в друзья')}\n"
-            f"{s.cmd('enemy @user', 'объявить врагом')}\n"
-            f"{s.cmd('forgive @user', 'простить врага')}\n\n"
-            
-            f"{s.section('💍 БРАКИ')}"
-            f"{s.cmd('propose @user', 'сделать предложение')}\n"
-            f"{s.cmd('divorce', 'развестись')}\n"
-            f"{s.cmd('families', 'список семей')}\n\n"
-            
-            f"{s.section('⭐ РЕПУТАЦИЯ')}"
-            f"{s.cmd('+репа @user', 'повысить репутацию')}\n"
-            f"{s.cmd('-репа @user', 'понизить репутацию')}\n"
-            f"{s.cmd('rep [@user]', 'репутация пользователя')}\n\n"
             
             f"{s.section('🎭 МАФИЯ')}"
             f"{s.cmd('mafia', 'меню мафии')}\n"
             f"{s.cmd('mafiastart', 'начать игру')}\n"
-            f"{s.cmd('mafiajoin', 'присоединиться')}\n"
-            f"{s.cmd('mafialeave', 'выйти из игры')}\n"
-            f"{s.cmd('mafiaroles', 'список ролей')}\n"
-            f"{s.cmd('mafiarules', 'правила игры')}\n"
-            f"{s.cmd('mafiastats', 'статистика мафии')}\n\n"
+            f"{s.cmd('mafiajoin', 'присоединиться')}\n\n"
             
-            f"{s.section('🌦️ ПОЛЕЗНОЕ')}"
-            f"{s.cmd('ping', 'проверка бота')}\n"
-            f"{s.cmd('uptime', 'время работы')}\n"
-            f"{s.cmd('info', 'информация о боте')}\n\n"
+            f"{s.section('📊 ГРАФИКИ')}"
+            f"{s.cmd('chart', 'мой график активности')}\n"
+            f"{s.cmd('profile', 'профиль со статистикой')}\n\n"
             
             f"👑 **Владелец:** {OWNER_USERNAME}"
         )
         
         await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
-    
-    async def cmd_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(
-            s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
-            reply_markup=kb.main(),
-            parse_mode=ParseMode.MARKDOWN
-        )
     
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -1606,43 +1454,137 @@ class SpectrumBot:
         enemies_list = json.loads(user_data.get('enemies', '[]'))
         enemies_count = len(enemies_list)
         
-        clan_info = ""
-        if user_data.get('clan_id', 0) > 0:
-            clan = self.db.get_clan(user_data['clan_id'])
-            if clan:
-                clan_info = f"\n{s.stat('Клан', clan['name'])}"
+        # Получаем статистику сообщений
+        stats = self.db.get_user_stats(user.id)
+        messages_count = stats['total_messages'] if stats else user_data['messages_count']
         
-        spouse_info = ""
-        if user_data.get('spouse', 0) > 0:
-            spouse = self.db.get_user_by_id(user_data['spouse'])
-            if spouse:
-                spouse_name = spouse.get('nickname') or spouse['first_name']
-                spouse_info = f"\n{s.stat('💍 Супруг(а)', spouse_name)}"
+        # Дата регистрации
+        registered = datetime.datetime.fromisoformat(user_data['registered']) if user_data.get('registered') else datetime.datetime.now()
+        days_in_chat = (datetime.datetime.now() - registered).days
         
         text = (
-            s.header("ПРОФИЛЬ") + "\n"
-            f"**{display_name}** {title}\n"
+            f"# Спектр | Профиль\n\n"
+            f"👤 **{display_name}** {title}\n"
             f"_{motto}_\n"
             f"{bio}\n\n"
-            f"{s.section('ХАРАКТЕРИСТИКИ')}"
-            f"{s.stat('Ранг', get_rank_emoji(user_data['rank']) + ' ' + user_data['rank_name'])}\n"
-            f"{s.stat('Уровень', user_data['level'])}\n"
-            f"{s.stat('Опыт', exp_progress)}\n"
-            f"{s.stat('Монеты', f'{user_data["coins"]} 💰')}\n"
-            f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n"
-            f"{s.stat('Здоровье', f'{user_data["health"]}/{user_data["max_health"]} ❤️')}\n\n"
-            f"{s.section('СТАТИСТИКА')}"
-            f"{s.stat('Сообщений', user_data['messages_count'])}\n"
-            f"{s.stat('Репутация', user_data['reputation'])}\n"
-            f"{s.stat('Предупреждения', warns)}\n"
-            f"{s.stat('Боссов убито', user_data['boss_kills'])}{clan_info}{spouse_info}\n\n"
-            f"{s.section('СТАТУС')}"
-            f"{s.item(f'VIP: {vip_status}')}\n"
-            f"{s.item(f'PREMIUM: {premium_status}')}\n"
-            f"{s.item(f'ID: {s.code(str(user.id))}')}"
+            f"📊 **Характеристики**\n"
+            f"• Ранг: {get_rank_emoji(user_data['rank'])} {user_data['rank_name']}\n"
+            f"• Уровень: {user_data['level']} ({exp_progress})\n"
+            f"• Монеты: {user_data['coins']:,} 💰\n"
+            f"• Энергия: {user_data['energy']}/100 ⚡\n"
+            f"• Здоровье: {user_data['health']}/{user_data['max_health']} ❤️\n\n"
+            
+            f"📈 **Статистика**\n"
+            f"• Сообщений: {messages_count:,} 💬\n"
+            f"• В среднем: {messages_count // max(days_in_chat, 1)}/день\n"
+            f"• Репутация: {user_data['reputation']} ⭐\n"
+            f"• Предупреждения: {warns}\n"
+            f"• Боссов убито: {user_data['boss_kills']} 👾\n"
+            f"• Друзей: {friends_count} / Врагов: {enemies_count}\n\n"
+            
+            f"💎 **Статус**\n"
+            f"• VIP: {vip_status}\n"
+            f"• PREMIUM: {premium_status}\n"
+            f"• В чате: {days_in_chat} дней\n"
+            f"• ID: `{user.id}`"
         )
         
-        await update.message.reply_text(text, reply_markup=kb.back(), parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        # Отправляем график
+        await self.cmd_chart(update, context)
+    
+    async def cmd_chart(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Генерирует и отправляет график активности"""
+        user = update.effective_user
+        
+        # Отправляем "печатает..."
+        await update.message.chat.send_action(action="upload_photo")
+        
+        stats = self.db.get_user_stats(user.id)
+        
+        if not stats or stats['total_messages'] < 10:
+            await update.message.reply_text(s.info("📊 Недостаточно данных для графика. Напиши ещё сообщений!"))
+            return
+        
+        try:
+            # Создаём график в стиле Iris
+            plt.style.use('dark_background')
+            fig, ax = plt.subplots(figsize=(12, 5))
+            fig.patch.set_facecolor('#1a1a1a')
+            ax.set_facecolor('#2a2a2a')
+            
+            # Подготавливаем данные
+            end_date = datetime.datetime.now()
+            start_date = end_date - datetime.timedelta(days=365)
+            
+            dates = []
+            messages = []
+            current_date = start_date
+            
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                dates.append(current_date)
+                count = stats['daily_activity'].get(date_str, 0)
+                messages.append(count)
+                current_date += datetime.timedelta(days=1)
+            
+            # Рисуем график
+            ax.plot(dates, messages, color='#ff9900', linewidth=2.5, 
+                    marker='o', markersize=2, markerfacecolor='#ff5500')
+            ax.fill_between(dates, messages, alpha=0.3, color='#ff9900')
+            
+            # Настройка осей
+            ax.set_xlabel('Дата', color='white', fontsize=12)
+            ax.set_ylabel('Сообщений', color='white', fontsize=12)
+            ax.xaxis.set_major_formatter(plt.matplotlib.dates.DateFormatter('%d.%m'))
+            ax.xaxis.set_major_locator(plt.MaxNLocator(10))
+            
+            ax.tick_params(colors='white', labelsize=9)
+            ax.grid(True, alpha=0.2, color='gray', linestyle='--', linewidth=0.5)
+            
+            for spine in ax.spines.values():
+                spine.set_color('#444444')
+            
+            # Заголовок
+            display_name = user.username or user.first_name
+            total = stats['total_messages']
+            avg_per_day = total / 365
+            max_messages = max(messages) if messages else 0
+            
+            ax.set_title(f'📊 Активность {display_name} за 365 дней', 
+                        color='white', fontsize=14, fontweight='bold', pad=20)
+            
+            # Статистика на графике
+            stats_text = (
+                f"📈 Всего: {total:,}\n"
+                f"📊 В день: {avg_per_day:.1f}\n"
+                f"🔥 Пик: {max_messages}"
+            )
+            
+            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+                    fontsize=10, verticalalignment='top',
+                    bbox=dict(boxstyle='round,pad=0.5', facecolor='#333333', 
+                             edgecolor='#ff9900', alpha=0.9),
+                    color='white')
+            
+            plt.tight_layout()
+            
+            # Сохраняем в буфер
+            buf = BytesIO()
+            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight',
+                       facecolor=fig.get_facecolor())
+            buf.seek(0)
+            plt.close(fig)
+            
+            await update.message.reply_photo(
+                photo=buf,
+                caption="📈 Твоя активность за последние 365 дней"
+            )
+            
+        except Exception as e:
+            logger.error(f"Ошибка при создании графика: {e}")
+            await update.message.reply_text(s.error("❌ Не удалось создать график"))
     
     async def cmd_set_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -1763,13 +1705,86 @@ class SpectrumBot:
         await update.message.reply_text(s.info(f"🆔 Ваш ID: `{user.id}`"), parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await update.message.reply_text(s.info("📊 Функция в разработке"), parse_mode=ParseMode.MARKDOWN)
+        chat = update.effective_chat
+        cursor = self.db.cursor
+        
+        now = datetime.datetime.now()
+        day_ago = now - datetime.timedelta(days=1)
+        week_ago = now - datetime.timedelta(days=7)
+        month_ago = now - datetime.timedelta(days=30)
+        
+        # Общая статистика
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id), COUNT(*) 
+            FROM messages 
+            WHERE chat_id = ?
+        ''', (chat.id,))
+        result = cursor.fetchone()
+        total_users = result[0] if result else 0
+        total_msgs = result[1] if result else 0
+        
+        # Статистика за день
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, day_ago.isoformat()))
+        daily_msgs = cursor.fetchone()[0] or 0
+        
+        # Статистика за неделю
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, week_ago.isoformat()))
+        weekly_msgs = cursor.fetchone()[0] or 0
+        
+        # Статистика за месяц
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, month_ago.isoformat()))
+        monthly_msgs = cursor.fetchone()[0] or 0
+        
+        # Топ пользователей
+        cursor.execute('''
+            SELECT username, first_name, COUNT(*) as msg_count
+            FROM messages 
+            WHERE chat_id = ? 
+            GROUP BY user_id 
+            ORDER BY msg_count DESC 
+            LIMIT 5
+        ''', (chat.id,))
+        top_users = cursor.fetchall()
+        
+        text = (
+            f"# Спектр | Статистика чата\n\n"
+            f"📅 **{chat.title}**\n"
+            f"👥 Участников: **{total_users}**\n\n"
+            
+            f"📊 **Активность**\n"
+            f"• За день: **{daily_msgs:,}** 💬\n"
+            f"• За неделю: **{weekly_msgs:,}** 💬\n"
+            f"• За месяц: **{monthly_msgs:,}** 💬\n"
+            f"• За всё время: **{total_msgs:,}** 💬\n\n"
+        )
+        
+        if top_users:
+            text += "🏆 **Топ-5 активных:**\n"
+            for i, (username, first_name, count) in enumerate(top_users, 1):
+                name = username or first_name or "Пользователь"
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                text += f"{medal} **{name}** — {count} 💬\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_my_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
+        
+        stats = self.db.get_user_stats(update.effective_user.id)
+        messages_count = stats['total_messages'] if stats else user_data['messages_count']
+        
         text = (
             s.header("📊 МОЯ СТАТИСТИКА") + "\n\n"
-            f"{s.stat('Сообщений', user_data['messages_count'])}\n"
+            f"{s.stat('Сообщений', messages_count)}\n"
             f"{s.stat('Команд', user_data['commands_used'])}\n"
             f"{s.stat('Репутация', user_data['reputation'])}\n"
             f"{s.stat('КНБ побед', user_data['rps_wins'])}\n"
@@ -2677,12 +2692,14 @@ class SpectrumBot:
         self.db.add_energy(user_data['id'], energy)
         
         text = (
-            s.header("🎁 ЕЖЕДНЕВНЫЙ БОНУС") + "\n"
-            f"{s.item(f'🔥 Стрик: {streak} дней')}\n"
-            f"{s.item(f'💰 Монеты: +{coins}')}\n"
-            f"{s.item(f'✨ Опыт: +{exp}')}\n"
-            f"{s.item(f'⚡ Энергия: +{energy}')}\n\n"
-            f"{s.info('Заходи завтра!')}"
+            f"# Спектр | Ежедневный бонус\n\n"
+            f"🎉 **{user.first_name}**, вы получили бонус!\n\n"
+            f"💰 Награда: **{coins}** іс\n"
+            f"🔥 Стрик: **{streak}** дней\n"
+            f"✨ Опыт: +{exp}\n"
+            f"⚡ Энергия: +{energy}\n\n"
+            f"💰 Новый баланс: **{user_data['coins'] + coins}** іс\n\n"
+            f"⏳ Следующий бонус через: **24 часа**"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -2827,14 +2844,25 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
     
     async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_data = self.db.get_user(update.effective_user.id)
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        vip_status = "✅ Активен" if self.db.is_vip(user_data['id']) else "❌ Не активен"
+        vip_until = ""
+        if self.db.is_vip(user_data['id']):
+            vip_until = self.db.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_data['id'],)).fetchone()[0]
+            vip_until = datetime.datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
+        
+        premium_status = "✅ Активен" if self.db.is_premium(user_data['id']) else "❌ Не активен"
         
         text = (
-            s.header("💰 БАЛАНС") + "\n\n"
-            f"{s.stat('Монеты', f'{user_data["coins"]} 💰')}\n"
-            f"{s.stat('Алмазы', f'{user_data["diamonds"]} 💎')}\n"
-            f"{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡')}\n"
-            f"{s.stat('Здоровье', f'{user_data["health"]}/{user_data["max_health"]} ❤️')}"
+            f"# Спектр | Кошелёк пользователя **{user.first_name}**\n\n"
+            f"💰 Баланс: **{user_data['coins']:,}** іс 🪙\n"
+            f"💎 VIP статус: **{vip_status}**\n"
+            f"{f'📅 VIP до: **{vip_until}**' if self.db.is_vip(user_data['id']) else ''}\n"
+            f"👑 PREMIUM: **{premium_status}**\n\n"
+            f"🔥 Стрик: **{user_data['daily_streak']}** дней\n"
+            f"🎁 /daily — доступно"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -2915,8 +2943,15 @@ class SpectrumBot:
         self.db.log_action(user_data['id'], 'buy_premium')
     
     # ===== ИГРЫ =====
+    async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await update.message.reply_text(
+            s.header("🎮 ИГРЫ") + "\nВыберите игру:",
+            reply_markup=kb.games_inline(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
     async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        result = random.choice(["Орел", "Решка"])
+        result = random.choice(["Орёл", "Решка"])
         await update.message.reply_text(
             f"{s.header('🪙 МОНЕТКА')}\n\n{s.item(f'Выпало: {result}')}",
             parse_mode=ParseMode.MARKDOWN
@@ -2968,10 +3003,12 @@ class SpectrumBot:
             result_text = s.info(f"🔄 НИЧЬЯ! Ставка возвращена")
         
         text = (
-            s.header("🎲 КОСТИ") + "\n\n"
-            f"{s.item(f'Ставка: {bet} 💰')}\n"
-            f"{s.item(f'Кубики: {dice1} + {dice2} = {total}')}\n\n"
-            f"{result_text}"
+            f"# Спектр | Кости\n\n"
+            f"Игрок: **{user.first_name}**\n"
+            f"Ставка: **{bet}** іс 💰\n\n"
+            f"🎲 **{dice1}** + **{dice2}** = **{total}**\n\n"
+            f"{result_text}\n\n"
+            f"💰 Новый баланс: **{user_data['coins'] + (win if total in [7,11] else -bet)}** іс"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3030,11 +3067,13 @@ class SpectrumBot:
             result = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
         
         text = (
-            s.header("🎰 РУЛЕТКА") + "\n\n"
-            f"{s.item(f'Ставка: {bet} 💰')}\n"
-            f"{s.item(f'Выбрано: {choice}')}\n"
-            f"{s.item(f'Выпало: {num} {color}')}\n\n"
-            f"{result}"
+            f"# Спектр | Рулетка\n\n"
+            f"Игрок: **{user.first_name}**\n"
+            f"Ставка: **{bet}** іс\n"
+            f"Выбрано: **{choice}**\n\n"
+            f"🎰 Выпало: **{num} {color}**\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: **{user_data['coins'] + (win_amount if win else -bet)}** іс"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3059,7 +3098,7 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
             return
         
-        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "🎰", "⭐"]
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "⭐"]
         spin = [random.choice(symbols) for _ in range(3)]
         
         if len(set(spin)) == 1:
@@ -3088,10 +3127,12 @@ class SpectrumBot:
             self.db.add_coins(user_data['id'], -bet)
         
         text = (
-            s.header("🎰 СЛОТЫ") + "\n\n"
-            f"{' '.join(spin)}\n\n"
-            f"{s.item(f'Ставка: {bet} 💰')}\n"
-            f"{result}"
+            f"# Спектр | Слоты\n\n"
+            f"Игрок: **{user.first_name}**\n"
+            f"Ставка: **{bet}** іс 💰\n\n"
+            f"**[ {' | '.join(spin)} ]**\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: **{user_data['coins'] + (win if win > 0 else -bet)}** іс"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3123,14 +3164,6 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
             return
         
-        try:
-            await context.bot.send_animation(
-                chat_id=update.effective_chat.id,
-                animation=GIFS["russian_roulette"]
-            )
-        except:
-            pass
-        
         chamber = random.randint(1, 6)
         shot = random.randint(1, 6)
         
@@ -3139,22 +3172,23 @@ class SpectrumBot:
         if chamber == shot:
             self.db.add_coins(user_data['id'], -bet)
             self.db.update_user(user_data['id'], rr_losses=user_data.get('rr_losses', 0) + 1)
-            text = (
-                s.header("💀 РУССКАЯ РУЛЕТКА") + "\n\n"
-                f"{s.item(f'Ставка: {bet} 💰')}\n"
-                f"{s.item('Бах! Выстрел...')}\n\n"
-                f"{s.error(f'ВЫ ПРОИГРАЛИ! -{bet} 💰')}"
-            )
+            result_text = "💥 *Бах!* Выстрел..."
+            win_text = s.error(f"💀 ВЫ ПРОИГРАЛИ! -{bet} 💰")
         else:
             win = bet * 5
             self.db.add_coins(user_data['id'], win)
             self.db.update_user(user_data['id'], rr_wins=user_data.get('rr_wins', 0) + 1)
-            text = (
-                s.header("🔫 РУССКАЯ РУЛЕТКА") + "\n\n"
-                f"{s.item(f'Ставка: {bet} 💰')}\n"
-                f"{s.item('Щёлк... В этот раз повезло!')}\n\n"
-                f"{s.success(f'ВЫ ВЫИГРАЛИ! +{win} 💰')}"
-            )
+            result_text = "🔫 *Щёлк...* В этот раз повезло!"
+            win_text = s.success(f"🎉 ВЫ ВЫИГРАЛИ! +{win} 💰")
+        
+        text = (
+            f"# Спектр | Русская рулетка\n\n"
+            f"Игрок: **{user.first_name}**\n"
+            f"Ставка: **{bet}** іс 💰\n\n"
+            f"{result_text}\n\n"
+            f"{win_text}\n\n"
+            f"💰 Новый баланс: **{user_data['coins'] + (win if chamber != shot else -bet)}** іс"
+        )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         self.db.log_action(user_data['id'], 'rr', f"{'win' if chamber != shot else 'lose'} {bet}")
@@ -3289,17 +3323,14 @@ class SpectrumBot:
         
         text = s.header("👾 БОССЫ") + "\n\n"
         
-        for boss in bosses[:3]:
+        for i, boss in enumerate(bosses[:5]):
             health_bar = s.progress(boss['health'], boss['max_health'], 15)
             text += (
-                f"**{boss['name']}** (ур.{boss['level']})\n"
+                f"**{i+1}. {boss['name']}** (ур.{boss['level']})\n"
                 f"{s.item(f'❤️ {health_bar}')}\n"
                 f"{s.item(f'⚔️ Урон: {boss['damage']}')}\n"
                 f"{s.item(f'💰 Награда: {boss['reward_coins']} 💰, ✨ {boss['reward_exp']}')}\n\n"
             )
-        
-        if len(bosses) > 3:
-            text += f"{s.info(f'... и еще {len(bosses) - 3} боссов')}\n\n"
         
         text += (
             f"{s.section('ТВОИ ПОКАЗАТЕЛИ')}\n"
@@ -3337,66 +3368,21 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Недостаточно энергии. Используй /regen"))
             return
         
-        self.db.add_energy(user_data['id'], -10)
-        
-        damage_bonus = 1.0
-        if self.db.is_vip(user_data['id']):
-            damage_bonus += 0.2
-        if self.db.is_premium(user_data['id']):
-            damage_bonus += 0.3
-        
-        base_damage = user_data['damage'] * damage_bonus
-        player_damage = int(base_damage) + random.randint(-5, 5)
-        
-        crit = random.randint(1, 100) <= user_data['crit_chance']
-        if crit:
-            player_damage = int(player_damage * user_data['crit_multiplier'] / 100)
-            crit_text = "💥 КРИТИЧЕСКИЙ УДАР! "
-        else:
-            crit_text = ""
-        
-        boss_damage = boss['damage'] + random.randint(-5, 5)
-        player_taken = max(1, boss_damage - user_data['armor'] // 2)
-        
-        killed = self.db.damage_boss(boss_id, player_damage)
-        self.db.damage(user_data['id'], player_taken)
-        
-        text = s.header("⚔️ БИТВА С БОССОМ") + "\n\n"
-        text += f"{s.item(f'{crit_text}Твой урон: {player_damage}')}\n"
-        text += f"{s.item(f'Урон босса: {player_taken}')}\n\n"
-        
-        if killed:
-            reward_coins = boss['reward_coins'] * (1 + user_data['level'] // 10)
-            reward_exp = boss['reward_exp'] * (1 + user_data['level'] // 10)
-            
-            if self.db.is_vip(user_data['id']):
-                reward_coins = int(reward_coins * 1.5)
-                reward_exp = int(reward_exp * 1.5)
-            if self.db.is_premium(user_data['id']):
-                reward_coins = int(reward_coins * 2)
-                reward_exp = int(reward_exp * 2)
-            
-            self.db.add_coins(user_data['id'], reward_coins)
-            leveled_up = self.db.add_exp(user_data['id'], reward_exp)
-            self.db.add_boss_kill(user_data['id'])
-            
-            text += f"{s.success('ПОБЕДА!')}\n"
-            text += f"{s.item(f'💰 Монеты: +{reward_coins}')}\n"
-            text += f"{s.item(f'✨ Опыт: +{reward_exp}')}\n"
-            
-            if leveled_up:
-                text += f"{s.success(f'✨ УРОВЕНЬ ПОВЫШЕН!')}\n"
-        else:
-            boss_info = self.db.get_boss(boss_id)
-            text += f"{s.warning('Босс ещё жив!')}\n"
-            text += f"❤️ Осталось: {boss_info['health']} здоровья\n"
-        
-        if user_data['health'] <= player_taken:
-            self.db.heal(user_data['id'], 50)
-            text += f"\n{s.info('Ты погиб и воскрешён с 50❤️')}"
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-        self.db.log_action(user_data['id'], 'boss_fight', f"Битва с боссом {boss['name']}")
+        # Показываем меню битвы
+        keyboard = kb.bosses_inline(boss_id)
+        await update.message.reply_text(
+            f"# Спектр | Битва с боссом\n\n"
+            f"👾 Босс: **{boss['name']}**\n"
+            f"Уровень: **{boss['level']}** | Здоровье: **{boss['health']}/{boss['max_health']}** ❤️\n\n"
+            f"Атакующий: **{user.first_name}**\n"
+            f"⚔️ Твой урон: **{user_data['damage']}**\n"
+            f"❤️ Твоё здоровье: **{user_data['health']}/{user_data['max_health']}**\n"
+            f"⚡ Энергия: **{user_data['energy']}/100**\n\n"
+            f"💰 Награда за победу: **{boss['reward_coins']}** іс + **{boss['reward_exp']}** опыта\n\n"
+            f"Выбери действие:",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_boss_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -3418,13 +3404,15 @@ class SpectrumBot:
         health_bar = s.progress(boss['health'], boss['max_health'], 20)
         
         text = (
-            s.header(f"👾 БОСС: {boss['name']}") + "\n\n"
-            f"{s.stat('Уровень', boss['level'])}\n"
-            f"{s.stat('❤️ Здоровье', health_bar)}\n"
-            f"{s.stat('⚔️ Урон', boss['damage'])}\n"
-            f"{s.stat('💰 Награда монетами', boss['reward_coins'])}\n"
-            f"{s.stat('✨ Награда опытом', boss['reward_exp'])}\n"
-            f"{s.stat('📊 Статус', status)}"
+            f"# Спектр | Информация о боссе\n\n"
+            f"👾 **{boss['name']}**\n\n"
+            f"📊 **Характеристики**\n"
+            f"• Уровень: **{boss['level']}**\n"
+            f"• ❤️ Здоровье: {health_bar}\n"
+            f"• ⚔️ Урон: **{boss['damage']}**\n"
+            f"• 💰 Награда: **{boss['reward_coins']}** іс\n"
+            f"• ✨ Опыт: **{boss['reward_exp']}**\n"
+            f"• 📊 Статус: **{status}**"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3494,10 +3482,11 @@ class SpectrumBot:
         target_name = target.get('nickname') or target['first_name']
         
         await update.message.reply_text(
-            f"{s.header('⚔️ ВЫЗОВ НА ДУЭЛЬ')}\n\n"
-            f"{s.item(f'Противник: {target_name}')}\n"
-            f"{s.item(f'Ставка: {bet} 💰')}\n\n"
-            f"{s.info('Ожидание ответа...')}",
+            f"# Спектр | Дуэль\n\n"
+            f"⚔️ **{user.first_name}** VS **{target_name}** ⚔️\n"
+            f"💰 Ставка: **{bet}** іс\n\n"
+            f"{user.first_name} вызывает на дуэль!\n\n"
+            f"{target_name}, прими вызов:",
             reply_markup=kb.duel_accept(duel_id),
             parse_mode=ParseMode.MARKDOWN
         )
@@ -3520,7 +3509,7 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_duel_rating(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        self.db.cursor.execute("SELECT first_name, nickname, duel_rating FROM users ORDER BY duel_rating DESC LIMIT 10")
+        self.db.cursor.execute("SELECT first_name, nickname, duel_rating FROM users WHERE duel_rating > 0 ORDER BY duel_rating DESC LIMIT 10")
         top = self.db.cursor.fetchall()
         
         if not top:
@@ -3535,14 +3524,6 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-    async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Меню игр"""
-        await update.message.reply_text(
-            s.header("🎮 ИГРЫ") + "\nВыберите игру:",
-            reply_markup=kb.games(),
-            parse_mode=ParseMode.MARKDOWN
-        )
-    
     async def cmd_donate(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о донате"""
         text = (
@@ -3586,12 +3567,14 @@ class SpectrumBot:
         members = self.db.get_clan_members(clan['id'])
         
         text = (
-            s.header(f"🏰 КЛАН: {clan['name']}") + "\n\n"
-            f"{s.stat('Уровень', clan['level'])}\n"
-            f"{s.stat('Опыт', clan['exp'])}\n"
-            f"{s.stat('Казна', f'{clan["coins"]} 💰')}\n"
-            f"{s.stat('Участников', len(members))}\n\n"
-            f"{s.section('УЧАСТНИКИ')}"
+            f"# Спектр | Клан\n\n"
+            f"🏰 **{clan['name']}**\n\n"
+            f"📊 **Информация**\n"
+            f"• Уровень: **{clan['level']}**\n"
+            f"• Опыт: **{clan['exp']}**\n"
+            f"• Казна: **{clan['coins']}** 💰\n"
+            f"• Участников: **{len(members)}**\n\n"
+            f"👥 **Участники:**\n"
         )
         
         for member in members:
@@ -3911,7 +3894,7 @@ class SpectrumBot:
     async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             s.header("🔫 МАФИЯ") + "\nВыберите действие:",
-            reply_markup=kb.mafia(),
+            reply_markup=kb.mafia_inline(),
             parse_mode=ParseMode.MARKDOWN
         )
     
@@ -3925,14 +3908,6 @@ class SpectrumBot:
         game_id = f"mafia_{chat_id}_{int(time.time())}"
         game = MafiaGame(chat_id, game_id, update.effective_user.id)
         self.mafia_games[chat_id] = game
-        
-        try:
-            await context.bot.send_animation(
-                chat_id=chat_id,
-                animation=GIFS["mafia_night"]
-            )
-        except:
-            pass
         
         text = (
             s.header("🔫 МАФИЯ") + "\n\n"
@@ -4065,9 +4040,7 @@ class SpectrumBot:
             f"{s.item('👨‍⚕️ Доктор — лечит ночью')}\n"
             f"{s.item('👤 Мирный — ищет мафию')}\n\n"
             f"{s.section('🎭 ОСОБЫЕ')}"
-            f"{s.item('🔪 Маньяк — убивает один')}\n"
-            f"{s.item('💃 Леди — соблазняет и защищает')}\n"
-            f"{s.item('🔫 Шериф — стреляет раз в игру')}"
+            f"{s.item('🔪 Маньяк — убивает один')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -4092,7 +4065,6 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Статистика мафии"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
@@ -4106,6 +4078,47 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
+    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        if len(game.players) < MAFIA_MIN_PLAYERS:
+            await context.bot.send_message(
+                game.chat_id,
+                s.error(f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}")
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.assign_roles()
+        game.status = "night"
+        game.phase = "night"
+        game.start_time = datetime.datetime.now()
+        
+        for player_id in game.players:
+            role = game.roles[player_id]
+            role_desc = game.get_role_description(role)
+            
+            try:
+                await context.bot.send_message(
+                    player_id,
+                    f"{s.header('🔫 МАФИЯ')}\n\n"
+                    f"{s.item(f'Ваша роль: {role}')}\n"
+                    f"{s.item(role_desc)}\n\n"
+                    f"{s.info('Ночь начинается. Ожидайте действий.')}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except:
+                pass
+        
+        await context.bot.send_message(
+            game.chat_id,
+            f"{s.header('🔫 МАФИЯ')}\n\n"
+            f"{s.success('🌙 НАСТУПИЛА НОЧЬ')}\n"
+            f"{s.item('Мафия выбирает жертву...')}\n"
+            f"{s.item('Доктор выбирает, кого спасти...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        asyncio.create_task(self._mafia_night_timer(game, context, MAFIA_NIGHT_TIME))
+
     async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE, seconds: int):
         await asyncio.sleep(seconds)
         
@@ -4132,14 +4145,6 @@ class SpectrumBot:
         game.phase = "day"
         game.day += 1
         game.votes = {}
-        
-        try:
-            await context.bot.send_animation(
-                chat_id=game.chat_id,
-                animation=GIFS["mafia_day"]
-            )
-        except:
-            pass
         
         alive_list = game.get_alive_players()
         alive_names = []
@@ -4253,14 +4258,6 @@ class SpectrumBot:
             "maniac_kill": None
         }
         
-        try:
-            await context.bot.send_animation(
-                chat_id=game.chat_id,
-                animation=GIFS["mafia_night"]
-            )
-        except:
-            pass
-        
         await context.bot.send_message(
             game.chat_id,
             f"{s.header(f'🔫 МАФИЯ | НОЧЬ {game.day}')}\n\n"
@@ -4311,7 +4308,6 @@ class SpectrumBot:
             "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный...",
             "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
             "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
-            "— Почему программисты путают Хэллоуин и Рождество?\n— Потому что Oct 31 = Dec 25.",
         ]
         await update.message.reply_text(f"😄 {random.choice(jokes)}")
     
@@ -4320,7 +4316,6 @@ class SpectrumBot:
             "Осьминоги имеют три сердца и голубую кровь.",
             "Бананы технически являются ягодами, а клубника — нет.",
             "В Швейцарии запрещено держать только одну морскую свинку.",
-            "Мед никогда не портится. Археологи находили 3000-летний мед в гробницах.",
         ]
         await update.message.reply_text(f"🔍 {random.choice(facts)}")
     
@@ -4341,27 +4336,8 @@ class SpectrumBot:
             "Пейте больше воды.",
             "Высыпайтесь — это важно для здоровья.",
             "Делайте зарядку по утрам.",
-            "Улыбайтесь чаще — это заразительно.",
         ]
         await update.message.reply_text(f"💡 {random.choice(advices)}")
-    
-    async def cmd_ask(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        question = " ".join(context.args) if context.args else ""
-        if not question:
-            await update.message.reply_text(s.error("❌ Задайте вопрос: /ask [вопрос]"))
-            return
-        
-        if not self.ai or not self.ai.is_available:
-            await update.message.reply_text(s.error("❌ AI не подключен"))
-            return
-        
-        await update.message.chat.send_action(action="typing")
-        response = await self.ai.get_response(update.effective_user.id, question, update.effective_user.first_name)
-        
-        if response:
-            await update.message.reply_text(f"🤖 **Спектр:** {response}", parse_mode=ParseMode.MARKDOWN)
-        else:
-            await update.message.reply_text(s.error("❌ AI временно недоступен"))
     
     async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -4407,10 +4383,20 @@ class SpectrumBot:
         )
     
     # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
-        # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         message_text = update.message.text
+        chat = update.effective_chat
+        
+        # Сохраняем сообщение в БД
+        self.db.save_message(
+            user.id, 
+            user.username, 
+            user.first_name, 
+            message_text, 
+            chat.id, 
+            chat.title
+        )
         
         if message_text.startswith('/'):
             return
@@ -4431,6 +4417,38 @@ class SpectrumBot:
         if self.db.is_word_blacklisted(message_text):
             await update.message.delete()
             await update.message.reply_text(s.warning("⚠️ Запрещенное слово! Сообщение удалено."))
+            return
+        
+        # Обработка reply-кнопок
+        if message_text == "🏠 ГЛАВНОЕ МЕНЮ":
+            await self.cmd_menu(update, context)
+            return
+        elif message_text == "👤 ПРОФИЛЬ":
+            await self.cmd_profile(update, context)
+            return
+        elif message_text == "📊 СТАТИСТИКА":
+            await self.cmd_stats(update, context)
+            return
+        elif message_text == "💰 БАЛАНС":
+            await self.cmd_balance(update, context)
+            return
+        elif message_text == "🎮 ИГРЫ":
+            await self.cmd_games(update, context)
+            return
+        elif message_text == "📈 МОЙ ГРАФИК":
+            await self.cmd_chart(update, context)
+            return
+        elif message_text == "👾 БОССЫ":
+            await self.cmd_bosses(update, context)
+            return
+        elif message_text == "⚔️ ДУЭЛИ":
+            await self.cmd_duel_rating(update, context)
+            return
+        elif message_text == "❓ ПОМОЩЬ":
+            await self.cmd_help(update, context)
+            return
+        elif message_text == "🎁 DAILY":
+            await self.cmd_daily(update, context)
             return
         
         # Проверка на активные игры
@@ -4520,8 +4538,21 @@ class SpectrumBot:
                         await update.message.reply_text(s.error("❌ Введите число от 1 до 9"))
                     return
         
-        # AI отвечает на ВСЕ сообщения (убрал random)
-        if self.ai and self.ai.is_available:
+        # AI отвечает только если:
+        # 1. Это личка (чат с ботом) - всегда отвечает
+        # 2. В группе - только если сообщение начинается со слова "Спектр"
+        should_respond = False
+        
+        if chat.type == "private":
+            should_respond = True
+        elif message_text.lower().startswith("спектр"):
+            # Убираем слово "Спектр" из запроса
+            message_text = message_text[6:].strip()
+            if not message_text:
+                message_text = "Привет"
+            should_respond = True
+        
+        if should_respond and self.ai and self.ai.is_available:
             try:
                 await update.message.chat.send_action(action="typing")
                 response = await self.ai.get_response(user.id, message_text, user.first_name)
@@ -4530,24 +4561,12 @@ class SpectrumBot:
                     return
             except Exception as e:
                 logger.error(f"AI response error: {e}")
-                # Если AI ошибся, используем простые ответы
-                pass
         
-        # Простые ответы если AI не сработал (только как fallback)
-        msg_lower = message_text.lower()
-        
-        if any(word in msg_lower for word in ["привет", "здравствуйте", "хай", "ку"]):
-            responses = ["👋 Привет!", "Йо, братан!", "Здарова!"]
-            await update.message.reply_text(random.choice(responses))
-        elif any(word in msg_lower for word in ["как дела", "как ты"]):
-            responses = ["✨ Всё отлично!", "База! Норм", "Пушка!"]
-            await update.message.reply_text(random.choice(responses))
-        elif any(word in msg_lower for word in ["спасибо", "пасиб"]):
-            responses = ["🤝 Всегда пожалуйста!", "Не за что!"]
-            await update.message.reply_text(random.choice(responses))
-        elif any(word in msg_lower for word in ["кто создал", "владелец"]):
-            await update.message.reply_text(f"👑 Мой создатель: {OWNER_USERNAME}")
-        # Убрал else с "Используй /help", чтобы AI отвечал на всё
+        # Если AI не сработал, но это личка, отправляем подсказку
+        if chat.type == "private" and not should_respond:
+            await update.message.reply_text(
+                "🤖 Я здесь! Используй /help для списка команд или просто напиши мне что-нибудь."
+            )
     
     async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -4580,39 +4599,37 @@ class SpectrumBot:
         await query.answer()
         data = query.data
         user = query.from_user
+        user_data = self.db.get_user(user.id)
         
         if data == "menu_main":
             await query.edit_message_text(
                 s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
-                reply_markup=kb.main(),
+                reply_markup=kb.main_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
         elif data == "menu_back":
             await query.edit_message_text(
                 s.header("ГЛАВНОЕ МЕНЮ") + "\nВыберите раздел:",
-                reply_markup=kb.main(),
+                reply_markup=kb.main_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
         elif data == "menu_profile":
-            context.args = []
             await self.cmd_profile(update, context)
         elif data == "menu_stats":
-            context.args = []
             await self.cmd_stats(update, context)
         elif data == "menu_games":
             await query.edit_message_text(
                 s.header("🎮 ИГРЫ") + "\nВыберите игру:",
-                reply_markup=kb.games(),
+                reply_markup=kb.games_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
         elif data == "menu_mafia":
             await query.edit_message_text(
                 s.header("🔫 МАФИЯ") + "\nВыберите действие:",
-                reply_markup=kb.mafia(),
+                reply_markup=kb.mafia_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
         elif data == "mafia_start":
-            context.args = []
             await self.cmd_mafia_start(update, context)
         elif data == "mafia_rules":
             await self.cmd_mafia_rules(update, context)
@@ -4623,37 +4640,20 @@ class SpectrumBot:
         elif data == "menu_economy":
             await query.edit_message_text(
                 s.header("💰 ЭКОНОМИКА") + "\nВыберите раздел:",
-                reply_markup=kb.economy(),
+                reply_markup=kb.main_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
-        elif data == "eco_balance":
-            context.args = []
-            await self.cmd_balance(update, context)
-        elif data == "eco_shop":
-            context.args = []
-            await self.cmd_shop(update, context)
-        elif data == "eco_bonus":
-            await query.edit_message_text(
-                f"{s.header('🎁 БОНУСЫ')}\n\n{s.cmd('daily', 'ежедневный бонус')}",
-                reply_markup=kb.back(),
-                parse_mode=ParseMode.MARKDOWN
-            )
-        elif data == "eco_top":
-            context.args = []
-            await self.cmd_top_coins(update, context)
-        elif data == "menu_donate":
-            await self.cmd_donate(update, context)
         elif data == "menu_mod":
             await query.edit_message_text(
                 s.header("⚙️ МОДЕРАЦИЯ") + "\nВыберите раздел:",
-                reply_markup=kb.mod(),
+                reply_markup=kb.main_inline(),
                 parse_mode=ParseMode.MARKDOWN
             )
         elif data == "menu_help":
-            context.args = []
             await self.cmd_help(update, context)
+        elif data == "menu_donate":
+            await self.cmd_donate(update, context)
         elif data == "game_rr":
-            context.args = []
             await self.cmd_russian_roulette(update, context)
         elif data == "game_dice":
             context.args = ['10']
@@ -4680,11 +4680,121 @@ class SpectrumBot:
             context.args = ['10']
             await self.cmd_bulls(update, context)
         elif data == "game_bosses":
-            context.args = []
             await self.cmd_bosses(update, context)
         elif data == "game_duels":
-            context.args = []
             await self.cmd_duel_rating(update, context)
+        elif data.startswith("boss_attack_"):
+            boss_id = int(data.split('_')[2])
+            boss = self.db.get_boss(boss_id)
+            
+            if not boss or not boss['is_alive']:
+                await query.edit_message_text(s.error("❌ Босс уже повержен"))
+                return
+            
+            if user_data['energy'] < 10:
+                await query.edit_message_text(s.error("❌ Недостаточно энергии. Используй регенерацию"))
+                return
+            
+            # Тратим энергию
+            self.db.add_energy(user_data['id'], -10)
+            
+            # Расчет урона
+            damage_bonus = 1.0
+            if self.db.is_vip(user_data['id']):
+                damage_bonus += 0.2
+            if self.db.is_premium(user_data['id']):
+                damage_bonus += 0.3
+            
+            base_damage = user_data['damage'] * damage_bonus
+            player_damage = int(base_damage) + random.randint(-5, 5)
+            
+            crit = random.randint(1, 100) <= user_data['crit_chance']
+            if crit:
+                player_damage = int(player_damage * user_data['crit_multiplier'] / 100)
+                crit_text = "💥 КРИТИЧЕСКИЙ УДАР! "
+            else:
+                crit_text = ""
+            
+            boss_damage = boss['damage'] + random.randint(-5, 5)
+            player_taken = max(1, boss_damage - user_data['armor'] // 2)
+            
+            killed = self.db.damage_boss(boss_id, player_damage)
+            self.db.damage(user_data['id'], player_taken)
+            
+            text = f"# Спектр | Битва с боссом\n\n"
+            text += f"👾 Босс: **{boss['name']}**\n\n"
+            text += f"{s.item(f'{crit_text}Твой урон: {player_damage}')}\n"
+            text += f"{s.item(f'Урон босса: {player_taken}')}\n\n"
+            
+            if killed:
+                reward_coins = boss['reward_coins'] * (1 + user_data['level'] // 10)
+                reward_exp = boss['reward_exp'] * (1 + user_data['level'] // 10)
+                
+                if self.db.is_vip(user_data['id']):
+                    reward_coins = int(reward_coins * 1.5)
+                    reward_exp = int(reward_exp * 1.5)
+                if self.db.is_premium(user_data['id']):
+                    reward_coins = int(reward_coins * 2)
+                    reward_exp = int(reward_exp * 2)
+                
+                self.db.add_coins(user_data['id'], reward_coins)
+                leveled_up = self.db.add_exp(user_data['id'], reward_exp)
+                self.db.add_boss_kill(user_data['id'])
+                
+                text += f"{s.success('ПОБЕДА!')}\n"
+                text += f"{s.item(f'💰 Монеты: +{reward_coins}')}\n"
+                text += f"{s.item(f'✨ Опыт: +{reward_exp}')}\n"
+                
+                if leveled_up:
+                    text += f"{s.success(f'✨ УРОВЕНЬ ПОВЫШЕН!')}\n"
+            else:
+                boss_info = self.db.get_boss(boss_id)
+                text += f"{s.warning('Босс ещё жив!')}\n"
+                text += f"❤️ Осталось: {boss_info['health']} здоровья\n"
+            
+            if user_data['health'] <= player_taken:
+                self.db.heal(user_data['id'], 50)
+                text += f"\n{s.info('Ты погиб и воскрешён с 50❤️')}"
+            
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        elif data == "boss_regen":
+            await self.cmd_regen(update, context)
+            await query.message.delete()
+        
+        elif data == "boss_shop":
+            await query.edit_message_text(
+                s.header("🛒 МАГАЗИН ОРУЖИЯ") + "\n\n"
+                f"{s.cmd('buy меч', '200 💰 (⚔️+10)')}\n"
+                f"{s.cmd('buy легендарный меч', '500 💰 (⚔️+30)')}\n"
+                f"{s.cmd('buy энергетик', '30 💰 (⚡+20)')}\n\n"
+                f"Используй команду /buy [предмет]",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        
+        elif data.startswith("boss_info_"):
+            boss_id = int(data.split('_')[2])
+            boss = self.db.get_boss(boss_id)
+            
+            if not boss:
+                await query.edit_message_text(s.error("❌ Босс не найден"))
+                return
+            
+            status = "ЖИВ" if boss['is_alive'] else "ПОВЕРЖЕН"
+            health_bar = s.progress(boss['health'], boss['max_health'], 20)
+            
+            text = (
+                s.header(f"👾 БОСС: {boss['name']}") + "\n\n"
+                f"{s.stat('Уровень', boss['level'])}\n"
+                f"{s.stat('❤️ Здоровье', health_bar)}\n"
+                f"{s.stat('⚔️ Урон', boss['damage'])}\n"
+                f"{s.stat('💰 Награда монетами', boss['reward_coins'])}\n"
+                f"{s.stat('✨ Награда опытом', boss['reward_exp'])}\n"
+                f"{s.stat('📊 Статус', status)}"
+            )
+            
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+        
         elif data.startswith("rps_"):
             choice = data.split('_')[1]
             bot_choice = random.choice(["rock", "scissors", "paper"])
@@ -4704,8 +4814,6 @@ class SpectrumBot:
             text = s.header("✊ КНБ") + "\n\n"
             text += f"{emoji[choice]} **Вы:** {names[choice]}\n"
             text += f"{emoji[bot_choice]} **Бот:** {names[bot_choice]}\n\n"
-            
-            user_data = self.db.get_user(user.id)
             
             if choice == bot_choice:
                 self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
@@ -4779,11 +4887,19 @@ class SpectrumBot:
             self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
             self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
             
-            await query.edit_message_text(
-                f"{s.success('💞 ПОЗДРАВЛЯЕМ!')}\n\n"
-                f"{s.item('Теперь вы в браке!')}",
-                parse_mode=ParseMode.MARKDOWN
+            text = (
+                f"# Спектр | Свадьба\n\n"
+                f"💍 **Поздравляем!**\n"
+                f"{user_data['first_name']} и {proposer['first_name']} теперь в браке! 🎉\n\n"
+                f"💕 Совместимость: **{random.randint(70, 100)}%**\n"
+                f"💰 Бонус молодожёнам: **+500 іс** каждому\n"
+                f"✨ Особый статус: **Супруг(а)**"
             )
+            
+            self.db.add_coins(user_data['id'], 500)
+            self.db.add_coins(proposer_id, 500)
+            
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
             
             await context.bot.send_message(
                 proposer['telegram_id'],
