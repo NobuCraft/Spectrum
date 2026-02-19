@@ -3967,6 +3967,21 @@ class SpectrumBot:
         )
         
         asyncio.create_task(self._mafia_night_timer(game, context, MAFIA_NIGHT_TIME))
+
+    async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика мафии"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        text = (
+            s.header("🔫 СТАТИСТИКА МАФИИ") + "\n\n"
+            f"{s.stat('Сыграно игр', user_data['mafia_games'])}\n"
+            f"{s.stat('Побед', user_data['mafia_wins'])}\n"
+            f"{s.stat('Поражений', user_data['mafia_losses'])}\n"
+            f"{s.stat('Процент побед', f'{(user_data["mafia_wins"]/max(1, user_data["mafia_games"])*100):.1f}%')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE, seconds: int):
         await asyncio.sleep(seconds)
