@@ -3226,7 +3226,7 @@ class SpectrumBot:
         except Exception as e:
             await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
 
-        async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Проверка прав бота в чате"""
         chat_id = update.effective_chat.id
         
