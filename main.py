@@ -2371,6 +2371,1128 @@ class SpectrumBot:
             caption=f"📊 Активность {user.first_name} за последние 7 дней",
             parse_mode='Markdown'
         )
+
+            # ===== КОМАНДЫ МОДЕРАЦИИ =====
+    async def _set_rank(self, update: Update, target_rank: int):
+        """Общая логика установки ранга"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
+            return
+        
+        self.db.set_rank(target_user['id'], target_rank, user_data['id'])
+        rank_info = RANKS[target_rank]
+        await update.message.reply_text(
+            f"{s.success('Ранг назначен!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 1)
+    
+    async def cmd_set_rank2(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 2)
+    
+    async def cmd_set_rank3(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 3)
+    
+    async def cmd_set_rank4(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 4)
+    
+    async def cmd_set_rank5(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, 5)
+    
+    async def cmd_lower_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] <= 0:
+            await update.message.reply_text(s.error("❌ Пользователь и так участник"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя понизить модератора выше рангом"))
+            return
+        
+        new_rank = target_user['rank'] - 1
+        self.db.set_rank(target_user['id'], new_rank, user_data['id'])
+        rank_info = RANKS[new_rank]
+        await update.message.reply_text(
+            f"{s.success('Ранг понижен!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Новый ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            username = text.replace('снять', '').replace('разжаловать', '').strip().replace('@', '')
+            if username:
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
+            return
+        
+        self.db.set_rank(target_user['id'], 0, user_data['id'])
+        await update.message.reply_text(
+            f"{s.success('Модератор снят!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item('Теперь: 👤 Участник')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        await update.message.reply_text(s.success("✅ Проверка вышедших модераторов выполнена"))
+    
+    async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 5 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Только для создателя"))
+            return
+        
+        self.db.cursor.execute("SELECT id FROM users WHERE rank > 0")
+        mods = self.db.cursor.fetchall()
+        
+        for mod_id in mods:
+            self.db.set_rank(mod_id[0], 0, user_data['id'])
+        
+        await update.message.reply_text(
+            s.success(f"✅ Снято модераторов: {len(mods)}"),
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        admins = self.db.get_admins()
+        if not admins:
+            await update.message.reply_text(s.info("👥 В чате нет администраторов"))
+            return
+        text = s.header("АДМИНИСТРАЦИЯ") + "\n\n"
+        for admin in admins:
+            name = admin['first_name']
+            username = f" (@{admin['username']})" if admin['username'] else ""
+            rank_emoji = RANKS[admin['rank']]["emoji"]
+            text += f"{s.item(f'{rank_emoji} {name}{username} — {admin["rank_name"]}')}\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 1+"))
+            return
+        
+        target_user = None
+        reason = "Нарушение правил"
+        
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+            parts = text.split('\n', 1)
+            if len(parts) > 1 and parts[1].strip():
+                reason = parts[1].strip()
+        else:
+            match = re.search(r'(?:варн|пред)\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+                if match.group(2):
+                    reason = match.group(2)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя выдать предупреждение модератору выше рангом"))
+            return
+        
+        warns = self.db.add_warn(target_user['id'], user_data['id'], reason)
+        
+        try:
+            await context.bot.send_message(
+                target_user['telegram_id'],
+                f"{s.warning('⚠️ ВЫ ПОЛУЧИЛИ ПРЕДУПРЕЖДЕНИЕ')}\n\n"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'Всего: {warns}/3')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("ПРЕДУПРЕЖДЕНИЕ") + "\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item(f'Предупреждений: {warns}/3')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        if warns >= 3:
+            self.db.mute_user(target_user['id'], 60, user_data['id'], "3 предупреждения")
+            await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час"))
+        if warns >= 5:
+            self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
+            await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен"))
+    
+    async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /warns @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        warns_list = self.db.get_warns(target['id'])
+        target_name = target.get('nickname') or target['first_name']
+        
+        if not warns_list:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        text = s.header(f"ПРЕДУПРЕЖДЕНИЯ: {target_name}") + "\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"**ID: {warn['id']}**\n"
+                f"{s.item(f'Причина: {warn["reason"]}')}\n"
+                f"{s.item(f'Админ: {admin_name}')}\n"
+                f"{s.item(f'Дата: {date}')}\n\n"
+            )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        warns_list = self.db.get_warns(user_data['id'])
+        
+        if not warns_list:
+            await update.message.reply_text(s.info("У вас нет предупреждений"))
+            return
+        
+        text = s.header("МОИ ПРЕДУПРЕЖДЕНИЯ") + "\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = admin.get('first_name', 'Система') if admin else 'Система'
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"**ID: {warn['id']}**\n"
+                f"{s.item(f'Причина: {warn["reason"]}')}\n"
+                f"{s.item(f'Админ: {admin_name}')}\n"
+                f"{s.item(f'Дата: {date}')}\n\n"
+            )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'снять варн\s+@?(\S+)', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
+        target_name = target_user.get('nickname') or target_user['first_name']
+        
+        if not removed:
+            await update.message.reply_text(s.info(f"У {target_name} нет предупреждений"))
+            return
+        
+        await update.message.reply_text(s.success(f"✅ Последнее предупреждение снято с {target_name}"))
+    
+    async def cmd_unwarn_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        match = re.search(r'снять все варны\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            return
+        
+        username = match.group(1)
+        target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        warns_list = self.db.get_warns(target_user['id'])
+        for _ in warns_list:
+            self.db.remove_last_warn(target_user['id'], user_data['id'])
+        
+        target_name = target_user.get('nickname') or target_user['first_name']
+        await update.message.reply_text(s.success(f"✅ Все предупреждения сняты с {target_name}"))
+    
+    async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            return
+        
+        match = re.search(r'мут\s+@?(\S+)(?:\s+(\d+[мчд]))?(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: мут @user 30м спам"))
+            return
+        
+        username = match.group(1)
+        time_str = match.group(2) if match.group(2) else "60м"
+        reason = match.group(3) if match.group(3) else "Нарушение правил"
+        
+        minutes = parse_time(time_str)
+        if not minutes:
+            await update.message.reply_text(s.error("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя замутить модератора выше рангом"))
+            return
+        
+        until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
+        until_str = until.strftime("%d.%m.%Y %H:%M")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"{s.warning('🔇 ВАС ЗАМУТИЛИ')}\n\n"
+                f"{s.item(f'Срок: {time_str}')}\n"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'До: {until_str}')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("МУТ") + "\n"
+            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
+            f"{s.item(f'Срок: {time_str}')}\n"
+            f"{s.item(f'До: {until_str}')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        muted = self.db.get_muted_users()
+        
+        if not muted:
+            await update.message.reply_text(s.info("Нет пользователей в муте"))
+            return
+        
+        text = s.header("СПИСОК ЗАМУЧЕННЫХ") + "\n\n"
+        for user in muted[:10]:
+            until = datetime.fromisoformat(user['mute_until']).strftime("%d.%m.%Y %H:%M")
+            name = user['first_name']
+            text += f"{s.item(f'{name} — до {until}')}\n"
+        
+        if len(muted) > 10:
+            text += f"\n... и еще {len(muted) - 10}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('размут', '').replace('@', '').strip()
+        if not username and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        elif username:
+            target = self.db.get_user_by_username(username)
+        else:
+            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            return
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_muted(target['id']):
+            await update.message.reply_text(s.info("Пользователь не в муте"))
+            return
+        
+        self.db.unmute_user(target['id'], user_data['id'])
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                s.success("✅ Мут снят")
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+    
+    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            return
+        
+        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: бан @user спам"))
+            return
+        
+        username = match.group(1)
+        reason = match.group(2) if match.group(2) else "Нарушение правил"
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя забанить модератора выше рангом"))
+            return
+        
+        self.db.ban_user(target['id'], user_data['id'], reason)
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
+                f"{s.item(f'Причина: {reason}')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("БЛОКИРОВКА") + "\n"
+            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
+            f"{s.item(f'Причина: {reason}')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
+        try:
+            await update.effective_chat.ban_member(target['telegram_id'])
+        except:
+            pass
+    
+    async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        bans = self.db.get_banlist()
+        
+        if not bans:
+            await update.message.reply_text(s.info("Список забаненных пуст"))
+            return
+        
+        text = s.header("СПИСОК ЗАБАНЕННЫХ") + "\n\n"
+        for ban in bans:
+            name = ban.get('first_name', 'Неизвестно')
+            username = f" (@{ban['username']})" if ban['username'] else ""
+            text += f"{s.item(f'{name}{username}')}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('разбан', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if not self.db.is_banned(target['id']):
+            await update.message.reply_text(s.info("Пользователь не забанен"))
+            return
+        
+        self.db.unban_user(target['id'], user_data['id'])
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                s.success("✅ Бан снят")
+            )
+        except:
+            pass
+        
+        await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
+        
+        try:
+            await update.effective_chat.unban_member(target['telegram_id'])
+        except:
+            pass
+    
+    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('кик', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        try:
+            await update.effective_chat.ban_member(target['telegram_id'])
+            await update.effective_chat.unban_member(target['telegram_id'])
+            await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
+        except Exception as e:
+            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+    
+    async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        text = text[9:].strip()
+        if "=" not in text:
+            await update.message.reply_text(s.error("❌ Формат: +триггер слово = действие"))
+            return
+        
+        word, action = text.split("=", 1)
+        word = word.strip().lower()
+        action = action.strip()
+        
+        action_parts = action.split()
+        action_type = action_parts[0].lower()
+        action_value = action_parts[1] if len(action_parts) > 1 else None
+        
+        if action_type not in ["delete", "mute", "warn", "ban"]:
+            await update.message.reply_text(s.error("❌ Действие должно быть: delete, mute, warn, ban"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO triggers (chat_id, word, action, action_value, created_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (update.effective_chat.id, word, action_type, action_value, user_data['id']))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ Триггер добавлен: {word} -> {action}"))
+    
+    async def cmd_remove_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        trigger_id = text[9:].strip()
+        if not trigger_id.isdigit():
+            await update.message.reply_text(s.error("❌ Укажите ID триггера"))
+            return
+        
+        self.db.cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", 
+                             (int(trigger_id), update.effective_chat.id))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Триггер удален"))
+    
+    async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT id, word, action, action_value FROM triggers WHERE chat_id = ?", 
+                             (update.effective_chat.id,))
+        triggers = self.db.cursor.fetchall()
+        
+        if not triggers:
+            await update.message.reply_text(s.info("В этом чате нет триггеров"))
+            return
+        
+        text = s.header("ТРИГГЕРЫ ЧАТА") + "\n\n"
+        for trigger in triggers:
+            action_text = trigger[2]
+            if trigger[3]:
+                action_text += f" {trigger[3]}"
+            text += f"ID: {trigger[0]} | {trigger[1]} → {action_text}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def _toggle_setting(self, update: Update, setting: str):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute(f'''
+            INSERT INTO chat_settings (chat_id, {setting})
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+        
+        status = "включен" if state else "выключен"
+        names = {"antimat": "Антимат", "antilink": "Антиссылки", "antiflood": "Антифлуд"}
+        await update.message.reply_text(s.success(f"✅ {names[setting]} {status}"))
+    
+    async def cmd_set_antimat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antimat")
+    
+    async def cmd_set_antilink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antilink")
+    
+    async def cmd_set_antiflood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antiflood")
+    
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите количество: чистка 50"))
+            return
+        
+        try:
+            count = int(parts[1])
+            if count > 100:
+                count = 100
+        except:
+            await update.message.reply_text(s.error("❌ Количество должно быть числом"))
+            return
+        
+        try:
+            await update.message.delete()
+            messages = []
+            async for msg in context.bot.get_chat_history(update.effective_chat.id, limit=count):
+                messages.append(msg.message_id)
+            
+            if messages:
+                await context.bot.delete_messages(update.effective_chat.id, messages)
+                await context.bot.send_message(update.effective_chat.id, 
+                                              s.success(f"✅ Удалено {len(messages)} сообщений"),
+                                              disable_notification=True)
+        except Exception as e:
+            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+    
+    async def cmd_clear_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        username = text.replace('чистка от', '').strip().replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        await update.message.reply_text(s.info(f"🔄 Удаляю сообщения {target['first_name']}..."))
+    
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        welcome_text = update.message.text[12:].strip()
+        if not welcome_text:
+            await update.message.reply_text(s.error("❌ Укажите текст приветствия"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, welcome)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET welcome = excluded.welcome
+        ''', (update.effective_chat.id, welcome_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Приветствие установлено"))
+    
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        rules_text = update.message.text[9:].strip()
+        if not rules_text:
+            await update.message.reply_text(s.error("❌ Укажите текст правил"))
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, rules)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET rules = excluded.rules
+        ''', (update.effective_chat.id, rules_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Правила установлены"))
+    
+    async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (update.effective_chat.id,))
+        row = self.db.cursor.fetchone()
+        
+        if row and row[0]:
+            await update.message.reply_text(f"📜 **Правила чата:**\n\n{row[0]}", parse_mode=ParseMode.MARKDOWN)
+        else:
+            await update.message.reply_text(s.info("В этом чате ещё не установлены правила"))
+    
+    async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, captcha)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET captcha = excluded.captcha
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+        
+        status = "включена" if state else "выключена"
+        await update.message.reply_text(s.success(f"✅ Капча {status}"))
+    
+    async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        vip_status = "✅ Активен" if self.db.is_vip(user_data['id']) else "❌ Не активен"
+        vip_until = ""
+        if self.db.is_vip(user_data['id']):
+            vip_until = self.db.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_data['id'],)).fetchone()[0]
+            vip_until = datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
+        
+        premium_status = "✅ Активен" if self.db.is_premium(user_data['id']) else "❌ Не активен"
+        
+        text = (
+            f"# Спектр | Кошелёк пользователя {user.first_name}**\n\n"
+            f"💰 Баланс: {user_data['coins']:,} 💰\n"
+            f"💜 Неоны: {user_data['neons']:,}\n"
+            f"🖥 Глитчи: {user_data['glitches']:,}\n\n"
+            f"💎 VIP статус: {vip_status}\n"
+            f"{f'📅 VIP до: {vip_until}' if self.db.is_vip(user_data['id']) else ''}\n"
+            f"👑 PREMIUM: {premium_status}\n\n"
+            f"🔥 Стрик: {user_data['daily_streak']} дней\n"
+            f"🎁 /daily — доступно"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /pay @user сумма"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            amount = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("❌ Сумма должна быть числом"))
+            return
+        
+        if amount <= 0:
+            await update.message.reply_text(s.error("❌ Сумма должна быть больше 0"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < amount:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя перевести самому себе"))
+            return
+        
+        self.db.add_coins(user_data['id'], -amount)
+        self.db.add_coins(target['id'], amount)
+        
+        commission_text = ""
+        if not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+            self.db.add_coins(user_data['id'], -commission)
+            commission_text = f"\n{s.item(f'💸 Комиссия: {commission} (5%)')}"
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        text = (
+            s.header("💸 ПЕРЕВОД") + "\n"
+            f"{s.item(f'Получатель: {target_name}')}\n"
+            f"{s.item(f'Сумма: {amount} 💰')}{commission_text}\n\n"
+            f"{s.success('✅ Перевод выполнен!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
+    
+    async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data.get('last_daily'):
+            last = datetime.fromisoformat(user_data['last_daily'])
+            if (datetime.now() - last).seconds < DAILY_COOLDOWN:
+                remain = DAILY_COOLDOWN - (datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(s.warning(f"⏳ Бонус через {hours}ч {minutes}м"))
+                return
+        
+        streak = self.db.add_daily_streak(user_data['id'])
+        
+        coins = random.randint(100, 300)
+        neons = random.randint(1, 5)
+        exp = random.randint(20, 60)
+        energy = 20
+        
+        coins = int(coins * (1 + min(streak, 30) * 0.05))
+        neons = int(neons * (1 + min(streak, 30) * 0.05))
+        exp = int(exp * (1 + min(streak, 30) * 0.05))
+        
+        if self.db.is_vip(user_data['id']):
+            coins = int(coins * 1.5)
+            neons = int(neons * 1.5)
+            exp = int(exp * 1.5)
+            energy = int(energy * 1.5)
+        if self.db.is_premium(user_data['id']):
+            coins = int(coins * 2)
+            neons = int(neons * 2)
+            exp = int(exp * 2)
+            energy = int(energy * 2)
+        
+        self.db.add_coins(user_data['id'], coins)
+        self.db.add_neons(user_data['id'], neons)
+        self.db.add_exp(user_data['id'], exp)
+        self.db.add_energy(user_data['id'], energy)
+        
+        text = (
+            f"# Спектр | Ежедневный бонус\n\n"
+            f"🎉 {user.first_name}, вы получили бонус!\n\n"
+            f"💰 Монеты: +{coins}\n"
+            f"💜 Неоны: +{neons}\n"
+            f"🔥 Стрик: {streak} дней\n"
+            f"✨ Опыт: +{exp}\n"
+            f"⚡️ Энергия: +{energy}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + coins} 💰\n"
+            f"💜 Новые неоны: {user_data['neons'] + neons}\n\n"
+            f"⏳ Следующий бонус через: 24 часа"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'daily', f'+{coins}💰 +{neons}💜')
+    
+    async def cmd_streak(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        streak = user_data.get('daily_streak', 0)
+        
+        text = (
+            s.header("🔥 ТЕКУЩИЙ СТРИК") + "\n\n"
+            f"{s.stat('Дней подряд', streak)}\n"
+            f"{s.stat('Множитель', f'x{1 + min(streak, 30) * 0.05:.2f}')}\n\n"
+            f"{s.info('Чем больше стрик, тем выше бонус!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("🛍 МАГАЗИН") + "\n\n"
+            f"{s.section('💊 ЗЕЛЬЯ')}"
+            f"{s.cmd('buy зелье здоровья', '50 💰 (❤️+30)')}\n"
+            f"{s.cmd('buy большое зелье', '100 💰 (❤️+70)')}\n\n"
+            f"{s.section('⚔️ ОРУЖИЕ')}"
+            f"{s.cmd('buy меч', '200 💰 (⚔️+10)')}\n"
+            f"{s.cmd('buy легендарный меч', '500 💰 (⚔️+30)')}\n\n"
+            f"{s.section('⚡️ ЭНЕРГИЯ')}"
+            f"{s.cmd('buy энергетик', '30 💰 (⚡️+20)')}\n"
+            f"{s.cmd('buy батарейка', '80 💰 (⚡️+50)')}\n\n"
+            f"{s.section('💎 ПРИВИЛЕГИИ')}"
+            f"{s.cmd('vip', f'VIP ({VIP_PRICE} 💰 / 30 дней)')}\n"
+            f"{s.cmd('premium', f'PREMIUM ({PREMIUM_PRICE} 💰 / 30 дней)')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Что купить? /buy [предмет]"))
+            return
+        
+        item = " ".join(context.args).lower()
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        items = {
+            "зелье здоровья": {"price": 50, "heal": 30},
+            "большое зелье": {"price": 100, "heal": 70},
+            "меч": {"price": 200, "damage": 10},
+            "легендарный меч": {"price": 500, "damage": 30},
+            "энергетик": {"price": 30, "energy": 20},
+            "батарейка": {"price": 80, "energy": 50}
+        }
+        
+        if item not in items:
+            await update.message.reply_text(s.error("❌ Такого товара нет в магазине"))
+            return
+        
+        item_data = items[item]
+        
+        if user_data['coins'] < item_data['price']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {item_data['price']} 💰"))
+            return
+        
+        self.db.add_coins(user_data['id'], -item_data['price'])
+        
+        effects = []
+        if 'heal' in item_data:
+            new_health = self.db.heal(user_data['id'], item_data['heal'])
+            effects.append(f"❤️ Здоровье +{item_data['heal']} (теперь {new_health})")
+        
+        if 'damage' in item_data:
+            new_damage = user_data['damage'] + item_data['damage']
+            self.db.update_user(user_data['id'], damage=new_damage)
+            effects.append(f"⚔️ Урон +{item_data['damage']} (теперь {new_damage})")
+        
+        if 'energy' in item_data:
+            new_energy = self.db.add_energy(user_data['id'], item_data['energy'])
+            effects.append(f"⚡️ Энергия +{item_data['energy']} (теперь {new_energy})")
+        
+        effects_text = "\n".join([f"{s.item(e)}" for e in effects])
+        
+        await update.message.reply_text(
+            f"{s.success('✅ Покупка совершена!')}\n\n"
+            f"{s.item(f'Предмет: {item}')}\n"
+            f"{effects_text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        self.db.log_action(user_data['id'], 'buy', item)
+    
+    async def cmd_vip_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("💎 VIP СТАТУС") + "\n\n"
+            f"Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n\n"
+            f"{s.item('⚔️ Урон в битвах +20%')}\n"
+            f"{s.item('💰 Награда с боссов +50%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +50%')}\n"
+            f"{s.item('💎 Алмазы +1 в день')}\n\n"
+            f"{s.cmd('buyvip', 'купить VIP')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_premium_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            s.header("💎 PREMIUM СТАТУС") + "\n\n"
+            f"Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n\n"
+            f"{s.item('⚔️ Урон в битвах +50%')}\n"
+            f"{s.item('💰 Награда с боссов +100%')}\n"
+            f"{s.item('🎁 Ежедневный бонус +100%')}\n"
+            f"{s.item('💎 Алмазы +3 в день')}\n"
+            f"{s.item('🚫 Игнорирование спам-фильтра')}\n\n"
+            f"{s.cmd('buypremium', 'купить PREMIUM')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < VIP_PRICE:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {VIP_PRICE} 💰"))
+            return
+        
+        if self.db.is_vip(user_data['id']):
+            await update.message.reply_text(s.error("❌ VIP статус уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -VIP_PRICE)
+        until = self.db.set_vip(user_data['id'], VIP_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        text = (
+            s.header("✨ VIP СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{s.item(f'Срок: до {date_str}')}\n\n"
+            f"{s.info('Спасибо за поддержку!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'buy_vip')
+    
+    async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < PREMIUM_PRICE:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Нужно {PREMIUM_PRICE} 💰"))
+            return
+        
+        if self.db.is_premium(user_data['id']):
+            await update.message.reply_text(s.error("❌ PREMIUM статус уже активен"))
+            return
+        
+        self.db.add_coins(user_data['id'], -PREMIUM_PRICE)
+        until = self.db.set_premium(user_data['id'], PREMIUM_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        text = (
+            s.header("✨ PREMIUM СТАТУС АКТИВИРОВАН") + "\n\n"
+            f"{s.item(f'Срок: до {date_str}')}\n\n"
+            f"{s.info('Спасибо за поддержку!')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'buy_premium')
     
     async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка цифр меню"""
