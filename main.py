@@ -443,6 +443,7 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.create_tables()
+        self.conn.commit()  # Важно! Фиксируем создание таблиц
         self.init_data()
         logger.info("✅ База данных инициализирована")
     
