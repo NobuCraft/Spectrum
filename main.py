@@ -2775,7 +2775,7 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         
-        # АВТОМАТИЧЕСКИЕ ДЕЙСТВИЯ (НАСТОЯЩИЕ)
+                # АВТОМАТИЧЕСКИЕ ДЕЙСТВИЯ
         if warns >= 3 and warns < 5:
             minutes = 60
             until = datetime.now() + timedelta(minutes=minutes)
@@ -2784,40 +2784,23 @@ class SpectrumBot:
             
             try:
                 until_date = int(time.time()) + (minutes * 60)
+                # Используем словарь
+                permissions = {
+                    'can_send_messages': False,
+                    'can_send_media_messages': False,
+                    'can_send_polls': False,
+                    'can_send_other_messages': False,
+                    'can_add_web_page_previews': False
+                }
                 await context.bot.restrict_chat_member(
                     chat_id=chat_id,
                     user_id=target_user['telegram_id'],
-                    permissions=ChatPermissions(
-                        can_send_messages=False,
-                        can_send_media_messages=False,
-                        can_send_polls=False,
-                        can_send_other_messages=False,
-                        can_add_web_page_previews=False,
-                        can_change_info=False,
-                        can_invite_users=False,
-                        can_pin_messages=False
-                    ),
+                    permissions=permissions,
                     until_date=until_date
                 )
                 await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час (3+ предупреждений)"))
-                logger.info(f"✅ Авто-мут применен к {target_user['first_name']} (3+ варнов)")
             except Exception as e:
                 logger.error(f"Ошибка авто-мута: {e}")
-                await update.message.reply_text(s.error(f"❌ Не удалось замутить: {str(e)[:100]}"))
-        
-        elif warns >= 5:
-            self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
-            
-            try:
-                await context.bot.ban_chat_member(
-                    chat_id=chat_id,
-                    user_id=target_user['telegram_id']
-                )
-                await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен (5 предупреждений)"))
-                logger.info(f"✅ Авто-бан применен к {target_user['first_name']} (5 варнов)")
-            except Exception as e:
-                logger.error(f"Ошибка авто-бана: {e}")
-                await update.message.reply_text(s.error(f"❌ Не удалось забанить: {str(e)[:100]}"))
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2971,29 +2954,44 @@ class SpectrumBot:
         until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
         until_str = until.strftime("%d.%m.%Y %H:%M")
         
-        # НАСТОЯЩИЙ МУТ В TELEGRAM (через restrict_chat_member)
+        # НАСТОЯЩИЙ МУТ - УНИВЕРСАЛЬНЫЙ СПОСОБ
         mute_success = False
         try:
             until_date = int(time.time()) + (minutes * 60)
             
-            # Правильные параметры для restrict_chat_member
-            await context.bot.restrict_chat_member(
-                chat_id=chat_id,
-                user_id=target['telegram_id'],
-                permissions=ChatPermissions(
-                    can_send_messages=False,
-                    can_send_media_messages=False,
-                    can_send_polls=False,
-                    can_send_other_messages=False,
-                    can_add_web_page_previews=False,
-                    can_change_info=False,
-                    can_invite_users=False,
-                    can_pin_messages=False
-                ),
-                until_date=until_date
-            )
-            mute_success = True
-            logger.info(f"✅ Реальный мут применен к {target['first_name']} до {until_str}")
+            # Пробуем первый способ (словарь)
+            try:
+                permissions_dict = {
+                    'can_send_messages': False,
+                    'can_send_media_messages': False,
+                    'can_send_polls': False,
+                    'can_send_other_messages': False,
+                    'can_add_web_page_previews': False
+                }
+                
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target['telegram_id'],
+                    permissions=permissions_dict,
+                    until_date=until_date
+                )
+                mute_success = True
+                logger.info("✅ Мут применен через словарь")
+            except:
+                # Если не сработало, пробуем минимальный набор
+                permissions_min = {
+                    'can_send_messages': False
+                }
+                
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target['telegram_id'],
+                    permissions=permissions_min,
+                    until_date=until_date
+                )
+                mute_success = True
+                logger.info("✅ Мут применен через минимальные права")
+                
         except Exception as e:
             logger.error(f"❌ Ошибка реального мута: {e}")
             error_text = str(e).lower()
@@ -3004,7 +3002,7 @@ class SpectrumBot:
             elif "user not found" in error_text:
                 await update.message.reply_text(s.error("❌ Пользователь не найден в чате!"))
             else:
-                await update.message.reply_text(s.error(f"❌ Ошибка Telegram: {str(e)[:100]}"))
+                await update.message.reply_text(s.error(f"❌ Ошибка: {str(e)[:100]}"))
         
         # Уведомление в ЛС
         try:
@@ -3073,24 +3071,22 @@ class SpectrumBot:
         
         self.db.unmute_user(target['id'], user_data['id'])
         
+        # Снимаем мут - возвращаем полные права
         try:
-            permissions = ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_polls=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True,
-                can_change_info=False,
-                can_invite_users=False,
-                can_pin_messages=False
-            )
+            permissions = {
+                'can_send_messages': True,
+                'can_send_media_messages': True,
+                'can_send_polls': True,
+                'can_send_other_messages': True,
+                'can_add_web_page_previews': True
+            }
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id'],
                 permissions=permissions
             )
         except Exception as e:
-            logger.error(f"Ошибка снятия мута в Telegram: {e}")
+            logger.error(f"Ошибка снятия мута: {e}")
         
         try:
             await context.bot.send_message(
@@ -3101,77 +3097,6 @@ class SpectrumBot:
             pass
         
         await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
-    
-    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        chat_id = update.effective_chat.id
-        
-        if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
-            return
-        
-        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-        if not match:
-            await update.message.reply_text(s.error("❌ Пример: бан @user спам"))
-            return
-        
-        username = match.group(1)
-        reason = match.group(2) if match.group(2) else "Нарушение правил"
-        
-        target = self.db.get_user_by_username(username)
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя забанить модератора выше рангом"))
-            return
-        
-        # Бан в БД
-        self.db.ban_user(target['id'], user_data['id'], reason)
-        
-        # НАСТОЯЩИЙ БАН В TELEGRAM (через ban_chat_member)
-        ban_success = False
-        try:
-            await context.bot.ban_chat_member(
-                chat_id=chat_id,
-                user_id=target['telegram_id']
-            )
-            ban_success = True
-            logger.info(f"✅ Реальный бан применен к {target['first_name']}")
-        except Exception as e:
-            logger.error(f"❌ Ошибка реального бана: {e}")
-            error_text = str(e).lower()
-            if "not enough rights" in error_text:
-                await update.message.reply_text(s.error("❌ У бота нет прав на бан! Нужно: 'Блокировка пользователей'"))
-            elif "user is an administrator" in error_text:
-                await update.message.reply_text(s.error("❌ Нельзя забанить администратора!"))
-            elif "user not found" in error_text:
-                await update.message.reply_text(s.error("❌ Пользователь не найден в чате!"))
-            else:
-                await update.message.reply_text(s.error(f"❌ Ошибка Telegram: {str(e)[:100]}"))
-        
-        # Уведомление в ЛС
-        try:
-            await context.bot.send_message(
-                target['telegram_id'],
-                f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
-                f"{s.item(f'Причина: {reason}')}\n"
-                f"{s.item(f'Чат: {update.effective_chat.title}')}"
-            )
-        except:
-            pass
-        
-        text = (
-            s.header("БЛОКИРОВКА") + "\n"
-            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
-            f"{s.item(f'Причина: {reason}')}\n\n"
-            f"{'✅ Пользователь забанен' if ban_success else '❌ Не удалось забанить'}"
-        )
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         bans = self.db.get_banlist()
