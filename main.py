@@ -1875,76 +1875,190 @@ class SpectrumBot:
             return True
         return False
     
-    def setup_handlers(self):
-        """Регистрация всех обработчиков"""
+    # ===== ОСНОВНЫЕ КОМАНДЫ =====
+    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка команды /start с новым дизайном"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id, user.first_name)
         
-        # ===== ОСНОВНЫЕ КОМАНДЫ =====
-        self.app.add_handler(CommandHandler("start", self.cmd_start))
-        self.app.add_handler(CommandHandler("help", self.cmd_help))
-        self.app.add_handler(CommandHandler("menu", self.show_menu))
+        # Проверка реферальной ссылки
+        if context.args and context.args[0].isdigit():
+            referrer_id = int(context.args[0])
+            if referrer_id != user_data['id']:
+                self.db.update_user(user_data['id'], referrer_id=referrer_id)
+                self.db.add_neons(referrer_id, 50)  # 50 неонов за реферала
+                try:
+                    await context.bot.send_message(
+                        referrer_id,
+                        s.success(f"🎉 По вашей ссылке зарегистрировался {user.first_name}! +50 💜")
+                    )
+                except:
+                    pass
         
-        # ===== ПРОФИЛЬ =====
-        self.app.add_handler(CommandHandler("profile", self.cmd_profile))
-        self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
-        self.app.add_handler(CommandHandler("title", self.cmd_set_title))
-        self.app.add_handler(CommandHandler("motto", self.cmd_set_motto))
-        self.app.add_handler(CommandHandler("bio", self.cmd_set_bio))
-        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))
-        self.app.add_handler(CommandHandler("city", self.cmd_set_city))
-        self.app.add_handler(CommandHandler("country", self.cmd_set_country))
-        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
-        self.app.add_handler(CommandHandler("age", self.cmd_set_age))
-        self.app.add_handler(CommandHandler("id", self.cmd_id))
+        # Создаем клавиатуру с кнопками
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎲 Случайная беседа", callback_data="random_chat")],
+            [InlineKeyboardButton("🏆 Беседы топ дня", callback_data="top_chats")],
+            [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
+            [InlineKeyboardButton("🔧 Установка", callback_data="setup_info")],
+            [InlineKeyboardButton("💜 Что такое неоны", callback_data="neons_info")],
+            [InlineKeyboardButton("🎁 Бонусы", callback_data="bonuses_menu")]
+        ])
         
-        # ===== СТАТИСТИКА =====
-        self.app.add_handler(CommandHandler("stats", self.cmd_stats))
-        self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
-        self.app.add_handler(CommandHandler("top", self.cmd_top))
-        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
-        self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
-        self.app.add_handler(CommandHandler("topneons", self.cmd_top_neons))
-        self.app.add_handler(CommandHandler("topglitches", self.cmd_top_glitches))
+        text = f"""
+👨‍💼 [Spectrum | Чат-менеджер](https://t.me/{BOT_USERNAME}) приветствует Вас!
+
+Я могу предложить следующие темы:
+
+1). [установка](https://teletype.in/@nobucraft/2_pbVPOhaYo) — инструкция установки Ириса;
+2). [команды](https://teletype.in/@nobucraft/h0ZU9C1yXNS) — список команд бота;
+3). что такое ириски — ириски, виртуальная валюта, как её получить;
+4). [бонусы](https://teletype.in/@nobucraft/60hXq-x3h6S) — какие есть бонусы во вселенной Ириса;
+5). мой спам — проверить, есть ли вы в базе «Ирис-антиспам».
+
+[Список всех команд с их описанием](https://teletype.in/@nobucraft/h0ZU9C1yXNS)
+[Канал](https://t.me/Spectrum_Game) с важными новостями.
+[Канал с полезными статьями](https://t.me/Spectrum_poleznoe)
+
+🔈 Для вызова клавиатуры с основными темами, введите `начать` или `помощь`.
+        """
         
-        # ===== МОДЕРАЦИЯ =====
-        self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
-        self.app.add_handler(CommandHandler("warns", self.cmd_warns))
-        self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
-        self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
-        self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
-        self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
-        self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
+        await update.message.reply_text(
+            text,
+            parse_mode=ParseMode.MARKDOWN,
+            disable_web_page_preview=True,
+            reply_markup=keyboard
+        )
         
-        # ===== ЭКОНОМИКА =====
-        self.app.add_handler(CommandHandler("balance", self.cmd_balance))
-        self.app.add_handler(CommandHandler("coins", self.cmd_balance))
-        self.app.add_handler(CommandHandler("pay", self.cmd_pay))
-        self.app.add_handler(CommandHandler("daily", self.cmd_daily))
-        self.app.add_handler(CommandHandler("streak", self.cmd_streak))
-        self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
-        self.app.add_handler(CommandHandler("buyvip", self.cmd_buy_vip))
-        self.app.add_handler(CommandHandler("premium", self.cmd_premium_info))
-        self.app.add_handler(CommandHandler("buypremium", self.cmd_buy_premium))
-        self.app.add_handler(CommandHandler("shop", self.cmd_shop))
-        self.app.add_handler(CommandHandler("buy", self.cmd_buy))
+        self.db.log_action(user_data['id'], 'start')
+    
+    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Команда помощи"""
+        text = (
+            s.header("СПРАВКА") + "\n"
+            f"{s.section('📌 ОСНОВНЫЕ')}"
+            f"{s.cmd('start', 'начать')}\n"
+            f"{s.cmd('menu', 'меню с цифрами')}\n"
+            f"{s.cmd('profile', 'профиль')}\n"
+            f"{s.cmd('id', 'узнать свой ID')}\n\n"
+            
+            f"{s.section('🤖 ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ')}"
+            f"{s.cmd('Спектр [вопрос]', 'задать вопрос AI (в группах)')}\n"
+            f"{s.cmd('[любое сообщение]', 'AI отвечает в личке')}\n\n"
+            
+            f"{s.section('⚙️ МОДЕРАЦИЯ')}"
+            f"{s.cmd('+Модер @user', '1 ранг')}\n"
+            f"{s.cmd('варн @user [причина]', 'предупреждение')}\n"
+            f"{s.cmd('мут @user 30м [причина]', 'заглушить')}\n"
+            f"{s.cmd('бан @user [причина]', 'заблокировать')}\n"
+            f"{s.cmd('админы', 'список администрации')}\n\n"
+            
+            f"{s.section('💰 ЭКОНОМИКА')}"
+            f"{s.cmd('balance', 'баланс')}\n"
+            f"{s.cmd('daily', 'ежедневный бонус')}\n"
+            f"{s.cmd('shop', 'магазин')}\n"
+            f"{s.cmd('neons', 'мои неоны')}\n"
+            f"{s.cmd('farm', 'ферма глитчей')}\n\n"
+            
+            f"{s.section('🎮 ИГРЫ')}"
+            f"{s.cmd('games', 'меню игр')}\n"
+            f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
+            f"{s.cmd('bosses', 'список боссов')}\n"
+            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n\n"
+            
+            f"{s.section('👾 БОССЫ')}"
+            f"{s.cmd('bosses', 'список боссов')}\n"
+            f"{s.cmd('boss [ID]', 'атаковать босса')}\n"
+            f"{s.cmd('regen', 'восстановить энергию')}\n\n"
+            
+            f"{s.section('🎭 МАФИЯ')}"
+            f"{s.cmd('mafia', 'меню мафии')}\n"
+            f"{s.cmd('mafiastart', 'начать игру')}\n"
+            f"{s.cmd('mafiajoin', 'присоединиться')}\n\n"
+            
+            f"{s.section('🏅 НОВЫЕ МОДУЛИ')}"
+            f"{s.cmd('achievements', 'ачивки')}\n"
+            f"{s.cmd('circles', 'кружки по интересам')}\n"
+            f"{s.cmd('bookmarks', 'закладки')}\n"
+            f"{s.cmd('bonuses', 'кибер-бонусы')}\n\n"
+            
+            f"{s.section('📊 ГРАФИКИ')}"
+            f"{s.cmd('menu', 'меню → 5')}\n"
+            f"{s.cmd('profile', 'профиль с графиком')}\n\n"
+            
+            f"👑 Владелец: {OWNER_USERNAME}"
+        )
         
-        # ===== НОВАЯ ЭКОНОМИКА (НЕОНЫ, ГЛИТЧИ) =====
-        self.app.add_handler(CommandHandler("neons", self.cmd_neons))
-        self.app.add_handler(CommandHandler("glitches", self.cmd_glitches))
-        self.app.add_handler(CommandHandler("farm", self.cmd_farm))
-        self.app.add_handler(CommandHandler("transfer", self.cmd_transfer_neons))
-        self.app.add_handler(CommandHandler("exchange", self.cmd_exchange))
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Главное меню с цифрами"""
+        text = """
+# Спектр | Меню
+
+Выберите действие (напишите цифру):
+
+1️⃣ 👤 Профиль
+2️⃣ 📊 Статистика
+3️⃣ 🎮 Игры
+4️⃣ 💰 Магазин
+5️⃣ 📈 График активности
+6️⃣ ❓ Помощь
+7️⃣ 📞 Контакты
+0️⃣ 🔙 Выход
+
+📝 Просто напишите номер в чат
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def show_contacts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Контакты"""
+        text = f"""
+# Спектр | Контакты
+
+👑 **Владелец: {OWNER_USERNAME}
+📢 Канал: @spectrum_channel
+💬 Чат: @spectrum_chat
+📧 Email: support@spectrum.ru
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def show_chart(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать график активности"""
+        user = update.effective_user
         
-        # ===== РАЗВЛЕЧЕНИЯ =====
-        self.app.add_handler(CommandHandler("joke", self.cmd_joke))
-        self.app.add_handler(CommandHandler("fact", self.cmd_fact))
-        self.app.add_handler(CommandHandler("quote", self.cmd_quote))
-        self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
-        self.app.add_handler(CommandHandler("advice", self.cmd_advice))
-        self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
-        self.app.add_handler(CommandHandler("weather", self.cmd_weather))
-        self.app.add_handler(CommandHandler("random", self.cmd_random))
-        self.app.add_handler(CommandHandler("choose", self.cmd_choose))
-            # ===== ПРОДОЛЖЕНИЕ МЕТОДОВ =====
+        await update.message.chat.send_action(action="upload_photo")
+        
+        days, counts = self.db.get_weekly_stats(user.id)
+        
+        chart = ChartGenerator.create_activity_chart(days, counts, user.first_name)
+        
+        await update.message.reply_photo(
+            photo=chart,
+            caption=f"📊 Активность {user.first_name} за последние 7 дней",
+            parse_mode='Markdown'
+        )
+    
+    async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка цифр меню"""
+        text = update.message.text.strip()
+        
+        if text == "1":
+            await self.cmd_profile(update, context)
+        elif text == "2":
+            await self.cmd_stats(update, context)
+        elif text == "3":
+            await self.cmd_games(update, context)
+        elif text == "4":
+            await self.cmd_shop(update, context)
+        elif text == "5":
+            await self.show_chart(update, context)
+        elif text == "6":
+            await self.cmd_help(update, context)
+        elif text == "7":
+            await self.show_contacts(update, context)
+        elif text == "0":
+            await self.show_menu(update, context)
     
     # ===== ПРОФИЛЬ =====
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2550,16 +2664,6 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         self.db.log_action(user_data['id'], 'transfer_neons', f"{amount}💜 -> {target['id']}")
-        
-        # Проверяем ачивку мецената
-        total_gifted = user_data.get('neons_gifted', 0) + amount
-        self.db.update_user(user_data['id'], neons_gifted=total_gifted)
-        if total_gifted >= 1000:
-            self.db.unlock_achievement(user_data['id'], 24)
-        if total_gifted >= 10000:
-            self.db.unlock_achievement(user_data['id'], 25)
-        if total_gifted >= 50000:
-            self.db.unlock_achievement(user_data['id'], 26)
     
     async def cmd_exchange(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обмен глитчей на неоны"""
@@ -2809,19 +2913,6 @@ class SpectrumBot:
     async def cmd_pairs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.cmd_pairing(update, context)
     
-    async def handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка голосовых сообщений"""
-        chat_id = update.effective_chat.id
-        
-        # Проверяем, включена ли функция
-        self.db.cursor.execute("SELECT speech_enabled FROM chat_settings WHERE chat_id = ?", (chat_id,))
-        row = self.db.cursor.fetchone()
-        if not row or not row[0]:
-            return
-        
-        # Здесь можно добавить интеграцию с распознаванием речи
-        await update.message.reply_text("🎤 Голосовое сообщение получено. Функция распознавания в разработке.")
-    
     # ===== ИГРЫ =====
     async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = """
@@ -2920,9 +3011,6 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    # Продолжение в следующем сообщении из-за лимита
-
-    # ===== ПРОДОЛЖЕНИЕ ИГР =====
     async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
@@ -3296,6 +3384,7 @@ class SpectrumBot:
         
         keyboard.append([InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")])
         keyboard.append([InlineKeyboardButton("⚔️ Купить оружие", callback_data="boss_buy_weapon")])
+        keyboard.append([InlineKeyboardButton("📋 К списку боссов", callback_data="boss_list")])
         
         reply_markup = InlineKeyboardMarkup(keyboard)
         
@@ -3315,7 +3404,7 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Неверный ID"))
             return
         
-        await self._process_boss_attack(update, context, user, user_data, boss_id)
+        await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=False)
     
     async def _process_boss_attack(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                                    user, user_data, boss_id: int, is_callback: bool = False):
@@ -3500,6 +3589,98 @@ class SpectrumBot:
             f"{s.item(f'💰 Потрачено: {cost}')}\n\n"
             f"{s.item(f'Теперь: ❤️ {user_data["health"]} | ⚡️ {user_data["energy"]}')}"
         )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    # ===== ДУЭЛИ =====
+    async def cmd_duel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /duel @user ставка"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            bet = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("❌ Ставка должна быть числом"))
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя вызвать на дуэль самого себя"))
+            return
+        
+        self.db.cursor.execute("SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
+                             (user_data['id'], user_data['id']))
+        if self.db.cursor.fetchone():
+            await update.message.reply_text(s.error("❌ У тебя уже есть активная дуэль"))
+            return
+        
+        duel_id = self.db.create_duel(user_data['id'], target['id'], bet)
+        self.db.add_coins(user_data['id'], -bet)
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ ПРИНЯТЬ", callback_data=f"accept_duel_{duel_id}"),
+             InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"reject_duel_{duel_id}")]
+        ])
+        
+        await update.message.reply_text(
+            f"# Спектр | Дуэль\n\n"
+            f"⚔️ {user.first_name} VS {target_name} ⚔️\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"{user.first_name} вызывает на дуэль!\n\n"
+            f"{target_name}, прими вызов:",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_duels(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT * FROM duels WHERE status = 'pending'")
+        duels = self.db.cursor.fetchall()
+        
+        if not duels:
+            await update.message.reply_text(s.info("Нет активных дуэлей"))
+            return
+        
+        text = s.header("⚔️ АКТИВНЫЕ ДУЭЛИ") + "\n\n"
+        for duel in duels:
+            challenger = self.db.get_user_by_id(duel[1])
+            opponent = self.db.get_user_by_id(duel[2])
+            if challenger and opponent:
+                text += f"{s.item(f'{challenger["first_name"]} vs {opponent["first_name"]} — ставка {duel[3]} 💰')}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_duel_rating(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT first_name, nickname, duel_rating FROM users WHERE duel_rating > 0 ORDER BY duel_rating DESC LIMIT 10")
+        top = self.db.cursor.fetchall()
+        
+        if not top:
+            await update.message.reply_text(s.info("Рейтинг пуст"))
+            return
+        
+        text = s.header("⚔️ ТОП ДУЭЛЯНТОВ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} очков\n"
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
@@ -3990,8 +4171,6 @@ class SpectrumBot:
         
         await update.message.reply_text(s.success("✅ Закладка удалена"))
     
-    # Продолжение в следующем сообщении...
-
     # ===== ТАЙМЕРЫ =====
     async def cmd_add_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Добавить таймер"""
@@ -5783,8 +5962,6 @@ class SpectrumBot:
         
         await update.message.reply_text(s.success(f"✅ {neons} 💜 переведены в ваш кошелёк!"))
     
-    # Продолжение в следующем сообщении...
-
     # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -6847,28 +7024,3 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             await self.ai.close()
         self.db.close()
         logger.info("✅ Бот остановлен")
-
-
-# ========== ТОЧКА ВХОДА ==========
-async def main():
-    print("=" * 60)
-    print(f"✨ ЗАПУСК БОТА {BOT_NAME} v{BOT_VERSION} ✨")
-    print("=" * 60)
-    print(f"📊 Команд: 300+")
-    print(f"📊 Модулей: 30+")
-    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY and ai and ai.is_available else 'Не подключен'}")
-    print("=" * 60)
-    
-    bot = SpectrumBot()
-    
-    try:
-        await bot.run()
-    except KeyboardInterrupt:
-        logger.info("Остановка по запросу пользователя")
-        await bot.close()
-    except Exception as e:
-        logger.error(f"Необработанная ошибка: {e}")
-        await bot.close()
-
-if __name__ == "__main__":
-    asyncio.run(main())
