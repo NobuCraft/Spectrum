@@ -7024,3 +7024,60 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             await self.ai.close()
         self.db.close()
         logger.info("✅ Бот остановлен")
+
+# ========== ТОЧКА ВХОДА ==========
+async def main():
+    print("=" * 60)
+    print(f"✨ ЗАПУСК БОТА {BOT_NAME} v{BOT_VERSION} ✨")
+    print("=" * 60)
+    print(f"📊 Команд: 300+")
+    print(f"📊 Модулей: 30+")
+    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY and ai and ai.is_available else 'Не подключен'}")
+    print("=" * 60)
+    
+    bot = SpectrumBot()
+    
+    try:
+        # Инициализируем и запускаем приложение
+        await bot.app.initialize()
+        await bot.app.start()
+        
+        # Запускаем polling
+        await bot.app.updater.start_polling(
+            allowed_updates=Update.ALL_TYPES,
+            drop_pending_updates=True
+        )
+        
+        # Запускаем проверку таймеров в фоне
+        asyncio.create_task(bot.check_timers())
+        
+        logger.info(f"🚀 Бот {BOT_NAME} успешно запущен и слушает обновления")
+        
+        # Держим бот запущенным
+        while True:
+            await asyncio.sleep(1)
+            
+    except KeyboardInterrupt:
+        logger.info("👋 Остановка по запросу пользователя")
+        await bot.app.updater.stop()
+        await bot.app.stop()
+        await bot.app.shutdown()
+        await bot.close()
+    except Exception as e:
+        logger.error(f"❌ Критическая ошибка: {e}")
+        import traceback
+        traceback.print_exc()
+        await bot.app.updater.stop()
+        await bot.app.stop()
+        await bot.app.shutdown()
+        await bot.close()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("👋 Программа завершена пользователем")
+    except Exception as e:
+        logger.error(f"❌ Фатальная ошибка: {e}")
+        import traceback
+        traceback.print_exc()
