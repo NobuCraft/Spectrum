@@ -387,6 +387,23 @@ class GroqAI:
     
     async def close(self):
         pass
+    
+    async def should_respond(self, message: str, is_reply_to_bot: bool = False) -> bool:
+        """
+        Определяет, стоит ли отвечать на сообщение
+        """
+        # Всегда отвечаем, если это ответ на сообщение бота
+        if is_reply_to_bot:
+            return True
+        
+        # 20% шанс ответить на любое сообщение для троллинга
+        if random.random() < 0.2:
+            return True
+        
+        return False
+    
+    async def close(self):
+        pass
 
 # ========== КЛАССЫ МАФИИ ==========
 class MafiaRole(str, Enum):
