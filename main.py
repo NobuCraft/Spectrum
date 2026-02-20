@@ -4207,7 +4207,7 @@ class SpectrumBot:
         ]
         await update.message.reply_text(f"💡 {random.choice(advices)}")
 
-        async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Проверка совместимости двух пользователей"""
         if len(context.args) < 2:
             await update.message.reply_text(s.error("❌ Укажите двух пользователей: /compatibility @user1 @user2"))
