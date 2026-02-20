@@ -139,7 +139,7 @@ class ChartGenerator:
         return buf
 
 # ========== GROQ AI КЛАСС (ПРОВОКАТОР С РЕАКЦИЯМИ) ==========
-class GroqAI:
+    class GroqAI:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = None
@@ -149,8 +149,8 @@ class GroqAI:
         self.ai_cooldown = AI_COOLDOWN
         self.toxic_users = defaultdict(int)
         self.blocked_users = set()
-        self.replied_messages = set()  # Отслеживаем на какие сообщения уже ответили
-        self.reply_chance = 0.3  # 30% шанс ответить на любое сообщение (кроме команд)
+        self.replied_messages = set()
+        self.reply_chance = 0.3
         
         if GROQ_AVAILABLE and api_key:
             try:
@@ -163,26 +163,26 @@ class GroqAI:
         
         # ЭМОДЗИ-РЕАКЦИИ ДЛЯ ПРОВОКАЦИЙ
         self.reactions = {
-            'clown': '🤡',  # Клоун - для тупых вопросов
-            'puke': '🤮',   # Тошнота - для зануд
-            'poop': '💩',   # Какашка - для провокации
-            'middle_finger': '🖕',  # Фак - для агрессии
-            'skull': '💀',  # Череп - когда "умер от смеха"
-            'monkey': '🐒',  # Обезьяна - для глупых
-            'rolling_eyes': '🙄',  # Закатывание глаз
-            'facepalm': '🤦',  # Рукалицо
-            'sleeping': '😴',  # Сонный - от скуки
-            'smirk': '😏',  # Ухмылка
-            'devil': '😈',  # Дьявол
-            'angel': '👼',  # Ангелок (саркастично)
-            'fire': '🔥',   # Огонь (когда жестко)
-            '100': '💯',    # Сто процентов
-            'eyes': '👀',   # Глаза (слежу)
-            'brain': '🧠',  # Мозг (когда умничают)
-            'broken_heart': '💔',  # Разбитое сердце (когда обидели)
-            'crown': '👑',  # Корона (король троллей)
-            'robot': '🤖',  # Робот
-            'alien': '👾'   # Пришелец
+            'clown': '🤡',
+            'puke': '🤮',
+            'poop': '💩',
+            'middle_finger': '🖕',
+            'skull': '💀',
+            'monkey': '🐒',
+            'rolling_eyes': '🙄',
+            'facepalm': '🤦',
+            'sleeping': '😴',
+            'smirk': '😏',
+            'devil': '😈',
+            'angel': '👼',
+            'fire': '🔥',
+            '100': '💯',
+            'eyes': '👀',
+            'brain': '🧠',
+            'broken_heart': '💔',
+            'crown': '👑',
+            'robot': '🤖',
+            'alien': '👾'
         }
         
         # СИСТЕМНЫЙ ПРОМПТ - ЖЕСТКИЙ ПРОВОКАТОР С ЭМОДЗИ
@@ -289,10 +289,7 @@ class GroqAI:
 Твоя задача — быть самым жестким троллем в чате, но чтобы это было смешно! И отвечай на сообщения даже без упоминания "Спектр", просто если есть настроение потроллить 🤡"""
     
     async def get_response(self, user_id: int, message: str, username: str = "Пользователь", force_response: bool = False) -> Optional[str]:
-        """
-        Получить ответ от AI
-        force_response: принудительный ответ (для прямых обращений)
-        """
+        """Получить ответ от AI"""
         if not self.is_available:
             return None
         
@@ -300,26 +297,20 @@ class GroqAI:
         mat_words = ['бля', 'хуй', 'пизд', 'ебат', 'нах', 'сука', 'гандон', 'мудак', 'долбоеб', 'пидор', 'аху', 'наху', 'бляд']
         has_mat = any(word in message.lower() for word in mat_words)
         
-        # Если пользователь матерится, увеличиваем счетчик токсичности
         if has_mat:
             self.toxic_users[user_id] += 1
-            
-            # Если слишком токсичный, можем заблокировать
             if self.toxic_users[user_id] > 10:
                 self.blocked_users.add(user_id)
                 return f"Слыш, {username}, ты задолбал уже материться 🤡 Иди остынь, потом поговорим 🖕 Блок 👾"
         
-        # Если пользователь в черном списке, не отвечаем
         if user_id in self.blocked_users:
             return None
         
         now = time.time()
         
-        # Проверка кулдауна (только для не-принудительных ответов)
         if not force_response:
             if now - self.user_last_ai[user_id] < self.ai_cooldown:
-                # Случайно выбираем: отвечать или нет
-                if random.random() < 0.3:  # 30% шанс ответить даже на кулдауне
+                if random.random() < 0.3:
                     cooldown_phrases = [
                         f"Эй, {username}, полегче на поворотах! 🖕 Я тебе не раб, подожди секунду 😏",
                         f"Ты чего так частишь? 🤡 Нейросеть не резиновая, подожди, блин 🧠",
@@ -346,7 +337,7 @@ class GroqAI:
                 return self.client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
                     messages=messages,
-                    temperature=1.3,  # Максимальная креативность/агрессия
+                    temperature=1.3,
                     max_tokens=400,
                     top_p=0.98
                 )
@@ -361,7 +352,6 @@ class GroqAI:
             
         except Exception as e:
             logger.error(f"Groq error: {e}")
-            # Агрессивные фразы на ошибку
             error_phrases = [
                 f"Блин, {username}, ты меня сломал! 🤖 Нейросеть в ауте 💀 Сам теперь разбирайся 🖕",
                 f"Ошибка, блин! 🤡 Это ты виноват, слишком тупой вопрос задал 🧠",
@@ -372,39 +362,28 @@ class GroqAI:
             return random.choice(error_phrases)
     
     async def should_respond(self, message: str, is_reply_to_bot: bool = False) -> bool:
-        """
-        Определяет, стоит ли отвечать на сообщение
-        """
-        # Всегда отвечаем, если это ответ на сообщение бота
+        """Определяет, стоит ли отвечать на сообщение"""
         if is_reply_to_bot:
             return True
-        
-        # 20% шанс ответить на любое сообщение для троллинга
         if random.random() < 0.2:
             return True
-        
-        return False
-    
-    async def close(self):
-        pass
-    
-    async def should_respond(self, message: str, is_reply_to_bot: bool = False) -> bool:
-        """
-        Определяет, стоит ли отвечать на сообщение
-        """
-        # Всегда отвечаем, если это ответ на сообщение бота
-        if is_reply_to_bot:
-            return True
-        
-        # 20% шанс ответить на любое сообщение для троллинга
-        if random.random() < 0.2:
-            return True
-        
         return False
     
     async def close(self):
         pass
 
+# ========== ИНИЦИАЛИЗАЦИЯ AI ==========
+ai = None
+if GROQ_API_KEY and GROQ_AVAILABLE:
+    try:
+        ai = GroqAI(GROQ_API_KEY)
+        logger.info("✅ Groq AI инициализирован (режим: ПРОВОКАТОР С РЕАКЦИЯМИ)")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации AI: {e}")
+        ai = None
+else:
+    logger.warning("⚠️ Groq AI не подключен (нет API ключа)")
+        
 # ========== КЛАССЫ МАФИИ ==========
 class MafiaRole(str, Enum):
     MAFIA = "😈 Мафия"
@@ -8358,34 +8337,43 @@ class SpectrumBot:
                         )
                     return
 
-                # Проверяем, нужно ли AI ответить
+                               # Проверяем, нужно ли AI ответить
         is_reply_to_bot = (update.message.reply_to_message and 
                           update.message.reply_to_message.from_user.id == context.bot.id)
         
         should_respond = False
+        force_response = False
+        ai_message = message_text  # копируем для возможного изменения
         
         # Всегда отвечаем на "Спектр"
-        if message_text.lower().startswith("спектр"):
+        if ai_message.lower().startswith("спектр"):
             should_respond = True
-            message_text = message_text[6:].strip()
+            force_response = True
+            ai_message = ai_message[6:].strip()
+            if not ai_message:
+                ai_message = "Привет"
         # В личке отвечаем на всё
         elif chat.type == "private":
             should_respond = True
+            force_response = True
         # В группах проверяем по алгоритму
-        else:
-            should_respond = await self.ai.should_respond(message_text, is_reply_to_bot)
+        elif self.ai and self.ai.is_available:
+            should_respond = await self.ai.should_respond(ai_message, is_reply_to_bot)
+            force_response = False
         
         if should_respond and self.ai and self.ai.is_available:
             try:
                 await update.message.chat.send_action(action="typing")
                 response = await self.ai.get_response(
                     user.id, 
-                    message_text, 
+                    ai_message, 
                     user.first_name,
-                    force_response=message_text.lower().startswith("спектр") or chat.type == "private"
+                    force_response=force_response
                 )
                 if response:
-                    await update.message.reply_text(f"🤖 {response}", parse_mode=ParseMode.MARKDOWN)
+                    # Добавляем эмодзи робота только если это прямое обращение
+                    prefix = "🤖 " if force_response else ""
+                    await update.message.reply_text(f"{prefix}{response}", parse_mode=ParseMode.MARKDOWN)
                     return
             except Exception as e:
                 logger.error(f"AI response error: {e}")
@@ -9333,28 +9321,30 @@ async def main():
     print("=" * 60)
     print(f"📊 Команд: 300+")
     print(f"📊 Модулей: 30+")
-    print(f"📊 AI: {'Groq подключен' if GROQ_API_KEY and ai and ai.is_available else 'Не подключен'}")
+    
+    # Проверяем AI
+    global ai
+    if GROQ_API_KEY and ai is not None and ai.is_available:
+        print(f"📊 AI: Groq подключен (режим: ПРОВОКАТОР)")
+    else:
+        print(f"📊 AI: Не подключен")
+    
     print("=" * 60)
     
     bot = SpectrumBot()
     
     try:
-        # Инициализируем и запускаем приложение
         await bot.app.initialize()
         await bot.app.start()
-        
-        # Запускаем polling
         await bot.app.updater.start_polling(
             allowed_updates=Update.ALL_TYPES,
             drop_pending_updates=True
         )
         
-        # Запускаем проверку таймеров в фоне
         asyncio.create_task(bot.check_timers())
         
         logger.info(f"🚀 Бот {BOT_NAME} успешно запущен и слушает обновления")
         
-        # Держим бот запущенным
         while True:
             await asyncio.sleep(1)
             
