@@ -448,9 +448,412 @@ class Database:
         logger.info("✅ База данных инициализирована")
     
     def create_tables(self):
-        # ... (весь код создания таблиц, который был ранее)
-        # Оставляем без изменений
-        pass
+        """Создание всех таблиц базы данных"""
+        
+        # Таблица bosses
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bosses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                level INTEGER,
+                health INTEGER,
+                max_health INTEGER,
+                damage INTEGER,
+                reward_coins INTEGER,
+                reward_exp INTEGER,
+                reward_neons INTEGER DEFAULT 0,
+                reward_glitches INTEGER DEFAULT 0,
+                is_alive INTEGER DEFAULT 1,
+                respawn_time TEXT
+            )
+        ''')
+        
+        # Таблица пользователей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER UNIQUE,
+                username TEXT,
+                first_name TEXT,
+                last_name TEXT,
+                coins INTEGER DEFAULT 1000,
+                neons INTEGER DEFAULT 0,
+                glitches INTEGER DEFAULT 0,
+                energy INTEGER DEFAULT 100,
+                level INTEGER DEFAULT 1,
+                exp INTEGER DEFAULT 0,
+                health INTEGER DEFAULT 100,
+                max_health INTEGER DEFAULT 100,
+                damage INTEGER DEFAULT 10,
+                armor INTEGER DEFAULT 0,
+                crit_chance INTEGER DEFAULT 5,
+                crit_multiplier INTEGER DEFAULT 150,
+                messages_count INTEGER DEFAULT 0,
+                commands_used INTEGER DEFAULT 0,
+                rps_wins INTEGER DEFAULT 0,
+                rps_losses INTEGER DEFAULT 0,
+                rps_draws INTEGER DEFAULT 0,
+                casino_wins INTEGER DEFAULT 0,
+                casino_losses INTEGER DEFAULT 0,
+                dice_wins INTEGER DEFAULT 0,
+                dice_losses INTEGER DEFAULT 0,
+                rr_wins INTEGER DEFAULT 0,
+                rr_losses INTEGER DEFAULT 0,
+                slots_wins INTEGER DEFAULT 0,
+                slots_losses INTEGER DEFAULT 0,
+                guess_wins INTEGER DEFAULT 0,
+                guess_losses INTEGER DEFAULT 0,
+                bulls_wins INTEGER DEFAULT 0,
+                bulls_losses INTEGER DEFAULT 0,
+                boss_kills INTEGER DEFAULT 0,
+                boss_damage INTEGER DEFAULT 0,
+                duel_wins INTEGER DEFAULT 0,
+                duel_losses INTEGER DEFAULT 0,
+                duel_rating INTEGER DEFAULT 1000,
+                mafia_games INTEGER DEFAULT 0,
+                mafia_wins INTEGER DEFAULT 0,
+                mafia_losses INTEGER DEFAULT 0,
+                clan_id INTEGER DEFAULT 0,
+                clan_role TEXT DEFAULT 'member',
+                friends TEXT DEFAULT '[]',
+                enemies TEXT DEFAULT '[]',
+                spouse INTEGER DEFAULT 0,
+                married_since TEXT,
+                reputation INTEGER DEFAULT 0,
+                nickname TEXT,
+                title TEXT DEFAULT '',
+                motto TEXT DEFAULT 'Нет девиза',
+                bio TEXT DEFAULT '',
+                gender TEXT DEFAULT 'не указан',
+                city TEXT DEFAULT 'не указан',
+                country TEXT DEFAULT 'не указана',
+                birth_date TEXT,
+                age INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user',
+                rank INTEGER DEFAULT 0,
+                rank_name TEXT DEFAULT 'Участник',
+                warns INTEGER DEFAULT 0,
+                warns_list TEXT DEFAULT '[]',
+                mute_until TEXT,
+                banned INTEGER DEFAULT 0,
+                vip_until TEXT,
+                premium_until TEXT,
+                cyber_status_until TEXT,
+                turbo_drive_until TEXT,
+                cyber_luck_until TEXT,
+                firewall_used INTEGER DEFAULT 0,
+                firewall_expires TEXT,
+                rp_packet_until TEXT,
+                daily_streak INTEGER DEFAULT 0,
+                last_daily TEXT,
+                last_seen TEXT,
+                registered TEXT DEFAULT CURRENT_TIMESTAMP,
+                referrer_id INTEGER,
+                daily_messages TEXT DEFAULT '[]',
+                profile_visible INTEGER DEFAULT 1,
+                achievements_visible INTEGER DEFAULT 1,
+                stats_visible INTEGER DEFAULT 1,
+                last_farm TEXT
+            )
+        ''')
+        
+        # Таблица сообщений
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                message_text TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                chat_id INTEGER,
+                chat_title TEXT
+            )
+        ''')
+        
+        # Таблица дневной статистики
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                date DATE,
+                count INTEGER DEFAULT 0,
+                UNIQUE(user_id, date)
+            )
+        ''')
+        
+        # Таблица логов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT,
+                details TEXT,
+                chat_id INTEGER,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица чёрного списка
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT UNIQUE,
+                added_by INTEGER,
+                added_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица настроек чатов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER PRIMARY KEY,
+                welcome TEXT,
+                rules TEXT,
+                antiflood INTEGER DEFAULT 1,
+                antispam INTEGER DEFAULT 1,
+                antilink INTEGER DEFAULT 0,
+                captcha INTEGER DEFAULT 0,
+                lang TEXT DEFAULT 'ru',
+                chat_code TEXT UNIQUE,
+                chat_name TEXT,
+                circle_limit INTEGER DEFAULT 20,
+                treasury_neons INTEGER DEFAULT 0,
+                treasury_glitches INTEGER DEFAULT 0,
+                glitch_hammer_price INTEGER DEFAULT 50,
+                glitch_hammer_enabled INTEGER DEFAULT 1,
+                glitch_hammer_min_rank INTEGER DEFAULT 0,
+                invisible_price INTEGER DEFAULT 30,
+                invisible_enabled INTEGER DEFAULT 1,
+                neon_nick_price INTEGER DEFAULT 100,
+                neon_nick_enabled INTEGER DEFAULT 1,
+                turbo_drive_price INTEGER DEFAULT 200,
+                turbo_drive_boost INTEGER DEFAULT 30,
+                turbo_drive_enabled INTEGER DEFAULT 1,
+                cyber_luck_price INTEGER DEFAULT 150,
+                cyber_luck_boost INTEGER DEFAULT 15,
+                cyber_luck_enabled INTEGER DEFAULT 1,
+                firewall_price INTEGER DEFAULT 80,
+                firewall_enabled INTEGER DEFAULT 1,
+                rp_packet_price INTEGER DEFAULT 120,
+                rp_packet_enabled INTEGER DEFAULT 1,
+                speech_enabled INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # Таблица дуэлей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS duels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                challenger_id INTEGER,
+                opponent_id INTEGER,
+                bet INTEGER,
+                status TEXT DEFAULT 'pending',
+                winner_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица игр мафии
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS mafia_games (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                game_id TEXT,
+                creator_id INTEGER,
+                status TEXT DEFAULT 'waiting',
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                players TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # Таблица триггеров
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS triggers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                word TEXT,
+                action TEXT,
+                action_value TEXT,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица ачивок
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS achievements (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                achievement_id INTEGER,
+                unlocked_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(user_id, achievement_id)
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS achievements_list (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                category TEXT,
+                condition_type TEXT,
+                condition_value INTEGER,
+                reward_neons INTEGER,
+                reward_glitches INTEGER,
+                reward_title TEXT,
+                reward_status TEXT,
+                secret INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # Таблица кружков
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS circles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                name TEXT,
+                description TEXT,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                members TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # Таблица кланов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS clans (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                name TEXT,
+                description TEXT,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                type TEXT DEFAULT 'open',
+                reputation INTEGER DEFAULT 0,
+                members INTEGER DEFAULT 1,
+                banned_users TEXT DEFAULT '[]',
+                pending_requests TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # Таблица закладок
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bookmarks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                user_id INTEGER,
+                name TEXT,
+                content TEXT,
+                message_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                visible INTEGER DEFAULT 1
+            )
+        ''')
+        
+        # Таблица таймеров
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS timers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                user_id INTEGER,
+                execute_at TEXT,
+                command TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                status TEXT DEFAULT 'pending'
+            )
+        ''')
+        
+        # Таблица наград
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS awards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                user_id INTEGER,
+                awarded_by INTEGER,
+                degree INTEGER,
+                text TEXT,
+                awarded_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица сеток чатов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_grids (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_id INTEGER,
+                name TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS grid_chats (
+                grid_id INTEGER,
+                chat_id INTEGER,
+                PRIMARY KEY (grid_id, chat_id)
+            )
+        ''')
+        
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS global_moderators (
+                grid_id INTEGER,
+                user_id INTEGER,
+                rank INTEGER,
+                PRIMARY KEY (grid_id, user_id)
+            )
+        ''')
+        
+        # Таблица бонусов пользователей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_bonuses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                bonus_type TEXT,
+                expires TEXT,
+                data TEXT
+            )
+        ''')
+        
+        # Таблица невидимок
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS invisible_bans (
+                chat_id INTEGER,
+                user_id INTEGER,
+                banned_by INTEGER,
+                PRIMARY KEY (chat_id, user_id)
+            )
+        ''')
+        
+        # Таблица голосований за бан
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ban_votes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER,
+                target_id INTEGER,
+                created_by INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                required_votes INTEGER,
+                min_rank INTEGER,
+                status TEXT DEFAULT 'active',
+                votes_for INTEGER DEFAULT 0,
+                votes_against INTEGER DEFAULT 0,
+                voters TEXT DEFAULT '[]'
+            )
+        ''')
+        
+        # Таблица пар (шипперинг)
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS pairs (
+                chat_id INTEGER,
+                user1_id INTEGER,
+                user2_id INTEGER,
+                paired_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (chat_id, user1_id, user2_id)
+            )
+        ''')
+        
+        self.conn.commit()
     
     def init_data(self):
         """Инициализация начальных данных в БД"""
