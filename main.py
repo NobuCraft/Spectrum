@@ -139,7 +139,7 @@ class ChartGenerator:
         return buf
 
 # ========== GROQ AI КЛАСС (ПРОВОКАТОР С РЕАКЦИЯМИ) ==========
-    class GroqAI:
+class GroqAI:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.client = None
@@ -371,7 +371,7 @@ class ChartGenerator:
     
     async def close(self):
         pass
-
+        
 # ========== ИНИЦИАЛИЗАЦИЯ AI ==========
 ai = None
 if GROQ_API_KEY and GROQ_AVAILABLE:
