@@ -3225,6 +3225,52 @@ class SpectrumBot:
             await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
         except Exception as e:
             await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+
+        async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверка прав бота в чате"""
+        chat_id = update.effective_chat.id
+        
+        try:
+            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+            
+            if bot_member.status == 'creator':
+                await update.message.reply_text(s.success("✅ Бот является создателем чата! Полные права."))
+            elif bot_member.status == 'administrator':
+                rights = []
+                if bot_member.can_restrict_members:
+                    rights.append("✅ может банить/мутить")
+                else:
+                    rights.append("❌ НЕТ ПРАВА на бан/мут! (нужно включить)")
+                
+                if bot_member.can_delete_messages:
+                    rights.append("✅ может удалять сообщения")
+                else:
+                    rights.append("❌ не может удалять сообщения")
+                
+                if bot_member.can_pin_messages:
+                    rights.append("✅ может закреплять")
+                else:
+                    rights.append("❌ не может закреплять")
+                
+                if bot_member.can_invite_users:
+                    rights.append("✅ может приглашать")
+                else:
+                    rights.append("❌ не может приглашать")
+                
+                if bot_member.can_change_info:
+                    rights.append("✅ может менять информацию")
+                else:
+                    rights.append("❌ не может менять информацию")
+                
+                rights_text = "\n".join(rights)
+                await update.message.reply_text(
+                    f"👑 **Бот администратор**\n\n{rights_text}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await update.message.reply_text(s.error("❌ Бот не администратор! Выдайте права администратора."))
+        except Exception as e:
+            await update.message.reply_text(s.error(f"❌ Ошибка проверки: {e}"))
             
     async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
