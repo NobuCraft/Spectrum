@@ -1855,7 +1855,7 @@ class SpectrumBot:
         self.setup_handlers()
         logger.info(f"✅ Бот {BOT_NAME} инициализирован")
 
-        def setup_handlers(self):
+    def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
