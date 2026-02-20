@@ -2548,7 +2548,6 @@ class SpectrumBot:
             caption=f"📊 Активность {user.first_name} за последние 7 дней",
             parse_mode='Markdown'
         )
-
             # ===== КОМАНДЫ МОДЕРАЦИИ =====
     async def _set_rank(self, update: Update, target_rank: int):
         """Общая логика установки ранга"""
@@ -2775,7 +2774,7 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         
-                # АВТОМАТИЧЕСКИЕ ДЕЙСТВИЯ
+        # АВТОМАТИЧЕСКИЕ ДЕЙСТВИЯ
         if warns >= 3 and warns < 5:
             minutes = 60
             until = datetime.now() + timedelta(minutes=minutes)
@@ -2784,7 +2783,6 @@ class SpectrumBot:
             
             try:
                 until_date = int(time.time()) + (minutes * 60)
-                # Используем словарь
                 permissions = {
                     'can_send_messages': False,
                     'can_send_media_messages': False,
@@ -2801,6 +2799,18 @@ class SpectrumBot:
                 await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час (3+ предупреждений)"))
             except Exception as e:
                 logger.error(f"Ошибка авто-мута: {e}")
+        
+        elif warns >= 5:
+            self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
+            
+            try:
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id']
+                )
+                await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен (5 предупреждений)"))
+            except Exception as e:
+                logger.error(f"Ошибка авто-бана: {e}")
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2954,57 +2964,29 @@ class SpectrumBot:
         until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
         until_str = until.strftime("%d.%m.%Y %H:%M")
         
-        # НАСТОЯЩИЙ МУТ - УНИВЕРСАЛЬНЫЙ СПОСОБ
+        # НАСТОЯЩИЙ МУТ
         mute_success = False
         try:
             until_date = int(time.time()) + (minutes * 60)
             
-            # Пробуем первый способ (словарь)
-            try:
-                permissions_dict = {
-                    'can_send_messages': False,
-                    'can_send_media_messages': False,
-                    'can_send_polls': False,
-                    'can_send_other_messages': False,
-                    'can_add_web_page_previews': False
-                }
-                
-                await context.bot.restrict_chat_member(
-                    chat_id=chat_id,
-                    user_id=target['telegram_id'],
-                    permissions=permissions_dict,
-                    until_date=until_date
-                )
-                mute_success = True
-                logger.info("✅ Мут применен через словарь")
-            except:
-                # Если не сработало, пробуем минимальный набор
-                permissions_min = {
-                    'can_send_messages': False
-                }
-                
-                await context.bot.restrict_chat_member(
-                    chat_id=chat_id,
-                    user_id=target['telegram_id'],
-                    permissions=permissions_min,
-                    until_date=until_date
-                )
-                mute_success = True
-                logger.info("✅ Мут применен через минимальные права")
-                
+            permissions = {
+                'can_send_messages': False,
+                'can_send_media_messages': False,
+                'can_send_polls': False,
+                'can_send_other_messages': False,
+                'can_add_web_page_previews': False
+            }
+            
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                permissions=permissions,
+                until_date=until_date
+            )
+            mute_success = True
         except Exception as e:
-            logger.error(f"❌ Ошибка реального мута: {e}")
-            error_text = str(e).lower()
-            if "not enough rights" in error_text:
-                await update.message.reply_text(s.error("❌ У бота нет прав! Нужно: 'Блокировка пользователей'"))
-            elif "user is an administrator" in error_text:
-                await update.message.reply_text(s.error("❌ Нельзя замутить администратора!"))
-            elif "user not found" in error_text:
-                await update.message.reply_text(s.error("❌ Пользователь не найден в чате!"))
-            else:
-                await update.message.reply_text(s.error(f"❌ Ошибка: {str(e)[:100]}"))
+            logger.error(f"Ошибка мута: {e}")
         
-        # Уведомление в ЛС
         try:
             await context.bot.send_message(
                 target['telegram_id'],
@@ -3022,7 +3004,7 @@ class SpectrumBot:
             f"{s.item(f'Срок: {time_str}')}\n"
             f"{s.item(f'До: {until_str}')}\n"
             f"{s.item(f'Причина: {reason}')}\n\n"
-            f"{'✅ Реальный мут применен' if mute_success else '❌ Ошибка применения мута'}"
+            f"{'✅ Мут применен' if mute_success else '❌ Не удалось применить мут'}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -3071,7 +3053,6 @@ class SpectrumBot:
         
         self.db.unmute_user(target['id'], user_data['id'])
         
-        # Снимаем мут - возвращаем полные права
         try:
             permissions = {
                 'can_send_messages': True,
@@ -3085,8 +3066,8 @@ class SpectrumBot:
                 user_id=target['telegram_id'],
                 permissions=permissions
             )
-        except Exception as e:
-            logger.error(f"Ошибка снятия мута: {e}")
+        except:
+            pass
         
         try:
             await context.bot.send_message(
@@ -3097,6 +3078,66 @@ class SpectrumBot:
             pass
         
         await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+    
+    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            return
+        
+        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Пример: бан @user спам"))
+            return
+        
+        username = match.group(1)
+        reason = match.group(2) if match.group(2) else "Нарушение правил"
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя забанить модератора выше рангом"))
+            return
+        
+        # Бан в БД
+        self.db.ban_user(target['id'], user_data['id'], reason)
+        
+        # НАСТОЯЩИЙ БАН
+        ban_success = False
+        try:
+            await context.bot.ban_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id']
+            )
+            ban_success = True
+        except Exception as e:
+            logger.error(f"Ошибка бана: {e}")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'Чат: {update.effective_chat.title}')}"
+            )
+        except:
+            pass
+        
+        text = (
+            s.header("БЛОКИРОВКА") + "\n"
+            f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
+            f"{s.item(f'Причина: {reason}')}\n\n"
+            f"{'✅ Пользователь забанен' if ban_success else '❌ Не удалось забанить'}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         bans = self.db.get_banlist()
@@ -3137,16 +3178,15 @@ class SpectrumBot:
         # Разбан в БД
         self.db.unban_user(target['id'], user_data['id'])
         
-        # НАСТОЯЩИЙ РАЗБАН В TELEGRAM
+        # Разбан в Telegram
         try:
             await context.bot.unban_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id'],
                 only_if_banned=True
             )
-            logger.info(f"✅ Реальный разбан применен к {target['first_name']}")
-        except Exception as e:
-            logger.error(f"Ошибка разбана в Telegram: {e}")
+        except:
+            pass
         
         try:
             await context.bot.send_message(
@@ -3157,47 +3197,12 @@ class SpectrumBot:
             pass
         
         await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
-
-    async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Проверка прав бота в чате"""
-        chat_id = update.effective_chat.id
-        
-        try:
-            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
-            
-            if bot_member.status == 'creator':
-                await update.message.reply_text(s.success("✅ Бот является создателем чата! Полные права."))
-            elif bot_member.status == 'administrator':
-                rights = []
-                if bot_member.can_restrict_members:
-                    rights.append("✅ может банить/мутить")
-                else:
-                    rights.append("❌ не может банить/мутить")
-                
-                if bot_member.can_delete_messages:
-                    rights.append("✅ может удалять сообщения")
-                else:
-                    rights.append("❌ не может удалять сообщения")
-                
-                if bot_member.can_pin_messages:
-                    rights.append("✅ может закреплять")
-                else:
-                    rights.append("❌ не может закреплять")
-                
-                rights_text = "\n".join(rights)
-                await update.message.reply_text(
-                    f"👑 Бот администратор\n\n{rights_text}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            else:
-                await update.message.reply_text(s.error("❌ Бот не администратор! Выдайте права администратора."))
-        except Exception as e:
-            await update.message.reply_text(s.error(f"❌ Ошибка проверки: {e}"))
     
     async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 1 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
@@ -3215,12 +3220,12 @@ class SpectrumBot:
             return
         
         try:
-            await update.effective_chat.ban_member(target['telegram_id'])
-            await update.effective_chat.unban_member(target['telegram_id'])
+            await context.bot.ban_chat_member(chat_id, target['telegram_id'])
+            await context.bot.unban_chat_member(chat_id, target['telegram_id'])
             await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
         except Exception as e:
             await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
-    
+            
     async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
