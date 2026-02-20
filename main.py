@@ -4543,6 +4543,197 @@ class SpectrumBot:
         """Получить список участников клана"""
         self.db.cursor.execute("SELECT id, first_name, nickname, clan_role FROM users WHERE clan_id = ?", (clan_id,))
         return [dict(row) for row in self.db.cursor.fetchall()]
+
+        # ===== СЕТКИ ЧАТОВ =====
+    async def cmd_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о сетке"""
+        await update.message.reply_text(s.info("Используйте /grids для списка сеток"))
+    
+    async def cmd_grids(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список сеток пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        grids = self.db.get_user_grids(user_data['id'])
+        
+        if not grids:
+            await update.message.reply_text(s.info("У вас нет созданных сеток"))
+            return
+        
+        text = s.header("🔗 МОИ СЕТКИ") + "\n\n"
+        for grid in grids:
+            text += f"ID: {grid['id']} | {grid['name']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать сетку чатов"""
+        text = update.message.text
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user.id != OWNER_ID and user_data['rank'] < 5:
+            await update.message.reply_text(s.error("❌ Только создатель может создавать сетки"))
+            return
+        
+        # Проверяем, откуда пришла команда
+        if text.startswith('/creategrid'):
+            if len(context.args) < 1:
+                await update.message.reply_text(s.error("❌ Укажите название сетки: /creategrid main"))
+                return
+            name = context.args[0]
+        else:
+            match = re.search(r'создать сетку\s+(\S+)', text, re.IGNORECASE)
+            if not match:
+                await update.message.reply_text(s.error("❌ Укажите название сетки: создать сетка main"))
+                return
+            name = match.group(1)
+        
+        grid_id = self.db.create_grid(user_data['id'], name)
+        
+        await update.message.reply_text(s.success(f"✅ Сетка '{name}' (ID: {grid_id}) создана!"))
+    
+    async def cmd_add_chat_to_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить чат в сетку"""
+        text = update.message.text
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        chat_id = update.effective_chat.id
+        
+        # Проверяем, откуда пришла команда
+        if text.startswith('/addchat'):
+            if len(context.args) < 1:
+                await update.message.reply_text(s.error("❌ Укажите ID сетки: /addchat 1"))
+                return
+            try:
+                grid_id = int(context.args[0])
+            except:
+                await update.message.reply_text(s.error("❌ ID сетки должен быть числом"))
+                return
+        else:
+            match = re.search(r'установить сетку\s+(\d+)', text, re.IGNORECASE)
+            if not match:
+                await update.message.reply_text(s.error("❌ Укажите ID сетки: установить сетку 1"))
+                return
+            grid_id = int(match.group(1))
+        
+        # Проверяем, владелец ли сетки
+        self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(s.error("❌ Сетка не найдена"))
+            return
+        
+        if row[0] != user_data['id'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("❌ Вы не владелец этой сетки"))
+            return
+        
+        if self.db.add_chat_to_grid(grid_id, chat_id):
+            await update.message.reply_text(s.success("✅ Чат добавлен в сетку!"))
+        else:
+            await update.message.reply_text(s.error("❌ Чат уже в сетке"))
+    
+    async def cmd_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Назначить глобального модератора"""
+        text = update.message.text
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        # Парсим: +глмодер @user
+        match = re.search(r'\+глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            username = match.group(1)
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text(s.error("❌ Пользователь не найден"))
+                return
+            
+            await update.message.reply_text(s.success(f"✅ {target['first_name']} назначен глобальным модератором"))
+            return
+        
+        # Парсим: сетка 3 !модер @user
+        match = re.search(r'сетка (\d+)\s+(!+)модер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            grid_id = int(match.group(1))
+            rank = len(match.group(2))
+            username = match.group(3)
+            
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text(s.error("❌ Пользователь не найден"))
+                return
+            
+            # Проверяем права на сетку
+            self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+            row = self.db.cursor.fetchone()
+            
+            if not row:
+                await update.message.reply_text(s.error("❌ Сетка не найдена"))
+                return
+            
+            if row[0] != user_data['id'] and user.id != OWNER_ID:
+                await update.message.reply_text(s.error("❌ Вы не владелец этой сетки"))
+                return
+            
+            # Добавляем в глобальные модераторы
+            self.db.cursor.execute("INSERT OR REPLACE INTO global_moderators (grid_id, user_id, rank) VALUES (?, ?, ?)",
+                                 (grid_id, target['id'], rank))
+            self.db.conn.commit()
+            
+            await update.message.reply_text(s.success(f"✅ {target['first_name']} получил ранг {rank} во всех чатах сетки"))
+            return
+        
+        await update.message.reply_text(s.error("❌ Неверный формат команды"))
+    
+    async def cmd_global_mods_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список глобальных модераторов"""
+        self.db.cursor.execute("""
+            SELECT gm.*, u.first_name, u.username 
+            FROM global_moderators gm
+            JOIN users u ON gm.user_id = u.id
+        """)
+        mods = self.db.cursor.fetchall()
+        
+        if not mods:
+            await update.message.reply_text(s.info("Нет глобальных модераторов"))
+            return
+        
+        text = s.header("🌐 ГЛОБАЛЬНЫЕ МОДЕРАТОРЫ") + "\n\n"
+        for mod in mods:
+            text += f"• {mod['first_name']} (@{mod['username']}) — ранг {mod['rank']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_add_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить глобального модератора"""
+        await self.cmd_global_mod(update, context)
+    
+    async def cmd_remove_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить глобального модератора"""
+        text = update.message.text
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        match = re.search(r'-глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: -глмодер @user"))
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        self.db.cursor.execute("DELETE FROM global_moderators WHERE user_id = ?", (target['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ {target['first_name']} снят с глобальной модерации"))
+    
+    async def cmd_grid_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить ранг во всех чатах сетки"""
+        await self.cmd_global_mod(update, context)
     
     # ===== ИГРЫ =====
     async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
