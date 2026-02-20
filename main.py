@@ -22,7 +22,7 @@ from collections import defaultdict, deque
 from enum import Enum
 from io import BytesIO
 import uuid
-from telegram.constants import ChatPermissions
+from telegram import ChatPermissions
 
 import matplotlib
 matplotlib.use('Agg')
