@@ -3109,26 +3109,68 @@ class SpectrumBot:
         # Бан в БД
         self.db.ban_user(target['id'], user_data['id'], reason)
         
+        # ПРОВЕРКА ПРАВ ПЕРЕД БАНОМ
+        try:
+            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+            if bot_member.status != 'administrator' and bot_member.status != 'creator':
+                await update.message.reply_text(s.error("❌ Бот не администратор! Выдайте права."))
+                return
+            
+            if not bot_member.can_restrict_members:
+                await update.message.reply_text(s.error("❌ У бота нет права на бан! Включите 'Блокировка пользователей'"))
+                return
+        except Exception as e:
+            logger.error(f"Ошибка проверки прав: {e}")
+        
         # НАСТОЯЩИЙ БАН
         ban_success = False
+        
+        # Пробуем разные способы бана
         try:
+            # Способ 1: обычный бан
             await context.bot.ban_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id']
             )
             ban_success = True
-        except Exception as e:
-            logger.error(f"Ошибка бана: {e}")
+        except Exception as e1:
+            logger.error(f"Способ 1 не сработал: {e1}")
+            
+            try:
+                # Способ 2: бан с удалением сообщений
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=target['telegram_id'],
+                    revoke_messages=True
+                )
+                ban_success = True
+            except Exception as e2:
+                logger.error(f"Способ 2 не сработал: {e2}")
+                
+                try:
+                    # Способ 3: кик (временный бан)
+                    await context.bot.ban_chat_member(
+                        chat_id=chat_id,
+                        user_id=target['telegram_id'],
+                        until_date=int(time.time()) + 40  # на 40 секунд
+                    )
+                    ban_success = True
+                    await update.message.reply_text(s.warning("⚠️ Временный бан на 40 секунд (проверка прав)"))
+                except Exception as e3:
+                    error_message = f"❌ Ошибка: {str(e3)[:100]}"
+                    await update.message.reply_text(s.error(error_message))
         
-        try:
-            await context.bot.send_message(
-                target['telegram_id'],
-                f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
-                f"{s.item(f'Причина: {reason}')}\n"
-                f"{s.item(f'Чат: {update.effective_chat.title}')}"
-            )
-        except:
-            pass
+        # Уведомление в ЛС
+        if ban_success:
+            try:
+                await context.bot.send_message(
+                    target['telegram_id'],
+                    f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
+                    f"{s.item(f'Причина: {reason}')}\n"
+                    f"{s.item(f'Чат: {update.effective_chat.title}')}"
+                )
+            except:
+                pass
         
         text = (
             s.header("БЛОКИРОВКА") + "\n"
