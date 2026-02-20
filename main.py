@@ -883,6 +883,7 @@ class Database:
         self.conn.commit()
     
     def init_data(self):
+        """Инициализация начальных данных в БД"""
         # Инициализация боссов
         self.cursor.execute("SELECT COUNT(*) FROM bosses")
         if self.cursor.fetchone()[0] == 0:
