@@ -4206,6 +4206,50 @@ class SpectrumBot:
             "Не откладывайте на завтра то, что можно сделать сегодня.",
         ]
         await update.message.reply_text(f"💡 {random.choice(advices)}")
+
+        async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверка совместимости двух пользователей"""
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Укажите двух пользователей: /compatibility @user1 @user2"))
+            return
+        
+        username1 = context.args[0].replace('@', '')
+        username2 = context.args[1].replace('@', '')
+        
+        user1 = self.db.get_user_by_username(username1)
+        user2 = self.db.get_user_by_username(username2)
+        
+        if not user1 or not user2:
+            await update.message.reply_text(s.error("❌ Пользователи не найдены"))
+            return
+        
+        name1 = user1.get('nickname') or user1['first_name']
+        name2 = user2.get('nickname') or user2['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            text = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            text = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            text = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            text = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            text = "Идеальная совместимость!"
+        
+        await update.message.reply_text(
+            f"{s.header('💞 СОВМЕСТИМОСТЬ')}\n\n"
+            f"{emoji} {name1} и {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Погода (симуляция)"""
