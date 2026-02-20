@@ -22,6 +22,7 @@ from collections import defaultdict, deque
 from enum import Enum
 from io import BytesIO
 import uuid
+from telegram.constants import ChatPermissions
 
 import matplotlib
 matplotlib.use('Agg')
@@ -919,12 +920,14 @@ class Database:
                 ''', ach)
             self.conn.commit()
     
-    def get_user(self, telegram_id: int, first_name: str = "Player") -> Dict[str, Any]:
+    def get_user(self, telegram_id: int, first_name: str = None) -> Dict[str, Any]:
         """Получить или создать пользователя"""
         self.cursor.execute("SELECT * FROM users WHERE telegram_id = ?", (telegram_id,))
         row = self.cursor.fetchone()
         
         if not row:
+            name = first_name if first_name else f"User{telegram_id}"
+            
             role = 'owner' if telegram_id == OWNER_ID else 'user'
             rank = 5 if telegram_id == OWNER_ID else 0
             rank_name = RANKS[rank]["name"]
@@ -932,14 +935,19 @@ class Database:
             self.cursor.execute('''
                 INSERT INTO users (telegram_id, first_name, role, rank, rank_name, last_seen)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (telegram_id, first_name, role, rank, rank_name, datetime.now().isoformat()))
+            ''', (telegram_id, name, role, rank, rank_name, datetime.now().isoformat()))
             self.conn.commit()
-            return self.get_user(telegram_id, first_name)
+            return self.get_user(telegram_id, name)
         
         user = dict(row)
         
-        self.cursor.execute("UPDATE users SET last_seen = ?, first_name = ? WHERE telegram_id = ?",
-                          (datetime.now().isoformat(), first_name, telegram_id))
+        if first_name and user['first_name'] != first_name and (user['first_name'] == 'Player' or user['first_name'].startswith('User')):
+            self.cursor.execute("UPDATE users SET first_name = ? WHERE telegram_id = ?",
+                              (first_name, telegram_id))
+            user['first_name'] = first_name
+        
+        self.cursor.execute("UPDATE users SET last_seen = ? WHERE telegram_id = ?",
+                          (datetime.now().isoformat(), telegram_id))
         self.conn.commit()
         
         return user
@@ -2546,6 +2554,7 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 1 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 1+"))
@@ -2583,7 +2592,7 @@ class SpectrumBot:
                 target_user['telegram_id'],
                 f"{s.warning('⚠️ ВЫ ПОЛУЧИЛИ ПРЕДУПРЕЖДЕНИЕ')}\n\n"
                 f"{s.item(f'Причина: {reason}')}\n"
-                f"{s.item(f'Всего: {warns}/3')}"
+                f"{s.item(f'Всего: {warns}/5')}"
             )
         except:
             pass
@@ -2591,18 +2600,52 @@ class SpectrumBot:
         text = (
             s.header("ПРЕДУПРЕЖДЕНИЕ") + "\n"
             f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item(f'Предупреждений: {warns}/3')}\n"
+            f"{s.item(f'Предупреждений: {warns}/5')}\n"
             f"{s.item(f'Причина: {reason}')}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         
-        if warns >= 3:
-            self.db.mute_user(target_user['id'], 60, user_data['id'], "3 предупреждения")
-            await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час"))
-        if warns >= 5:
+        # АВТОМАТИЧЕСКИЕ ДЕЙСТВИЯ
+        if warns >= 3 and warns < 5:
+            minutes = 60
+            until = datetime.now() + timedelta(minutes=minutes)
+            
+            self.db.mute_user(target_user['id'], minutes, user_data['id'], "3+ предупреждения")
+            
+            try:
+                permissions = ChatPermissions(
+                    can_send_messages=False,
+                    can_send_media_messages=False,
+                    can_send_polls=False,
+                    can_send_other_messages=False,
+                    can_add_web_page_previews=False,
+                    can_change_info=False,
+                    can_invite_users=False,
+                    can_pin_messages=False
+                )
+                until_date = int(time.time()) + (minutes * 60)
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id'],
+                    permissions=permissions,
+                    until_date=until_date
+                )
+                await update.message.reply_text(s.warning(f"⚠️ {target_user['first_name']} замучен на 1 час (3+ предупреждений)"))
+            except Exception as e:
+                logger.error(f"Ошибка авто-мута: {e}")
+        
+        elif warns >= 5:
             self.db.ban_user(target_user['id'], user_data['id'], "5 предупреждений")
-            await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен"))
+            
+            try:
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id']
+                )
+                await update.message.reply_text(s.error(f"🔨 {target_user['first_name']} забанен (5 предупреждений)"))
+            except Exception as e:
+                logger.error(f"Ошибка авто-бана: {e}")
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
@@ -2723,6 +2766,7 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
@@ -2751,8 +2795,33 @@ class SpectrumBot:
             await update.message.reply_text(s.error("⛔️ Нельзя замутить модератора выше рангом"))
             return
         
+        # Сохраняем в БД
         until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
         until_str = until.strftime("%d.%m.%Y %H:%M")
+        
+        # РЕАЛЬНЫЙ МУТ В TELEGRAM
+        try:
+            permissions = ChatPermissions(
+                can_send_messages=False,
+                can_send_media_messages=False,
+                can_send_polls=False,
+                can_send_other_messages=False,
+                can_add_web_page_previews=False,
+                can_change_info=False,
+                can_invite_users=False,
+                can_pin_messages=False
+            )
+            until_date = int(time.time()) + (minutes * 60)
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                permissions=permissions,
+                until_date=until_date
+            )
+            mute_success = True
+        except Exception as e:
+            logger.error(f"Ошибка мута в Telegram: {e}")
+            mute_success = False
         
         try:
             await context.bot.send_message(
@@ -2770,7 +2839,8 @@ class SpectrumBot:
             f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
             f"{s.item(f'Срок: {time_str}')}\n"
             f"{s.item(f'До: {until_str}')}\n"
-            f"{s.item(f'Причина: {reason}')}"
+            f"{s.item(f'Причина: {reason}')}\n\n"
+            f"{'✅ Реальный мут в Telegram применен' if mute_success else '❌ Не удалось применить мут в Telegram'}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
@@ -2797,6 +2867,7 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
@@ -2816,11 +2887,26 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Пользователь не найден"))
             return
         
-        if not self.db.is_muted(target['id']):
-            await update.message.reply_text(s.info("Пользователь не в муте"))
-            return
-        
         self.db.unmute_user(target['id'], user_data['id'])
+        
+        try:
+            permissions = ChatPermissions(
+                can_send_messages=True,
+                can_send_media_messages=True,
+                can_send_polls=True,
+                can_send_other_messages=True,
+                can_add_web_page_previews=True,
+                can_change_info=False,
+                can_invite_users=False,
+                can_pin_messages=False
+            )
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                permissions=permissions
+            )
+        except Exception as e:
+            logger.error(f"Ошибка снятия мута в Telegram: {e}")
         
         try:
             await context.bot.send_message(
@@ -2836,6 +2922,7 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
@@ -2860,11 +2947,22 @@ class SpectrumBot:
         
         self.db.ban_user(target['id'], user_data['id'], reason)
         
+        ban_success = False
+        try:
+            await context.bot.ban_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id']
+            )
+            ban_success = True
+        except Exception as e:
+            logger.error(f"Ошибка бана в Telegram: {e}")
+        
         try:
             await context.bot.send_message(
                 target['telegram_id'],
                 f"{s.error('🔴 ВАС ЗАБЛОКИРОВАЛИ')}\n\n"
-                f"{s.item(f'Причина: {reason}')}"
+                f"{s.item(f'Причина: {reason}')}\n"
+                f"{s.item(f'Чат: {update.effective_chat.title}')}"
             )
         except:
             pass
@@ -2872,15 +2970,11 @@ class SpectrumBot:
         text = (
             s.header("БЛОКИРОВКА") + "\n"
             f"{s.item(f'Пользователь: {target["first_name"]}')}\n"
-            f"{s.item(f'Причина: {reason}')}"
+            f"{s.item(f'Причина: {reason}')}\n\n"
+            f"{'✅ Пользователь забанен в Telegram' if ban_success else '❌ Ошибка бана в Telegram'}"
         )
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-        
-        try:
-            await update.effective_chat.ban_member(target['telegram_id'])
-        except:
-            pass
     
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         bans = self.db.get_banlist()
@@ -2901,6 +2995,7 @@ class SpectrumBot:
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
+        chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
             await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
@@ -2920,6 +3015,15 @@ class SpectrumBot:
         self.db.unban_user(target['id'], user_data['id'])
         
         try:
+            await context.bot.unban_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                only_if_banned=True
+            )
+        except Exception as e:
+            logger.error(f"Ошибка разбана в Telegram: {e}")
+        
+        try:
             await context.bot.send_message(
                 target['telegram_id'],
                 s.success("✅ Бан снят")
@@ -2928,11 +3032,6 @@ class SpectrumBot:
             pass
         
         await update.message.reply_text(s.success(f"✅ Бан снят с {target['first_name']}"))
-        
-        try:
-            await update.effective_chat.unban_member(target['telegram_id'])
-        except:
-            pass
     
     async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -5447,8 +5546,10 @@ class SpectrumBot:
             await update.message.reply_text(s.error("❌ Нельзя вызвать на дуэль самого себя"))
             return
         
-        self.db.cursor.execute("SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
-                             (user_data['id'], user_data['id']))
+        self.db.cursor.execute(
+            "SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
+            (user_data['id'], user_data['id'])
+        )
         if self.db.cursor.fetchone():
             await update.message.reply_text(s.error("❌ У тебя уже есть активная дуэль"))
             return
@@ -5459,8 +5560,10 @@ class SpectrumBot:
         target_name = target.get('nickname') or target['first_name']
         
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✅ ПРИНЯТЬ", callback_data=f"accept_duel_{duel_id}"),
-             InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"reject_duel_{duel_id}")]
+            [
+                InlineKeyboardButton("✅ ПРИНЯТЬ", callback_data=f"accept_duel_{duel_id}"),
+                InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"reject_duel_{duel_id}")
+            ]
         ])
         
         await update.message.reply_text(
@@ -5472,6 +5575,73 @@ class SpectrumBot:
             reply_markup=keyboard,
             parse_mode=ParseMode.MARKDOWN
         )
+        
+        self.duels_in_progress[duel_id] = {
+            'challenger': user_data['id'],
+            'opponent': target['id'],
+            'bet': bet,
+            'chat_id': update.effective_chat.id,
+            'message_id': None,
+            'status': 'pending'
+        }
+
+    async def _process_duel(self, duel_id: int, challenger: Dict, opponent: Dict, bet: int, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка дуэли"""
+        await asyncio.sleep(2)
+        
+        challenger_roll = random.randint(1, 100)
+        opponent_roll = random.randint(1, 100)
+        
+        if self.db.is_vip(challenger['id']):
+            challenger_roll += 5
+        if self.db.is_vip(opponent['id']):
+            opponent_roll += 5
+        
+        if challenger_roll > opponent_roll:
+            winner = challenger
+            loser = opponent
+            winner_score = challenger_roll
+            loser_score = opponent_roll
+        elif opponent_roll > challenger_roll:
+            winner = opponent
+            loser = challenger
+            winner_score = opponent_roll
+            loser_score = challenger_roll
+        else:
+            await context.bot.send_message(
+                chat_id,
+                s.info("🤝 Ничья! Перебрасываем..."),
+                parse_mode=ParseMode.MARKDOWN
+            )
+            await asyncio.sleep(1)
+            await self._process_duel(duel_id, challenger, opponent, bet, chat_id, context)
+            return
+        
+        win_amount = bet * 2
+        self.db.add_coins(winner['id'], win_amount)
+        
+        self.db.update_user(winner['id'], 
+                          duel_wins=self.db.get_user_by_id(winner['id']).get('duel_wins', 0) + 1,
+                          duel_rating=self.db.get_user_by_id(winner['id']).get('duel_rating', 1000) + 25)
+        
+        self.db.update_user(loser['id'], 
+                          duel_losses=self.db.get_user_by_id(loser['id']).get('duel_losses', 0) + 1,
+                          duel_rating=self.db.get_user_by_id(loser['id']).get('duel_rating', 1000) - 15)
+        
+        result_text = (
+            f"# Спектр | Результат дуэли\n\n"
+            f"⚔️ **{winner['first_name']}** VS **{loser['first_name']}**\n\n"
+            f"🎲 **Результаты:**\n"
+            f"• {winner['first_name']}: {winner_score}\n"
+            f"• {loser['first_name']}: {loser_score}\n\n"
+            f"🏆 **Победитель:** {winner['first_name']}\n"
+            f"💰 Выигрыш: {win_amount} 💰\n\n"
+            f"{s.success('Поздравляем!')}"
+        )
+        
+        await context.bot.send_message(chat_id, result_text, parse_mode=ParseMode.MARKDOWN)
+        
+        self.db.update_duel(duel_id, status='completed', winner_id=winner['id'])
     
     async def cmd_duels(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.db.cursor.execute("SELECT * FROM duels WHERE status = 'pending'")
@@ -8048,6 +8218,9 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
 5. Настройте модерацию через !модер
             """
             await query.edit_message_text(text, disable_web_page_preview=True)
+
+        elif data == "disabled":
+            await query.answer("Эта клетка уже открыта", show_alert=False)
         
         elif data == "neons_info":
             text = """
@@ -8256,27 +8429,50 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                     if game.all_confirmed():
                         await self._mafia_start_game(game, context)
         
-        # Кнопки дуэлей
+                # Кнопки дуэлей
         elif data.startswith("accept_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
-            if duel and duel['opponent_id'] == user_data['id'] and duel['status'] == 'pending':
-                self.db.update_duel(duel_id, status='accepted')
-                await query.edit_message_text(
-                    f"{s.success('✅ Дуэль принята!')}\n\n"
-                    f"{s.info('Скоро начнётся...')}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text(s.error("❌ Дуэль не найдена или уже обработана"))
+                return
+            
+            self.db.update_duel(duel_id, status='accepted')
+            
+            challenger = self.db.get_user_by_id(duel['challenger_id'])
+            opponent = self.db.get_user_by_id(duel['opponent_id'])
+            
+            if not challenger or not opponent:
+                await query.edit_message_text(s.error("❌ Ошибка загрузки данных"))
+                return
+            
+            await query.edit_message_text(
+                f"{s.success('✅ Дуэль принята!')}\n\n"
+                f"⚔️ {challenger['first_name']} VS {opponent['first_name']} ⚔️\n"
+                f"💰 Ставка: {duel['bet']} 💰\n\n"
+                f"🔄 Дуэль начинается...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
+        
         elif data.startswith("reject_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
-            if duel and duel['opponent_id'] == user_data['id'] and duel['status'] == 'pending':
-                self.db.update_duel(duel_id, status='rejected')
-                self.db.add_coins(duel['challenger_id'], duel['bet'])
-                await query.edit_message_text(
-                    f"{s.error('❌ Дуэль отклонена')}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text(s.error("❌ Дуэль не найдена или уже обработана"))
+                return
+            
+            self.db.update_duel(duel_id, status='rejected')
+            self.db.add_coins(duel['challenger_id'], duel['bet'])
+            
+            await query.edit_message_text(
+                f"{s.error('❌ Дуэль отклонена')}\n\n"
+                f"Ставка возвращена.",
+                parse_mode=ParseMode.MARKDOWN
+            )
         
         # Кнопки брака
         elif data.startswith("marry_accept_"):
