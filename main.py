@@ -2032,15 +2032,15 @@ class SpectrumBot:
         # Бонус 8: РП-пакет
         self.app.add_handler(CommandHandler("rppacket", self.cmd_rp_packet))
         
-        # РП команды для РП-пакета
-        self.app.add_handler(CommandHandler("взломать", self.cmd_rp_hack))
-        self.app.add_handler(CommandHandler("заглючить", self.cmd_rp_glitch))
-        self.app.add_handler(CommandHandler("перегрузить", self.cmd_rp_reboot))
-        self.app.add_handler(CommandHandler("закодить", self.cmd_rp_code))
-        self.app.add_handler(CommandHandler("оцифровать", self.cmd_rp_digitize))
-        self.app.add_handler(CommandHandler("хакнуть", self.cmd_rp_hack_deep))
-        self.app.add_handler(CommandHandler("скачать", self.cmd_rp_download))
-        self.app.add_handler(CommandHandler("обновить", self.cmd_rp_update))
+                # РП команды для РП-пакета (через MessageHandler с regex)
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/взломать\s+@'), self.cmd_rp_hack))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/заглючить\s+@'), self.cmd_rp_glitch))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/перегрузить\s+@'), self.cmd_rp_reboot))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/закодить\s+@'), self.cmd_rp_code))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/оцифровать\s+@'), self.cmd_rp_digitize))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/хакнуть\s+@'), self.cmd_rp_hack_deep))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/скачать\s+@'), self.cmd_rp_download))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/обновить\s+@'), self.cmd_rp_update))
         
         # ===== ТЕЛЕГРАМ БОНУСЫ =====
         self.app.add_handler(CommandHandler("tgpremium", self.cmd_tg_premium))
