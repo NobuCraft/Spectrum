@@ -8373,7 +8373,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             )
 
     # ===== НАСТРОЙКА ОБРАБОТЧИКОВ (setup_handlers) =====
-        def setup_handlers(self):
+    def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
         # ===== ОСНОВНЫЕ КОМАНДЫ =====
