@@ -7849,6 +7849,256 @@ class SpectrumBot:
             self.spam_tracker[user_id] = []
             return True
         return False
+
+        # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка всех текстовых сообщений"""
+        user = update.effective_user
+        message_text = update.message.text
+        chat = update.effective_chat
+        
+        if not user or not message_text:
+            return
+        
+        # Сохраняем сообщение в БД
+        self.db.save_message(
+            user.id, 
+            user.username, 
+            user.first_name, 
+            message_text, 
+            chat.id, 
+            chat.title
+        )
+        
+        if message_text.startswith('/'):
+            return
+        
+        user_data = self.db.get_user(user.id, user.first_name)
+        self.db.update_user(user_data['id'], messages_count=user_data.get('messages_count', 0) + 1)
+        
+        if self.db.is_banned(user_data['id']):
+            return
+        
+        if self.db.is_muted(user_data['id']):
+            await update.message.reply_text("🔇 Ты в муте")
+            return
+        
+        # Проверка на файрволл (защита от наказаний)
+        if user_data.get('firewall_expires') and datetime.fromisoformat(user_data['firewall_expires']) > datetime.now():
+            if user_data.get('firewall_used') == 0:
+                # Файрволл активен, но пока не использован
+                pass
+        
+        if await self.check_spam(update):
+            return
+        
+        if self.db.is_word_blacklisted(message_text):
+            await update.message.delete()
+            await update.message.reply_text("⚠️ Запрещенное слово! Сообщение удалено.")
+            return
+        
+        # Обработка RPS (камень-ножницы-бумага)
+        if context.user_data.get('awaiting_rps'):
+            if message_text in ["1", "2", "3"]:
+                context.user_data['awaiting_rps'] = False
+                
+                choices = {1: "🪨 Камень", 2: "✂️ Ножницы", 3: "📄 Бумага"}
+                results = {
+                    (1,2): "win", (2,3): "win", (3,1): "win",
+                    (2,1): "lose", (3,2): "lose", (1,3): "lose"
+                }
+                
+                player_choice = int(message_text)
+                bot_choice = random.randint(1, 3)
+                
+                text = f"✊ **КНБ**\n\n"
+                text += f"👤 Вы: {choices[player_choice]}\n"
+                text += f"🤖 Бот: {choices[bot_choice]}\n\n"
+                
+                if player_choice == bot_choice:
+                    self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
+                    text += "🤝 НИЧЬЯ!"
+                elif results.get((player_choice, bot_choice)) == "win":
+                    self.db.update_user(user_data['id'], rps_wins=user_data.get('rps_wins', 0) + 1)
+                    reward = random.randint(10, 30)
+                    self.db.add_coins(user_data['id'], reward)
+                    text += f"🎉 ПОБЕДА! +{reward} 💰"
+                else:
+                    self.db.update_user(user_data['id'], rps_losses=user_data.get('rps_losses', 0) + 1)
+                    text += "😢 ПОРАЖЕНИЕ!"
+                
+                await update.message.reply_text(text)
+                return
+        
+        # Обработка голосования в мафии
+        if message_text.lower().startswith('голосовать '):
+            try:
+                vote_num = int(message_text.split()[1])
+                for game in self.mafia_games.values():
+                    if game.chat_id == chat.id and game.phase == "day" and user.id in game.get_alive_players():
+                        alive_players = game.get_alive_players()
+                        if 1 <= vote_num <= len(alive_players):
+                            target_id = alive_players[vote_num - 1]
+                            game.votes[user.id] = target_id
+                            await update.message.reply_text(f"✅ Ваш голос учтён за игрока #{vote_num}")
+                            break
+            except:
+                pass
+            return
+        
+        # Проверка на активные игры
+        for game_id, game in list(self.games_in_progress.items()):
+            if game.get('user_id') == user.id:
+                if game_id.startswith('guess_'):
+                    try:
+                        guess = int(message_text)
+                        game['attempts'] += 1
+                        
+                        if guess == game['number']:
+                            win = game['bet'] * 2
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], guess_wins=user_data.get('guess_wins', 0) + 1)
+                            await update.message.reply_text(
+                                f"🎉 **ПОБЕДА!**\n\n"
+                                f"Число {game['number']}!\n"
+                                f"Попыток: {game['attempts']}\n"
+                                f"Выигрыш: {win} 💰"
+                            )
+                            del self.games_in_progress[game_id]
+                        elif game['attempts'] >= game['max_attempts']:
+                            self.db.update_user(user_data['id'], guess_losses=user_data.get('guess_losses', 0) + 1)
+                            await update.message.reply_text(
+                                f"❌ Попытки кончились! Было число {game['number']}"
+                            )
+                            del self.games_in_progress[game_id]
+                        elif guess < game['number']:
+                            await update.message.reply_text(f"📈 Загаданное число больше {guess}")
+                        else:
+                            await update.message.reply_text(f"📉 Загаданное число меньше {guess}")
+                    except ValueError:
+                        await update.message.reply_text("❌ Введите число от 1 до 100")
+                    return
+                
+                elif game_id.startswith('bulls_'):
+                    if len(message_text) != 4 or not message_text.isdigit():
+                        await update.message.reply_text("❌ Введите 4 цифры")
+                        return
+                    
+                    guess = message_text
+                    if len(set(guess)) != 4:
+                        await update.message.reply_text("❌ Цифры не должны повторяться")
+                        return
+                    
+                    bulls = 0
+                    cows = 0
+                    for i in range(4):
+                        if guess[i] == game['number'][i]:
+                            bulls += 1
+                        elif guess[i] in game['number']:
+                            cows += 1
+                    
+                    game['attempts'].append((guess, bulls, cows))
+                    
+                    if bulls == 4:
+                        win = game['bet'] * 3
+                        self.db.add_coins(user_data['id'], win)
+                        self.db.update_user(user_data['id'], bulls_wins=user_data.get('bulls_wins', 0) + 1)
+                        await update.message.reply_text(
+                            f"🎉 **ПОБЕДА!**\n\n"
+                            f"Число {game['number']}!\n"
+                            f"Попыток: {len(game['attempts'])}\n"
+                            f"Выигрыш: {win} 💰"
+                        )
+                        del self.games_in_progress[game_id]
+                    elif len(game['attempts']) >= game['max_attempts']:
+                        self.db.update_user(user_data['id'], bulls_losses=user_data.get('bulls_losses', 0) + 1)
+                        await update.message.reply_text(
+                            f"❌ Попытки кончились! Было число {game['number']}"
+                        )
+                        del self.games_in_progress[game_id]
+                    else:
+                        await update.message.reply_text(
+                            f"🔍 Быки: {bulls}, Коровы: {cows}\n"
+                            f"Осталось попыток: {game['max_attempts'] - len(game['attempts'])}"
+                        )
+                    return
+
+        # Проверяем, нужно ли AI ответить
+        is_reply_to_bot = (update.message.reply_to_message and 
+                          update.message.reply_to_message.from_user.id == context.bot.id)
+        
+        should_respond = False
+        force_response = False
+        ai_message = message_text
+        
+        # Всегда отвечаем на "Спектр"
+        if ai_message.lower().startswith("спектр"):
+            should_respond = True
+            force_response = True
+            ai_message = ai_message[6:].strip()
+            if not ai_message:
+                ai_message = "Привет"
+        # В личке отвечаем на всё
+        elif chat.type == "private":
+            should_respond = True
+            force_response = True
+        # В группах проверяем по алгоритму
+        elif self.ai and self.ai.is_available:
+            should_respond = await self.ai.should_respond(ai_message, is_reply_to_bot)
+            force_response = False
+        
+        if should_respond and self.ai and self.ai.is_available:
+            try:
+                await update.message.chat.send_action(action="typing")
+                response = await self.ai.get_response(
+                    user.id, 
+                    ai_message, 
+                    user.first_name,
+                    force_response=force_response
+                )
+                if response:
+                    prefix = "🤖 " if force_response else ""
+                    await update.message.reply_text(f"{prefix}{response}")
+                    return
+            except Exception as e:
+                logger.error(f"AI response error: {e}")
+
+        async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка новых участников"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT welcome FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        welcome_text = row[0] if row and row[0] else "Добро пожаловать!"
+        
+        for member in update.message.new_chat_members:
+            if member.is_bot:
+                continue
+            
+            self.db.get_user(member.id, member.first_name)
+            
+            user_data = self.db.get_user_by_id(member.id)
+            gender = user_data.get('gender', 'не указан')
+            
+            welcome = welcome_text.replace('{имя}', member.first_name)
+            if gender == 'м':
+                welcome = welcome.replace('{ж|м|мн}', 'присоединился')
+            elif gender == 'ж':
+                welcome = welcome.replace('{ж|м|мн}', 'присоединилась')
+            else:
+                welcome = welcome.replace('{ж|м|мн}', 'присоединился(ась)')
+            
+            await update.message.reply_text(
+                f"👋 {welcome}\n\n{member.first_name}, используй /help для команд!"
+            )
+    
+    async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка ухода участников"""
+        member = update.message.left_chat_member
+        if member.is_bot:
+            return
+        
+        await update.message.reply_text(f"👋 {member.first_name} покинул чат...")
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
