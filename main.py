@@ -4692,7 +4692,7 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
     async def cmd_pairs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.cmd_pairing(update, context)
 
-        # ===== АЧИВКИ =====
+            # ===== АЧИВКИ =====
     async def cmd_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = """
 # Спектр | Ачивки
@@ -4709,6 +4709,104 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
 🖥 По глитчам
 🎲 По играм
 ⚔️ По дуэлям
+👾 По боссам
+🔥 По активности
+📆 По стрикам
+💎 VIP-ачивки
+🎁 Особые
+🤖 Секретные
+
+🔐 **Приватность:**
++Ачивки — открыть доступ к вашим ачивкам
+-Ачивки — скрыть ваши ачивки от других
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_my_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        achievements = self.db.get_user_achievements(user_data['id'])
+        
+        if not achievements:
+            await update.message.reply_text(s.info("У вас пока нет ачивок"))
+            return
+        
+        text = s.header(f"🏅 АЧИВКИ: {user_data['first_name']}") + f"\nВсего: {len(achievements)}\n\n"
+        for ach in achievements[:20]:
+            text += f"• {ach['name']} — {ach['description']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_achievement_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ID ачивки: /achievement 1"))
+            return
+        
+        try:
+            ach_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ ID должен быть числом"))
+            return
+        
+        self.db.cursor.execute("SELECT * FROM achievements_list WHERE id = ?", (ach_id,))
+        ach = self.db.cursor.fetchone()
+        
+        if not ach:
+            await update.message.reply_text(s.error("❌ Ачивка не найдена"))
+            return
+        
+        ach = dict(ach)
+        
+        text = (
+            f"# Спектр | Ачивка {ach_id}\n\n"
+            f"🏅 **{ach['name']}**\n"
+            f"📝 {ach['description']}\n\n"
+            f"🎁 **Награда:**\n"
+        )
+        
+        if ach['reward_neons'] > 0:
+            text += f"• {ach['reward_neons']} 💜 неонов\n"
+        if ach['reward_glitches'] > 0:
+            text += f"• {ach['reward_glitches']} 🖥 глитчей\n"
+        if ach['reward_title']:
+            text += f"• Титул: {ach['reward_title']}\n"
+        if ach['reward_status']:
+            text += f"• Статус: {ach['reward_status']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("""
+            SELECT u.first_name, u.nickname, COUNT(a.id) as count
+            FROM users u
+            LEFT JOIN achievements a ON u.id = a.user_id
+            GROUP BY u.id
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        
+        top = self.db.cursor.fetchall()
+        
+        if not top or top[0][2] == 0:
+            await update.message.reply_text(s.info("Топ ачивок пуст"))
+            return
+        
+        text = s.header("🏆 ТОП КОЛЛЕКЦИОНЕРОВ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} ачивок\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_achievements_public(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], achievements_visible=1)
+        await update.message.reply_text(s.success("✅ Ваши ачивки теперь видны всем"))
+    
+    async def cmd_achievements_private(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], achievements_visible=0)
+        await update.message.reply_text(s.success("✅ Ваши ачивки теперь скрыты от других"))
 
     async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка цифр меню"""
