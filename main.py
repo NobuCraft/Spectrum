@@ -2547,6 +2547,147 @@ class SpectrumBot:
         user = update.effective_user
         await update.message.reply_text(f"🆔 Ваш ID: `{user.id}`", parse_mode=ParseMode.MARKDOWN)
 
+        # ===== СТАТИСТИКА =====
+    async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата"""
+        chat = update.effective_chat
+        cursor = self.db.cursor
+        
+        now = datetime.now()
+        day_ago = now - timedelta(days=1)
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+        
+        # Общая статистика
+        cursor.execute('''
+            SELECT COUNT(DISTINCT user_id), COUNT(*) 
+            FROM messages 
+            WHERE chat_id = ?
+        ''', (chat.id,))
+        result = cursor.fetchone()
+        total_users = result[0] if result else 0
+        total_msgs = result[1] if result else 0
+        
+        # Статистика за день
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, day_ago.isoformat()))
+        daily_msgs = cursor.fetchone()[0] or 0
+        
+        # Статистика за неделю
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, week_ago.isoformat()))
+        weekly_msgs = cursor.fetchone()[0] or 0
+        
+        # Статистика за месяц
+        cursor.execute('''
+            SELECT COUNT(*) FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+        ''', (chat.id, month_ago.isoformat()))
+        monthly_msgs = cursor.fetchone()[0] or 0
+        
+        # Топ пользователей
+        cursor.execute('''
+            SELECT username, first_name, COUNT(*) as msg_count
+            FROM messages 
+            WHERE chat_id = ? 
+            GROUP BY user_id 
+            ORDER BY msg_count DESC 
+            LIMIT 5
+        ''', (chat.id,))
+        top_users = cursor.fetchall()
+        
+        text = (
+            f"# Спектр | Статистика чата\n\n"
+            f"📅 {chat.title}\n"
+            f"👥 Участников: {total_users}\n\n"
+            
+            f"📊 **Активность**\n"
+            f"• За день: {daily_msgs:,} 💬\n"
+            f"• За неделю: {weekly_msgs:,} 💬\n"
+            f"• За месяц: {monthly_msgs:,} 💬\n"
+            f"• За всё время: {total_msgs:,} 💬\n\n"
+        )
+        
+        if top_users:
+            text += "🏆 **Топ-5 активных:**\n"
+            for i, (username, first_name, count) in enumerate(top_users, 1):
+                name = username or first_name or "Пользователь"
+                medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+                text += f"{medal} {name} — {count} 💬\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Моя статистика"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        text = (
+            s.header("📊 МОЯ СТАТИСТИКА") + "\n\n"
+            f"{s.stat('Сообщений', user_data['messages_count'])}\n"
+            f"{s.stat('Команд', user_data['commands_used'])}\n"
+            f"{s.stat('Репутация', user_data['reputation'])}\n"
+            f"{s.stat('КНБ побед', user_data['rps_wins'])}\n"
+            f"{s.stat('Дуэлей побед', user_data['duel_wins'])}\n"
+            f"{s.stat('Рейтинг дуэлей', user_data['duel_rating'])}\n"
+            f"{s.stat('Боссов убито', user_data['boss_kills'])}\n"
+            f"{s.stat('Игр в мафию', user_data['mafia_games'])}"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ игроков"""
+        text = s.header("🏆 ТОП ИГРОКОВ") + "\n\n"
+        top_coins = self.db.get_top("coins", 5)
+        text += s.section("💰 ПО МОНЕТАМ")
+        for i, row in enumerate(top_coins, 1):
+            name = row[1] or row[0]
+            text += f"{i}. {name} — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по монетам"""
+        top = self.db.get_top("coins", 10)
+        text = s.header("💰 ТОП ПО МОНЕТАМ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_level(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по уровню"""
+        top = self.db.get_top("level", 10)
+        text = s.header("📊 ТОП ПО УРОВНЮ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} уровень\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по неонам"""
+        top = self.db.get_top("neons", 10)
+        text = s.header("💜 ТОП ПО НЕОНАМ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 💜\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_glitches(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ по глитчам"""
+        top = self.db.get_top("glitches", 10)
+        text = s.header("🖥 ТОП ПО ГЛИТЧАМ") + "\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 🖥\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
     def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
