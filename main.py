@@ -8099,6 +8099,389 @@ class SpectrumBot:
             return
         
         await update.message.reply_text(f"👋 {member.first_name} покинул чат...")
+
+        # ===== CALLBACK КНОПКИ =====
+    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка нажатий на инлайн-кнопки"""
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        user = query.from_user
+        user_data = self.db.get_user(user.id)
+        
+        # Кнопки главного меню
+        if data == "random_chat":
+            # Поиск случайной беседы
+            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
+            row = self.db.cursor.fetchone()
+            if row:
+                await query.edit_message_text(
+                    f"🎲 **Случайная беседа найдена!**\n\n"
+                    f"📢 **Название:** {row[1]}\n"
+                    f"🆔 **ID:** `{row[0]}`\n\n"
+                    f"🔗 Присоединяйтесь!"
+                )
+            else:
+                await query.edit_message_text(
+                    "🔄 **Нет доступных бесед**\n\n"
+                    "Добавьте бота в чат и введите `!привязать`"
+                )
+        
+        elif data == "top_chats":
+            await query.edit_message_text("🏆 **Топ бесед**\n\nФункция в разработке")
+        
+        elif data == "help_menu":
+            await self.cmd_help(update, context)
+        
+        elif data == "setup_info":
+            text = """
+🔧 **УСТАНОВКА БОТА**
+
+1️⃣ Добавьте бота в группу
+2️⃣ Сделайте бота администратором
+3️⃣ Введите `!привязать` для привязки чата
+4️⃣ Настройте приветствие: `+приветствие Текст`
+5️⃣ Настройте правила: `+правила Текст`
+
+📚 Подробнее: https://telegra.ph/Iris-bot-setup
+            """
+            await query.edit_message_text(text, disable_web_page_preview=True)
+        
+        elif data == "disabled":
+            await query.answer("Эта клетка уже открыта", show_alert=False)
+        
+        elif data == "neons_info":
+            text = """
+💜 **Что такое неоны?**
+
+Неоны — основная валюта кибер-вселенной Спектра.
+
+**Как получить:**
+• Ежедневный бонус (/daily)
+• Победы в играх
+• Убийство боссов
+• Реферальная система
+
+**Команды:**
+/neons — мой баланс
+/transfer @user 100 — перевести неоны
+/farm — ферма глитчей
+            """
+            await query.edit_message_text(text)
+        
+        elif data == "bonuses_menu":
+            await self.cmd_bonuses(update, context)
+        
+        elif data == "top_chats_day":
+            context.args = ["день"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_week":
+            context.args = ["неделя"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_month":
+            context.args = ["месяц"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data.startswith("chat_card_"):
+            chat_id = int(data.split('_')[2])
+            await query.edit_message_text(
+                "📇 **Карточка чата**\n\nФункция в разработке"
+            )
+        
+        # Кнопки боссов
+        elif data.startswith("boss_attack_"):
+            boss_id = int(data.split('_')[2])
+            await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=True)
+        
+        elif data == "boss_regen":
+            await self.cmd_regen(update, context)
+        
+        elif data == "boss_buy_weapon":
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗡 Меч (+10 урона) - 200💰", callback_data="buy_weapon_sword")],
+                [InlineKeyboardButton("⚔️ Легендарный меч (+30 урона) - 500💰", callback_data="buy_weapon_legendary")],
+                [InlineKeyboardButton("🔫 Бластер (+50 урона) - 1000💰", callback_data="buy_weapon_blaster")],
+                [InlineKeyboardButton("🔙 Назад", callback_data="boss_list")]
+            ])
+            await query.edit_message_text(
+                "⚔️ **МАГАЗИН ОРУЖИЯ**\n\nВыберите оружие:",
+                reply_markup=keyboard
+            )
+        
+        elif data.startswith("buy_weapon_"):
+            weapon = data.replace("buy_weapon_", "")
+            weapons = {
+                "sword": {"name": "🗡 Меч", "damage": 10, "price": 200},
+                "legendary": {"name": "⚔️ Легендарный меч", "damage": 30, "price": 500},
+                "blaster": {"name": "🔫 Бластер", "damage": 50, "price": 1000}
+            }
+            
+            if weapon in weapons:
+                w = weapons[weapon]
+                if user_data['coins'] >= w['price']:
+                    self.db.add_coins(user_data['id'], -w['price'])
+                    new_damage = user_data['damage'] + w['damage']
+                    self.db.update_user(user_data['id'], damage=new_damage)
+                    await query.edit_message_text(
+                        f"✅ **Куплено:** {w['name']}!\n\nТеперь ваш урон: {new_damage}"
+                    )
+                else:
+                    await query.edit_message_text(
+                        f"❌ Недостаточно монет. Нужно {w['price']} 💰"
+                    )
+        
+        elif data == "boss_list":
+            bosses = self.db.get_bosses()
+            text = "👾 **БОССЫ**\n\n"
+            for i, boss in enumerate(bosses[:5]):
+                status = "⚔️" if boss['is_alive'] else "💀"
+                health_bar = self._progress_bar(boss['health'], boss['max_health'], 10)
+                text += f"{i+1}. {status} {boss['name']}\n   {health_bar}\n\n"
+            
+            keyboard = []
+            for i, boss in enumerate(bosses[:5]):
+                if boss['is_alive']:
+                    keyboard.append([InlineKeyboardButton(
+                        f"⚔️ {boss['name']}",
+                        callback_data=f"boss_attack_{boss['id']}"
+                    )])
+            
+            keyboard.append([InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")])
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        
+        # Кнопки сапёра
+        elif data.startswith("saper_"):
+            parts = data.split('_')
+            if len(parts) >= 3:
+                game_id = f"{parts[1]}_{parts[2]}"
+                cell = int(parts[3])
+                
+                if game_id in self.games_in_progress:
+                    game = self.games_in_progress[game_id]
+                    if game['user_id'] != user.id:
+                        await query.answer("Это не ваша игра!", show_alert=True)
+                        return
+                    
+                    x = (cell - 1) // 3
+                    y = (cell - 1) % 3
+                    
+                    if x == game['mine_x'] and y == game['mine_y']:
+                        await query.edit_message_text(
+                            f"💥 **БУМ!**\n\n❌ Ты подорвался на мине!\n\nПроигрыш: {game['bet']} 💰"
+                        )
+                        del self.games_in_progress[game_id]
+                    else:
+                        game['opened'] += 1
+                        game['field'][x][y] = "✅"
+                        
+                        if game['opened'] >= 8:
+                            win = game['bet'] * 3
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+                            await query.edit_message_text(
+                                f"🎉 **ПОБЕДА!**\n\nТы открыл все безопасные клетки!\nВыигрыш: {win} 💰"
+                            )
+                            del self.games_in_progress[game_id]
+                        else:
+                            field_text = ""
+                            for i in range(3):
+                                field_text += ' '.join(game['field'][i]) + "\n"
+                            
+                            keyboard = []
+                            for i in range(3):
+                                row = []
+                                for j in range(3):
+                                    cell_num = i * 3 + j + 1
+                                    if game['field'][i][j] == "✅":
+                                        row.append(InlineKeyboardButton(f"✅", callback_data="disabled"))
+                                    else:
+                                        row.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+                                keyboard.append(row)
+                            
+                            await query.edit_message_text(
+                                f"💣 **САПЁР**\n\n{field_text}",
+                                reply_markup=InlineKeyboardMarkup(keyboard)
+                            )
+        
+        # Кнопки голосования за бан
+        elif data.startswith("vote_for_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], True):
+                await query.edit_message_text("✅ Ваш голос учтён (ЗА БАН)")
+                
+                self.db.cursor.execute("SELECT * FROM ban_votes WHERE id = ?", (vote_id,))
+                vote = self.db.cursor.fetchone()
+                if vote and vote[7] >= vote[5]:
+                    target = self.db.get_user_by_id(vote[2])
+                    if target:
+                        self.db.ban_user(target['id'], vote[3], "По результатам голосования")
+                        self.db.cursor.execute("UPDATE ban_votes SET status = 'completed' WHERE id = ?", (vote_id,))
+                        self.db.conn.commit()
+                        
+                        await context.bot.send_message(
+                            vote[1],
+                            f"🔨 Пользователь {target['first_name']} забанен по результатам голосования!"
+                        )
+            else:
+                await query.edit_message_text("❌ Не удалось проголосовать")
+        
+        elif data.startswith("vote_against_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], False):
+                await query.edit_message_text("✅ Ваш голос учтён (ПРОТИВ БАНА)")
+            else:
+                await query.edit_message_text("❌ Не удалось проголосовать")
+        
+        # Кнопки мафии
+        elif data.startswith("mafia_confirm_"):
+            chat_id = int(data.split('_')[2])
+            if chat_id in self.mafia_games:
+                game = self.mafia_games[chat_id]
+                if user.id in game.players:
+                    game.confirm_player(user.id)
+                    await query.edit_message_text(
+                        "✅ **Подтверждение получено!**\n\nОжидайте начала игры..."
+                    )
+                    
+                    if game.all_confirmed():
+                        await self._mafia_start_game(game, context)
+        
+        # Кнопки дуэлей
+        elif data.startswith("accept_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
+                return
+            
+            self.db.update_duel(duel_id, status='accepted')
+            
+            challenger = self.db.get_user_by_id(duel['challenger_id'])
+            opponent = self.db.get_user_by_id(duel['opponent_id'])
+            
+            if not challenger or not opponent:
+                await query.edit_message_text("❌ Ошибка загрузки данных")
+                return
+            
+            await query.edit_message_text(
+                f"✅ **Дуэль принята!**\n\n"
+                f"⚔️ {challenger['first_name']} VS {opponent['first_name']}\n"
+                f"💰 Ставка: {duel['bet']} 💰\n\n"
+                f"🔄 Дуэль начинается..."
+            )
+            
+            asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
+        
+        elif data.startswith("reject_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
+                return
+            
+            self.db.update_duel(duel_id, status='rejected')
+            self.db.add_coins(duel['challenger_id'], duel['bet'])
+            
+            await query.edit_message_text(
+                f"❌ **Дуэль отклонена**\n\nСтавка возвращена."
+            )
+        
+        # Кнопки брака
+        elif data.startswith("marry_accept_"):
+            proposer_id = int(data.split('_')[2])
+            
+            if user_data.get('spouse', 0):
+                await query.edit_message_text("❌ Вы уже в браке")
+                return
+            
+            proposer = self.db.get_user_by_id(proposer_id)
+            if not proposer:
+                await query.edit_message_text("❌ Пользователь не найден")
+                return
+            
+            if proposer.get('spouse', 0):
+                await query.edit_message_text("❌ Пользователь уже в браке")
+                return
+            
+            now = datetime.now().isoformat()
+            self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
+            self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
+            
+            self.db.add_coins(user_data['id'], 500)
+            self.db.add_coins(proposer_id, 500)
+            
+            await query.edit_message_text(
+                f"💍 **Поздравляем!**\n\n"
+                f"{user_data['first_name']} и {proposer['first_name']} теперь в браке! 🎉\n\n"
+                f"💰 Бонус молодожёнам: +500 💰 каждому"
+            )
+            
+            await context.bot.send_message(
+                proposer['telegram_id'],
+                f"💞 **ПОЗДРАВЛЯЕМ!**\n\n{user_data['first_name']} принял(а) ваше предложение!"
+            )
+        
+        elif data.startswith("marry_reject_"):
+            proposer_id = int(data.split('_')[2])
+            await query.edit_message_text("❌ Предложение отклонено")
+            await context.bot.send_message(
+                proposer_id,
+                "❌ Ваше предложение отклонили"
+            )
+        
+        # Кнопки для закладок
+        elif data == "bookmark_help":
+            text = """
+📌 **Закладки**
+
+Как использовать:
+
+• `+Закладка Название` (с новой строки содержимое) — создать
+• `закладка [ID]` — показать
+• `чатбук` — все закладки чата
+• `мои закладки` — ваши закладки
+• `-Закладка [ID]` — удалить
+            """
+            await query.edit_message_text(text)
+        
+        # Кнопки для кружков
+        elif data == "circle_help":
+            text = """
+🔄 **Кружки**
+
+Как использовать:
+
+• `создать кружок Название` (с новой строки описание) — создать
+• `кружки` — список кружков
+• `кружок [номер]` — информация
+• `+Кружок [номер]` — присоединиться
+• `-Кружок [номер]` — выйти
+            """
+            await query.edit_message_text(text)
+        
+        # Кнопки для ачивок
+        elif data == "achievements_help":
+            text = """
+🏅 **Ачивки**
+
+Как использовать:
+
+• `мои ачивки` — ваши достижения
+• `топ ачивок` — рейтинг
+• `ачивка [ID]` — информация
+• `+Ачивки` / `-Ачивки` — приватность
+            """
+            await query.edit_message_text(text)
+
+    
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
