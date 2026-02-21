@@ -706,65 +706,65 @@ class Database:
     # ПРОДОЛЖАЙТЕ ЗДЕСЬ СО СЛЕДУЮЩЕЙ ТАБЛИЦЕЙ...
     # Убедитесь, что каждая следующая строка имеет ТОЧНО такие же отступы
         
-        # Таблица чёрного списка
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS blacklist (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                word TEXT UNIQUE,
-                added_by INTEGER,
-                added_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    # Таблица чёрного списка
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS blacklist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            word TEXT UNIQUE,
+            added_by INTEGER,
+            added_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
         
-        # Таблица настроек чатов
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS chat_settings (
-                chat_id INTEGER PRIMARY KEY,
-                welcome TEXT,
-                rules TEXT,
-                antiflood INTEGER DEFAULT 1,
-                antispam INTEGER DEFAULT 1,
-                antilink INTEGER DEFAULT 0,
-                captcha INTEGER DEFAULT 0,
-                lang TEXT DEFAULT 'ru',
-                chat_code TEXT UNIQUE,
-                chat_name TEXT,
-                circle_limit INTEGER DEFAULT 20,
-                treasury_neons INTEGER DEFAULT 0,
-                treasury_glitches INTEGER DEFAULT 0,
-                glitch_hammer_price INTEGER DEFAULT 50,
-                glitch_hammer_enabled INTEGER DEFAULT 1,
-                glitch_hammer_min_rank INTEGER DEFAULT 0,
-                invisible_price INTEGER DEFAULT 30,
-                invisible_enabled INTEGER DEFAULT 1,
-                neon_nick_price INTEGER DEFAULT 100,
-                neon_nick_enabled INTEGER DEFAULT 1,
-                turbo_drive_price INTEGER DEFAULT 200,
-                turbo_drive_boost INTEGER DEFAULT 30,
-                turbo_drive_enabled INTEGER DEFAULT 1,
-                cyber_luck_price INTEGER DEFAULT 150,
-                cyber_luck_boost INTEGER DEFAULT 15,
-                cyber_luck_enabled INTEGER DEFAULT 1,
-                firewall_price INTEGER DEFAULT 80,
-                firewall_enabled INTEGER DEFAULT 1,
-                rp_packet_price INTEGER DEFAULT 120,
-                rp_packet_enabled INTEGER DEFAULT 1,
-                speech_enabled INTEGER DEFAULT 0
-            )
-        ''')
+    # Таблица настроек чатов
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS chat_settings (
+            chat_id INTEGER PRIMARY KEY,
+            welcome TEXT,
+            rules TEXT,
+            antiflood INTEGER DEFAULT 1,
+            antispam INTEGER DEFAULT 1,
+            antilink INTEGER DEFAULT 0,
+            captcha INTEGER DEFAULT 0,
+            lang TEXT DEFAULT 'ru',
+            chat_code TEXT UNIQUE,
+            chat_name TEXT,
+            circle_limit INTEGER DEFAULT 20,
+            treasury_neons INTEGER DEFAULT 0,
+            treasury_glitches INTEGER DEFAULT 0,
+            glitch_hammer_price INTEGER DEFAULT 50,
+            glitch_hammer_enabled INTEGER DEFAULT 1,
+            glitch_hammer_min_rank INTEGER DEFAULT 0,
+            invisible_price INTEGER DEFAULT 30,
+            invisible_enabled INTEGER DEFAULT 1,
+            neon_nick_price INTEGER DEFAULT 100,
+            neon_nick_enabled INTEGER DEFAULT 1,
+            turbo_drive_price INTEGER DEFAULT 200,
+            turbo_drive_boost INTEGER DEFAULT 30,
+            turbo_drive_enabled INTEGER DEFAULT 1,
+            cyber_luck_price INTEGER DEFAULT 150,
+            cyber_luck_boost INTEGER DEFAULT 15,
+            cyber_luck_enabled INTEGER DEFAULT 1,
+            firewall_price INTEGER DEFAULT 80,
+            firewall_enabled INTEGER DEFAULT 1,
+            rp_packet_price INTEGER DEFAULT 120,
+            rp_packet_enabled INTEGER DEFAULT 1,
+            speech_enabled INTEGER DEFAULT 0
+        )
+    ''')
         
-        # Таблица дуэлей
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS duels (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                challenger_id INTEGER,
-                opponent_id INTEGER,
-                bet INTEGER,
-                status TEXT DEFAULT 'pending',
-                winner_id INTEGER,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    # Таблица дуэлей
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS duels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            challenger_id INTEGER,
+            opponent_id INTEGER,
+            obet INTEGER,
+            status TEXT DEFAULT 'pending',
+            winner_id INTEGER,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
         
         # Таблица игр мафии
         self.cursor.execute('''
