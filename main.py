@@ -1488,31 +1488,33 @@ class Database:
         self.conn.commit()
         return self.cursor.lastrowid
     
-    def vote_for_ban(self, vote_id: int, user_id: int, vote: bool) -> bool:
-        self.cursor.execute("SELECT * FROM ban_votes WHERE id = ? AND status = 'active'", (vote_id,))
-        vote_data = self.cursor.fetchone()
-        if not vote_data:
-            return False
-        
-        voters = json.loads(vote_data[9])
-        if user_id in voters:
-            return False
-        
-        voters.append(user_id)
-        
-        if vote:
-            new_for = vote_data[7] + 1
-        else:
-            new_for = vote_data[7]  # votes_for
-            new_against = vote_data[8] + 1
-        
-        self.cursor.execute("""
-            UPDATE ban_votes 
-            SET votes_for = ?, votes_against = ?, voters = ?
-            WHERE id = ?
-        """, (new_for, new_against, json.dumps(voters), vote_id))
-        self.conn.commit()
-        return True
+def vote_for_ban(self, vote_id: int, user_id: int, vote: bool) -> bool:
+    """Проголосовать за бан"""
+    self.cursor.execute("SELECT * FROM ban_votes WHERE id = ? AND status = 'active'", (vote_id,))
+    vote_data = self.cursor.fetchone()
+    if not vote_data:
+        return False
+    
+    voters = json.loads(vote_data[9])
+    if user_id in voters:
+        return False
+    
+    voters.append(user_id)
+    
+    if vote:
+        new_for = vote_data[7] + 1
+        new_against = vote_data[8]
+    else:
+        new_for = vote_data[7]
+        new_against = vote_data[8] + 1
+    
+    self.cursor.execute("""
+        UPDATE ban_votes 
+        SET votes_for = ?, votes_against = ?, voters = ?
+        WHERE id = ?
+    """, (new_for, new_against, json.dumps(voters), vote_id))
+    self.conn.commit()
+    return True
     
     # ===== МЕТОДЫ ДЛЯ ПАР (ШИППЕРИНГ) =====
     def create_pair(self, chat_id: int, user1_id: int, user2_id: int) -> bool:
@@ -1724,17 +1726,17 @@ class Database:
                           (datetime.now().isoformat(),))
         return [dict(row) for row in self.cursor.fetchall()]
 
-    def ban_user(self, user_id: int, admin_id: int, reason: str) -> bool:
-        # user_id здесь - это ВНУТРЕННИЙ ID пользователя
-        try:
-            now = datetime.now().isoformat()
-            self.cursor.execute('''
-                UPDATE users SET 
-                    banned = 1,
-                    ban_reason = ?,
-                    ban_date = ?,
-                    ban_admin = ?
-                WHERE id = ?
+def ban_user(self, user_id: int, admin_id: int, reason: str) -> bool:
+    """Забанить пользователя в БД"""
+    try:
+        now = datetime.now().isoformat()
+        self.cursor.execute('''
+            UPDATE users SET 
+                banned = 1,
+                ban_reason = ?,
+                ban_date = ?,
+                ban_admin = ?
+            WHERE id = ?
         ''', (reason, now, admin_id, user_id))
         self.conn.commit()
         self.log_action(admin_id, "ban", f"{user_id}: {reason}")
@@ -1742,9 +1744,9 @@ class Database:
     except Exception as e:
         logger.error(f"Ошибка при бане в БД (user_id: {user_id}): {e}")
         return False
-    
-  def unban_user(self, user_id: int, admin_id: int) -> bool:
-    # user_id здесь - это ВНУТРЕННИЙ ID пользователя
+
+def unban_user(self, user_id: int, admin_id: int) -> bool:
+    """Разбанить пользователя в БД"""
     try:
         self.cursor.execute('''
             UPDATE users SET 
