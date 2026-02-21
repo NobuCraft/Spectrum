@@ -590,96 +590,6 @@ class MafiaGame:
         
         await self._update_mafia_game_message(game, context)
     
-    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        """Начать игру после подтверждения"""
-        if len(game.players) < MAFIA_MIN_PLAYERS:
-            await context.bot.send_message(
-                game.chat_id,
-                f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}"
-            )
-            del self.mafia_games[game.chat_id]
-            return
-        
-        game.assign_roles()
-        game.status = "night"
-        game.phase = "night"
-        game.start_time = datetime.now()
-        
-        # Рассылаем роли в ЛС
-        for player_id in game.players:
-            role = game.roles[player_id]
-            role_desc = game.get_role_description(role)
-            
-            try:
-                await context.bot.send_message(
-                    player_id,
-                    f"🔫 **МАФИЯ**\n\n"
-                    f"🎭 **Ваша роль:** {role}\n"
-                    f"📖 {role_desc}\n\n"
-                    f"🌙 Наступает ночь. Ожидайте..."
-                )
-            except:
-                pass
-        
-        # Сообщение в чат
-        await context.bot.send_message(
-            game.chat_id,
-            "🔫 **МАФИЯ**\n\n"
-            "🌙 **НАСТУПИЛА НОЧЬ**\n"
-            "📨 Роли розданы в ЛС\n"
-            "🔪 Мафия выбирает жертву...",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Таймер на ночь
-        asyncio.create_task(self._mafia_night_timer(game, context))
-    
-    async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        """Таймер ночи"""
-        await asyncio.sleep(MAFIA_NIGHT_TIME)
-        
-        if game.chat_id not in self.mafia_games or game.phase != "night":
-            return
-        
-        killed = game.process_night()
-        
-        if killed["killed"]:
-            game.alive[killed["killed"]] = False
-            try:
-                await context.bot.send_message(
-                    killed["killed"],
-                    "💀 **ВАС УБИЛИ НОЧЬЮ**\n\nВы больше не участвуете"
-                )
-            except:
-                pass
-        
-        game.phase = "day"
-        game.day += 1
-        
-        alive_list = game.get_alive_players()
-        alive_names = []
-        for pid in alive_list:
-            name = game.players_data[pid]['name']
-            alive_names.append(f"• {name}")
-        
-        killed_name = "никого"
-        if killed["killed"]:
-            killed_name = game.players_data[killed["killed"]]['name']
-        
-        text = (
-            f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
-            f"☀️ Наступило утро\n"
-            f"💀 **Убит:** {killed_name}\n\n"
-            f"👥 **Живы ({len(alive_list)}):**\n"
-            f"{chr(10).join(alive_names)}\n\n"
-            f"🗳 Обсуждайте и голосуйте"
-        )
-        
-        await context.bot.send_message(game.chat_id, text, parse_mode=ParseMode.MARKDOWN)
-        
-        # Таймер на день
-        asyncio.create_task(self._mafia_day_timer(game, context))
-    
     async def _mafia_day_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
         """Таймер дня"""
         await asyncio.sleep(MAFIA_DAY_TIME)
@@ -9590,6 +9500,156 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             )
         except:
             pass
+
+    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Начать игру после подтверждения"""
+        if len(game.players) < MAFIA_MIN_PLAYERS:
+            await context.bot.send_message(
+                game.chat_id,
+                f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.assign_roles()
+        game.status = "night"
+        game.phase = "night"
+        game.start_time = datetime.now()
+        
+        # Рассылаем роли в ЛС
+        for player_id in game.players:
+            role = game.roles[player_id]
+            role_desc = game.get_role_description(role)
+            
+            try:
+                await context.bot.send_message(
+                    player_id,
+                    f"🔫 **МАФИЯ**\n\n"
+                    f"🎭 **Ваша роль:** {role}\n"
+                    f"📖 {role_desc}\n\n"
+                    f"🌙 Наступает ночь. Ожидайте..."
+                )
+            except:
+                pass
+        
+        # Сообщение в чат
+        await context.bot.send_message(
+            game.chat_id,
+            "🔫 **МАФИЯ**\n\n"
+            "🌙 **НАСТУПИЛА НОЧЬ**\n"
+            "📨 Роли розданы в ЛС\n"
+            "🔪 Мафия выбирает жертву...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Таймер на ночь
+        asyncio.create_task(self._mafia_night_timer(game, context))
+    
+    async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Таймер ночи"""
+        await asyncio.sleep(MAFIA_NIGHT_TIME)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "night":
+            return
+        
+        killed = game.process_night()
+        
+        if killed["killed"]:
+            game.alive[killed["killed"]] = False
+            try:
+                await context.bot.send_message(
+                    killed["killed"],
+                    "💀 **ВАС УБИЛИ НОЧЬЮ**\n\nВы больше не участвуете"
+                )
+            except:
+                pass
+        
+        game.phase = "day"
+        game.day += 1
+        
+        alive_list = game.get_alive_players()
+        alive_names = []
+        for pid in alive_list:
+            name = game.players_data[pid]['name']
+            alive_names.append(f"• {name}")
+        
+        killed_name = "никого"
+        if killed["killed"]:
+            killed_name = game.players_data[killed["killed"]]['name']
+        
+        text = (
+            f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
+            f"☀️ Наступило утро\n"
+            f"💀 **Убит:** {killed_name}\n\n"
+            f"👥 **Живы ({len(alive_list)}):**\n"
+            f"{chr(10).join(alive_names)}\n\n"
+            f"🗳 Обсуждайте и голосуйте"
+        )
+        
+        await context.bot.send_message(game.chat_id, text, parse_mode=ParseMode.MARKDOWN)
+        
+        # Таймер на день
+        asyncio.create_task(self._mafia_day_timer(game, context))
+    
+    async def _mafia_day_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Таймер дня"""
+        await asyncio.sleep(MAFIA_DAY_TIME)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "day":
+            return
+        
+        executed = game.process_voting()
+        
+        if executed:
+            game.alive[executed] = False
+            executed_name = game.players_data[executed]['name']
+            role = game.roles.get(executed, "неизвестно")
+            
+            await context.bot.send_message(
+                game.chat_id,
+                f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
+                f"🔨 **Исключён:** {executed_name}\n"
+                f"🎭 **Роль:** {role}\n\n"
+                f"🌙 Ночь скоро..."
+            )
+            
+            try:
+                await context.bot.send_message(
+                    executed,
+                    "🔨 **ВАС ИСКЛЮЧИЛИ ДНЁМ**\n\nВы больше не участвуете"
+                )
+            except:
+                pass
+        else:
+            await context.bot.send_message(
+                game.chat_id,
+                "📢 Никто не был исключён"
+            )
+        
+        winner = game.check_win()
+        
+        if winner == "citizens":
+            await context.bot.send_message(
+                game.chat_id,
+                "🏆 **ПОБЕДА ГОРОДА!**\n\nМафия уничтожена!"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        elif winner == "mafia":
+            await context.bot.send_message(
+                game.chat_id,
+                "🏆 **ПОБЕДА МАФИИ!**\n\nМафия захватила город!"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.phase = "night"
+        await context.bot.send_message(
+            game.chat_id,
+            f"🔫 **МАФИЯ | НОЧЬ {game.day}**\n\n🌙 Наступает ночь..."
+        )
+        
+        asyncio.create_task(self._mafia_night_timer(game, context))
 
     async def _update_mafia_game_message(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
         """Обновить сообщение с игрой"""
