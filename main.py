@@ -653,18 +653,17 @@ class Database:
                 achievements_visible INTEGER DEFAULT 1,
                 stats_visible INTEGER DEFAULT 1,
                 last_farm TEXT
-            )
-        ''')
-             
+        )
+    ''')
     
-    # Добавьте это после создания таблицы users
+    # Добавляем колонки для банов
     try:
         self.cursor.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT")
         self.cursor.execute("ALTER TABLE users ADD COLUMN ban_date TEXT")
         self.cursor.execute("ALTER TABLE users ADD COLUMN ban_admin INTEGER")
         self.conn.commit()
     except sqlite3.OperationalError:
-        # Колонки уже существуют - игнорируем ошибку
+        # Колонки уже существуют - игнорируем
         pass
 
     # Таблица сообщений
@@ -691,8 +690,8 @@ class Database:
             UNIQUE(user_id, date)
         )
     ''')
-        
-        # Таблица логов
+
+    # Таблица логов
     self.cursor.execute('''
         CREATE TABLE IF NOT EXISTS logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -703,6 +702,9 @@ class Database:
             timestamp TEXT DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    
+    # ПРОДОЛЖАЙТЕ ЗДЕСЬ СО СЛЕДУЮЩЕЙ ТАБЛИЦЕЙ...
+    # Убедитесь, что каждая следующая строка имеет ТОЧНО такие же отступы
         
         # Таблица чёрного списка
         self.cursor.execute('''
