@@ -8063,7 +8063,7 @@ class SpectrumBot:
             except Exception as e:
                 logger.error(f"AI response error: {e}")
 
-        async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка новых участников"""
         chat_id = update.effective_chat.id
         
