@@ -8589,11 +8589,6 @@ async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE
             await self.ai.close()
         self.db.close()
         logger.info("✅ Бот остановлен")
-
-    def setup_handlers(self):
-        """Регистрация всех обработчиков"""
-        
-       lf.app.handlers)}")
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
