@@ -3449,10 +3449,10 @@ class SpectrumBot:
         """
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Подбросить монетку"""
-    result = random.choice(["Орёл", "Решка"])
-    await update.message.reply_text(f"🪙 **МОНЕТКА**\n\n• Выпало: {result}")
+    async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Подбросить монетку"""
+        result = random.choice(["Орёл", "Решка"])
+        await update.message.reply_text(f"🪙 **МОНЕТКА**\n\n• Выпало: {result}")
     
     # ===== СЛОТЫ СО СПЕКТРОМ =====
     
