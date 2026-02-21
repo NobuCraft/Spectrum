@@ -2249,7 +2249,7 @@ class SpectrumBot:
         gender_text = {"м": "Мужской", "ж": "Женский", "др": "Другой"}[gender]
         await update.message.reply_text(f"✅ Пол установлен: {gender_text}")
 
-        async def cmd_remove_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def cmd_remove_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Удалить пол из анкеты"""
         user_data = self.db.get_user(update.effective_user.id)
         self.db.update_user(user_data['id'], gender='не указан')
