@@ -12399,6 +12399,1086 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
         self.db.close()
         logger.info("✅ Бот остановлен")
 
+    def setup_handlers(self):
+        """Регистрация всех обработчиков"""
+        
+        # ===== ОСНОВНЫЕ КОМАНДЫ =====
+        self.app.add_handler(CommandHandler("start", self.cmd_start))
+        self.app.add_handler(CommandHandler("help", self.cmd_help))
+        self.app.add_handler(CommandHandler("menu", self.show_menu))
+        
+        # ===== ПРОФИЛЬ =====
+        self.app.add_handler(CommandHandler("profile", self.cmd_profile))
+        self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
+        self.app.add_handler(CommandHandler("title", self.cmd_set_title))
+        self.app.add_handler(CommandHandler("motto", self.cmd_set_motto))
+        self.app.add_handler(CommandHandler("bio", self.cmd_set_bio))
+        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))
+        self.app.add_handler(CommandHandler("city", self.cmd_set_city))
+        self.app.add_handler(CommandHandler("country", self.cmd_set_country))
+        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
+        self.app.add_handler(CommandHandler("age", self.cmd_set_age))
+        self.app.add_handler(CommandHandler("id", self.cmd_id))
+        self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile)) 
+        
+        # ===== СТАТИСТИКА =====
+        self.app.add_handler(CommandHandler("stats", self.cmd_stats))
+        self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
+        self.app.add_handler(CommandHandler("top", self.cmd_top))
+        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
+        self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
+        self.app.add_handler(CommandHandler("topneons", self.cmd_top_neons))
+        self.app.add_handler(CommandHandler("topglitches", self.cmd_top_glitches))
+        
+        # ===== МОДЕРАЦИЯ =====
+        self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
+        self.app.add_handler(CommandHandler("warns", self.cmd_warns))
+        self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
+        self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
+        self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
+        self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
+        self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
+        self.app.add_handler(CommandHandler("checkrights", self.cmd_checkrights))
+
+        
+        # ===== ЭКОНОМИКА =====
+        self.app.add_handler(CommandHandler("balance", self.cmd_balance))
+        self.app.add_handler(CommandHandler("coins", self.cmd_balance))
+        self.app.add_handler(CommandHandler("pay", self.cmd_pay))
+        self.app.add_handler(CommandHandler("daily", self.cmd_daily))
+        self.app.add_handler(CommandHandler("streak", self.cmd_streak))
+        self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
+        self.app.add_handler(CommandHandler("buyvip", self.cmd_buy_vip))
+        self.app.add_handler(CommandHandler("premium", self.cmd_premium_info))
+        self.app.add_handler(CommandHandler("buypremium", self.cmd_buy_premium))
+        self.app.add_handler(CommandHandler("shop", self.cmd_shop))
+        self.app.add_handler(CommandHandler("buy", self.cmd_buy))
+        
+        # ===== НОВАЯ ЭКОНОМИКА (НЕОНЫ, ГЛИТЧИ) =====
+        self.app.add_handler(CommandHandler("neons", self.cmd_neons))
+        self.app.add_handler(CommandHandler("glitches", self.cmd_glitches))
+        self.app.add_handler(CommandHandler("farm", self.cmd_farm))
+        self.app.add_handler(CommandHandler("transfer", self.cmd_transfer_neons))
+        self.app.add_handler(CommandHandler("exchange", self.cmd_exchange))
+        
+        # ===== РАЗВЛЕЧЕНИЯ =====
+        self.app.add_handler(CommandHandler("joke", self.cmd_joke))
+        self.app.add_handler(CommandHandler("fact", self.cmd_fact))
+        self.app.add_handler(CommandHandler("quote", self.cmd_quote))
+        self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
+        self.app.add_handler(CommandHandler("advice", self.cmd_advice))
+        self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
+        self.app.add_handler(CommandHandler("weather", self.cmd_weather))
+        self.app.add_handler(CommandHandler("random", self.cmd_random))
+        self.app.add_handler(CommandHandler("choose", self.cmd_choose))
+        self.app.add_handler(CommandHandler("dane", self.cmd_dane))
+        self.app.add_handler(CommandHandler("ship", self.cmd_ship))
+        self.app.add_handler(CommandHandler("pairing", self.cmd_pairing))
+        self.app.add_handler(CommandHandler("pairs", self.cmd_pairs))
+        
+        # ===== ИГРЫ =====
+        self.app.add_handler(CommandHandler("games", self.cmd_games))
+        self.app.add_handler(CommandHandler("coin", self.cmd_coin))
+        self.app.add_handler(CommandHandler("dice", self.cmd_dice))
+        self.app.add_handler(CommandHandler("dicebet", self.cmd_dice_bet))
+        self.app.add_handler(CommandHandler("rps", self.cmd_rps))
+        self.app.add_handler(CommandHandler("rr", self.cmd_russian_roulette))
+        self.app.add_handler(CommandHandler("roulette", self.cmd_roulette))
+        self.app.add_handler(CommandHandler("slots", self.cmd_slots))
+        self.app.add_handler(CommandHandler("saper", self.cmd_saper))
+        self.app.add_handler(CommandHandler("guess", self.cmd_guess))
+        self.app.add_handler(CommandHandler("bulls", self.cmd_bulls))
+        
+        # ===== БОССЫ =====
+        self.app.add_handler(CommandHandler("bosses", self.cmd_bosses))
+        self.app.add_handler(CommandHandler("boss", self.cmd_boss_fight))
+        self.app.add_handler(CommandHandler("bossinfo", self.cmd_boss_info))
+        self.app.add_handler(CommandHandler("regen", self.cmd_regen))
+        
+        # ===== ДУЭЛИ =====
+        self.app.add_handler(CommandHandler("duel", self.cmd_duel))
+        self.app.add_handler(CommandHandler("duels", self.cmd_duels))
+        self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
+
+        # ===== Мафия =====
+        self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
+        self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
+        self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
+        self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
+        self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
+        self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
+        self.app.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
+
+        # ===== БЕСЕДЫ =====
+        self.app.add_handler(CommandHandler("randomchat", self.cmd_random_chat))
+        self.app.add_handler(CommandHandler("topchats", self.cmd_top_chats))
+        
+        # ===== КЛАНЫ =====
+        self.app.add_handler(CommandHandler("clan", self.cmd_clan))
+        self.app.add_handler(CommandHandler("clans", self.cmd_clans))
+        self.app.add_handler(CommandHandler("createclan", self.cmd_create_clan))
+        self.app.add_handler(CommandHandler("joinclan", self.cmd_join_clan))
+        self.app.add_handler(CommandHandler("leaveclan", self.cmd_leave_clan))
+        
+        # ===== АЧИВКИ =====
+        self.app.add_handler(CommandHandler("achievements", self.cmd_achievements))
+        self.app.add_handler(CommandHandler("myachievements", self.cmd_my_achievements))
+        self.app.add_handler(CommandHandler("achievement", self.cmd_achievement_info))
+        self.app.add_handler(CommandHandler("topachievements", self.cmd_top_achievements))
+        
+        # ===== КРУЖКИ =====
+        self.app.add_handler(CommandHandler("circles", self.cmd_circles))
+        self.app.add_handler(CommandHandler("circle", self.cmd_circle))
+        self.app.add_handler(CommandHandler("createcircle", self.cmd_create_circle))
+        self.app.add_handler(CommandHandler("joincircle", self.cmd_join_circle))
+        self.app.add_handler(CommandHandler("leavecircle", self.cmd_leave_circle))
+        
+        # ===== ЗАКЛАДКИ =====
+        self.app.add_handler(CommandHandler("bookmarks", self.cmd_bookmarks))
+        self.app.add_handler(CommandHandler("bookmark", self.cmd_bookmark))
+        self.app.add_handler(CommandHandler("addbookmark", self.cmd_add_bookmark))
+        self.app.add_handler(CommandHandler("removebookmark", self.cmd_remove_bookmark))
+        self.app.add_handler(CommandHandler("chatbook", self.cmd_chat_bookmarks))
+        
+        # ===== ТАЙМЕРЫ =====
+        self.app.add_handler(CommandHandler("timers", self.cmd_timers))
+        self.app.add_handler(CommandHandler("timer", self.cmd_add_timer))
+        self.app.add_handler(CommandHandler("removetimer", self.cmd_remove_timer))
+        
+        # ===== НАГРАДЫ =====
+        self.app.add_handler(CommandHandler("awards", self.cmd_awards))
+        self.app.add_handler(CommandHandler("award", self.cmd_give_award))
+        self.app.add_handler(CommandHandler("removeaward", self.cmd_remove_award))
+        
+        # ===== ГОЛОСОВАНИЕ ЗА БАН =====
+        self.app.add_handler(CommandHandler("banvote", self.cmd_ban_vote))
+        self.app.add_handler(CommandHandler("stopvote", self.cmd_stop_vote))
+        self.app.add_handler(CommandHandler("voteinfo", self.cmd_vote_info))
+        self.app.add_handler(CommandHandler("votelist", self.cmd_vote_list))
+        
+        # ===== СЕТКИ ЧАТОВ =====
+        self.app.add_handler(CommandHandler("grid", self.cmd_grid))
+        self.app.add_handler(CommandHandler("grids", self.cmd_grids))
+        self.app.add_handler(CommandHandler("creategrid", self.cmd_create_grid))
+        self.app.add_handler(CommandHandler("addchat", self.cmd_add_chat_to_grid))
+        self.app.add_handler(CommandHandler("globalmod", self.cmd_global_mod))
+        
+        # ===== БОНУСЫ =====
+        self.app.add_handler(CommandHandler("bonuses", self.cmd_bonuses))
+        self.app.add_handler(CommandHandler("buybonus", self.cmd_buy_bonus))
+        self.app.add_handler(CommandHandler("bonusinfo", self.cmd_bonus_info))
+        
+        # Бонус 1: Кибер-статус
+        self.app.add_handler(CommandHandler("cyberstatus", self.cmd_cyber_status))
+        
+        # Бонус 2: Глитч-молот
+        self.app.add_handler(CommandHandler("glitchhammer", self.cmd_glitch_hammer))
+        
+        # Бонус 3: Турбо-драйв
+        self.app.add_handler(CommandHandler("turbodrive", self.cmd_turbo_drive))
+        
+        # Бонус 4: Невидимка
+        self.app.add_handler(CommandHandler("invisible", self.cmd_invisible))
+        
+        # Бонус 5: Неон-ник
+        self.app.add_handler(CommandHandler("neonick", self.cmd_neon_nick))
+        
+        # Бонус 6: Кибер-удача
+        self.app.add_handler(CommandHandler("cyberluck", self.cmd_cyber_luck))
+        
+        # Бонус 7: Файрволл
+        self.app.add_handler(CommandHandler("firewall", self.cmd_firewall))
+        
+        # Бонус 8: РП-пакет
+        self.app.add_handler(CommandHandler("rppacket", self.cmd_rp_packet))
+        
+                # РП команды для РП-пакета (через MessageHandler с regex)
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/взломать\s+@'), self.cmd_rp_hack))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/заглючить\s+@'), self.cmd_rp_glitch))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/перегрузить\s+@'), self.cmd_rp_reboot))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/закодить\s+@'), self.cmd_rp_code))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/оцифровать\s+@'), self.cmd_rp_digitize))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/хакнуть\s+@'), self.cmd_rp_hack_deep))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/скачать\s+@'), self.cmd_rp_download))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^/обновить\s+@'), self.cmd_rp_update))
+        
+        # ===== ТЕЛЕГРАМ БОНУСЫ =====
+        self.app.add_handler(CommandHandler("tgpremium", self.cmd_tg_premium))
+        self.app.add_handler(CommandHandler("tggift", self.cmd_tg_gift))
+        self.app.add_handler(CommandHandler("tgstars", self.cmd_tg_stars))
+        
+        # ===== АНКЕТА =====
+        self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile))
+        
+        # ===== СТАТИСТИКА ЧАТА (РУССКИЕ КОМАНДЫ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^стата$'), self.cmd_chat_stats_today))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^стата неделя$'), self.cmd_chat_stats_week))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^стата месяц$'), self.cmd_chat_stats_month))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^стата вся$'), self.cmd_chat_stats_all))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^топ$'), self.cmd_top_chat_today))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^топ неделя$'), self.cmd_top_chat_week))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^топ месяц$'), self.cmd_top_chat_month))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^топ вся$'), self.cmd_top_chat_all))
+        
+        # ===== АЧИВКИ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мои ачивки$'), self.cmd_my_achievements))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^топ ачивок$'), self.cmd_top_achievements))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^ачивка \d+$'), self.cmd_achievement_info))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Ачивки$'), self.cmd_achievements_public))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Ачивки$'), self.cmd_achievements_private))
+        
+        # ===== КРУЖКИ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кружки$'), self.cmd_circles))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кружок \d+$'), self.cmd_circle))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^создать кружок'), self.cmd_create_circle))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Кружок \d+$'), self.cmd_join_circle))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Кружок \d+$'), self.cmd_leave_circle))
+        
+        # ===== ЗАКЛАДКИ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Закладка'), self.cmd_add_bookmark))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^закладка \d+$'), self.cmd_bookmark))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чатбук$'), self.cmd_chat_bookmarks))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мои закладки$'), self.cmd_my_bookmarks))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Закладка \d+$'), self.cmd_remove_bookmark))
+        
+        # ===== ТАЙМЕРЫ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^таймер через'), self.cmd_add_timer))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^таймер на'), self.cmd_add_timer))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^таймеры$'), self.cmd_timers))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^удалить таймер \d+$'), self.cmd_remove_timer))
+        
+        # ===== НАГРАДЫ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^наградить \d+'), self.cmd_give_award))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^награды'), self.cmd_awards))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять награду'), self.cmd_remove_award))
+        
+        # ===== ГОЛОСОВАНИЕ ЗА БАН (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^гб @'), self.cmd_ban_vote))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^гб стоп'), self.cmd_stop_vote))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^гб инфо'), self.cmd_vote_info))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^гб список$'), self.cmd_vote_list))
+        
+        # ===== БОНУСЫ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить кибер-статус'), self.cmd_buy_cyber_status))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^применить глитч-молот'), self.cmd_use_glitch_hammer))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить турбо-драйв'), self.cmd_buy_turbo_drive))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^невидимка '), self.cmd_use_invisible))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Невидимка'), self.cmd_allow_invisible))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Невидимка'), self.cmd_ban_invisible))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить неон-ник'), self.cmd_buy_neon_nick))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить кибер-удачу'), self.cmd_buy_cyber_luck))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить файрволл'), self.cmd_buy_firewall))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить рп-пакет'), self.cmd_buy_rp_packet))
+        
+        # ===== ТЕЛЕГРАМ БОНУСЫ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг прем'), self.cmd_buy_tg_premium))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^подарить тг прем'), self.cmd_gift_tg_premium))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг подарок'), self.cmd_buy_tg_gift))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^подарить тг подарок'), self.cmd_gift_tg_gift))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг зв'), self.cmd_buy_tg_stars))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^передать тг зв'), self.cmd_transfer_tg_stars))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^где мои тг зв'), self.cmd_my_tg_stars))
+        
+        # ===== АНКЕТА (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^моя анкета$'), self.cmd_my_profile))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мой пол '), self.cmd_set_gender))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Пол$'), self.cmd_remove_gender))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мой город '), self.cmd_set_city))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мой др '), self.cmd_set_birth))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Анкета$'), self.cmd_profile_public))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-Анкета$'), self.cmd_profile_private))
+        
+        # ===== МОДЕРАЦИЯ (РУССКИЕ) =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить$'), self.cmd_set_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2$'), self.cmd_set_rank2))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3$'), self.cmd_set_rank3))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 4|^!модер 4|^повысить 4$'), self.cmd_set_rank4))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 5|^!модер 5|^повысить 5$'), self.cmd_set_rank5))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^понизить'), self.cmd_lower_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн'), self.cmd_unwarn))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^снять все варны'), self.cmd_unwarn_all))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+триггер'), self.cmd_add_trigger))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^-триггер'), self.cmd_remove_trigger))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антимат'), self.cmd_set_antimat))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антиссылки'), self.cmd_set_antilink))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^антифлуд'), self.cmd_set_antiflood))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка'), self.cmd_clear))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка от'), self.cmd_clear_user))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
+
+        # ===== РУССКИЕ ТЕКСТОВЫЕ КОМАНДЫ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Случайная беседа$'), self.cmd_random_chat))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Беседы топ дня$'), self.cmd_top_chats))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Команды$'), self.cmd_help))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Установка$'), self.cmd_setup_info))
+        
+        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы$'), self.cmd_themes))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \d+$'), self.cmd_apply_theme))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \w+$'), self.cmd_apply_theme_by_name))
+        
+        # ===== ПРИВЯЗКА ЧАТА =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^!привязать$'), self.cmd_bind_chat))
+        
+        # ===== КОД ЧАТА =====
+        self.app.add_handler(CommandHandler("chatcode", self.cmd_chat_code))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^код чата$'), self.cmd_chat_code))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^сменить код'), self.cmd_change_chat_code))
+        
+        # ===== КУБЫШКА =====
+        self.app.add_handler(CommandHandler("treasury", self.cmd_treasury))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка$'), self.cmd_treasury))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка в неоны$'), self.cmd_treasury_withdraw))
+        
+        # ===== ОБРАБОТЧИК ЦИФРОВОГО МЕНЮ =====
+        self.app.add_handler(MessageHandler(filters.Regex('^[0-9]$'), self.handle_numbers))
+        
+        # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
+        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
+        self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
+        self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
+        
+        # ===== CALLBACK КНОПКИ =====
+        self.app.add_handler(CallbackQueryHandler(self.button_callback))
+        
+        self.app.add_error_handler(self.error_handler)
+        
+        logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
+
+        # ===== ОБРАБОТЧИК ЦИФРОВОГО МЕНЮ =====
+    async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка цифр меню"""
+        text = update.message.text.strip()
+        
+        if text == "1":
+            await self.cmd_profile(update, context)
+        elif text == "2":
+            await self.cmd_stats(update, context)
+        elif text == "3":
+            await self.cmd_games(update, context)
+        elif text == "4":
+            await self.cmd_shop(update, context)
+        elif text == "5":
+            await self.show_chart(update, context)
+        elif text == "6":
+            await self.cmd_help(update, context)
+        elif text == "7":
+            await self.show_contacts(update, context)
+        elif text == "0":
+            await self.show_menu(update, context)
+        else:
+            await update.message.reply_text("❌ Неверный номер. Введите 0-7")
+    
+    async def check_spam(self, update: Update) -> bool:
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if has_permission(user_data, 2):
+            return False
+        
+        now = time.time()
+        user_id = user.id
+        
+        self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
+        self.spam_tracker[user_id].append(now)
+        
+        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
+            self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
+            await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
+            self.spam_tracker[user_id] = []
+            return True
+        return False
+
+        # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
+    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка всех текстовых сообщений"""
+        user = update.effective_user
+        message_text = update.message.text
+        chat = update.effective_chat
+        
+        if not user or not message_text:
+            return
+        
+        # Сохраняем сообщение в БД
+        self.db.save_message(
+            user.id, 
+            user.username, 
+            user.first_name, 
+            message_text, 
+            chat.id, 
+            chat.title
+        )
+        
+        if message_text.startswith('/'):
+            return
+        
+        user_data = self.db.get_user(user.id, user.first_name)
+        self.db.update_user(user_data['id'], messages_count=user_data.get('messages_count', 0) + 1)
+        
+        if self.db.is_banned(user_data['id']):
+            return
+        
+        if self.db.is_muted(user_data['id']):
+            await update.message.reply_text("🔇 Ты в муте")
+            return
+        
+        # Проверка на файрволл (защита от наказаний)
+        if user_data.get('firewall_expires') and datetime.fromisoformat(user_data['firewall_expires']) > datetime.now():
+            if user_data.get('firewall_used') == 0:
+                # Файрволл активен, но пока не использован
+                pass
+        
+        if await self.check_spam(update):
+            return
+        
+        if self.db.is_word_blacklisted(message_text):
+            await update.message.delete()
+            await update.message.reply_text("⚠️ Запрещенное слово! Сообщение удалено.")
+            return
+        
+        # Обработка RPS (камень-ножницы-бумага)
+        if context.user_data.get('awaiting_rps'):
+            if message_text in ["1", "2", "3"]:
+                context.user_data['awaiting_rps'] = False
+                
+                choices = {1: "🪨 Камень", 2: "✂️ Ножницы", 3: "📄 Бумага"}
+                results = {
+                    (1,2): "win", (2,3): "win", (3,1): "win",
+                    (2,1): "lose", (3,2): "lose", (1,3): "lose"
+                }
+                
+                player_choice = int(message_text)
+                bot_choice = random.randint(1, 3)
+                
+                text = f"✊ **КНБ**\n\n"
+                text += f"👤 Вы: {choices[player_choice]}\n"
+                text += f"🤖 Бот: {choices[bot_choice]}\n\n"
+                
+                if player_choice == bot_choice:
+                    self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
+                    text += "🤝 НИЧЬЯ!"
+                elif results.get((player_choice, bot_choice)) == "win":
+                    self.db.update_user(user_data['id'], rps_wins=user_data.get('rps_wins', 0) + 1)
+                    reward = random.randint(10, 30)
+                    self.db.add_coins(user_data['id'], reward)
+                    text += f"🎉 ПОБЕДА! +{reward} 💰"
+                else:
+                    self.db.update_user(user_data['id'], rps_losses=user_data.get('rps_losses', 0) + 1)
+                    text += "😢 ПОРАЖЕНИЕ!"
+                
+                await update.message.reply_text(text)
+                return
+        
+        # Обработка голосования в мафии
+        if message_text.lower().startswith('голосовать '):
+            try:
+                vote_num = int(message_text.split()[1])
+                for game in self.mafia_games.values():
+                    if game.chat_id == chat.id and game.phase == "day" and user.id in game.get_alive_players():
+                        alive_players = game.get_alive_players()
+                        if 1 <= vote_num <= len(alive_players):
+                            target_id = alive_players[vote_num - 1]
+                            game.votes[user.id] = target_id
+                            await update.message.reply_text(f"✅ Ваш голос учтён за игрока #{vote_num}")
+                            break
+            except:
+                pass
+            return
+        
+        # Проверка на активные игры
+        for game_id, game in list(self.games_in_progress.items()):
+            if game.get('user_id') == user.id:
+                if game_id.startswith('guess_'):
+                    try:
+                        guess = int(message_text)
+                        game['attempts'] += 1
+                        
+                        if guess == game['number']:
+                            win = game['bet'] * 2
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], guess_wins=user_data.get('guess_wins', 0) + 1)
+                            await update.message.reply_text(
+                                f"🎉 **ПОБЕДА!**\n\n"
+                                f"Число {game['number']}!\n"
+                                f"Попыток: {game['attempts']}\n"
+                                f"Выигрыш: {win} 💰"
+                            )
+                            del self.games_in_progress[game_id]
+                        elif game['attempts'] >= game['max_attempts']:
+                            self.db.update_user(user_data['id'], guess_losses=user_data.get('guess_losses', 0) + 1)
+                            await update.message.reply_text(
+                                f"❌ Попытки кончились! Было число {game['number']}"
+                            )
+                            del self.games_in_progress[game_id]
+                        elif guess < game['number']:
+                            await update.message.reply_text(f"📈 Загаданное число больше {guess}")
+                        else:
+                            await update.message.reply_text(f"📉 Загаданное число меньше {guess}")
+                    except ValueError:
+                        await update.message.reply_text("❌ Введите число от 1 до 100")
+                    return
+                
+                elif game_id.startswith('bulls_'):
+                    if len(message_text) != 4 or not message_text.isdigit():
+                        await update.message.reply_text("❌ Введите 4 цифры")
+                        return
+                    
+                    guess = message_text
+                    if len(set(guess)) != 4:
+                        await update.message.reply_text("❌ Цифры не должны повторяться")
+                        return
+                    
+                    bulls = 0
+                    cows = 0
+                    for i in range(4):
+                        if guess[i] == game['number'][i]:
+                            bulls += 1
+                        elif guess[i] in game['number']:
+                            cows += 1
+                    
+                    game['attempts'].append((guess, bulls, cows))
+                    
+                    if bulls == 4:
+                        win = game['bet'] * 3
+                        self.db.add_coins(user_data['id'], win)
+                        self.db.update_user(user_data['id'], bulls_wins=user_data.get('bulls_wins', 0) + 1)
+                        await update.message.reply_text(
+                            f"🎉 **ПОБЕДА!**\n\n"
+                            f"Число {game['number']}!\n"
+                            f"Попыток: {len(game['attempts'])}\n"
+                            f"Выигрыш: {win} 💰"
+                        )
+                        del self.games_in_progress[game_id]
+                    elif len(game['attempts']) >= game['max_attempts']:
+                        self.db.update_user(user_data['id'], bulls_losses=user_data.get('bulls_losses', 0) + 1)
+                        await update.message.reply_text(
+                            f"❌ Попытки кончились! Было число {game['number']}"
+                        )
+                        del self.games_in_progress[game_id]
+                    else:
+                        await update.message.reply_text(
+                            f"🔍 Быки: {bulls}, Коровы: {cows}\n"
+                            f"Осталось попыток: {game['max_attempts'] - len(game['attempts'])}"
+                        )
+                    return
+
+        # Проверяем, нужно ли AI ответить
+        is_reply_to_bot = (update.message.reply_to_message and 
+                          update.message.reply_to_message.from_user.id == context.bot.id)
+        
+        should_respond = False
+        force_response = False
+        ai_message = message_text
+        
+        # Всегда отвечаем на "Спектр"
+        if ai_message.lower().startswith("спектр"):
+            should_respond = True
+            force_response = True
+            ai_message = ai_message[6:].strip()
+            if not ai_message:
+                ai_message = "Привет"
+        # В личке отвечаем на всё
+        elif chat.type == "private":
+            should_respond = True
+            force_response = True
+        # В группах проверяем по алгоритму
+        elif self.ai and self.ai.is_available:
+            should_respond = await self.ai.should_respond(ai_message, is_reply_to_bot)
+            force_response = False
+        
+        if should_respond and self.ai and self.ai.is_available:
+            try:
+                await update.message.chat.send_action(action="typing")
+                response = await self.ai.get_response(
+                    user.id, 
+                    ai_message, 
+                    user.first_name,
+                    force_response=force_response
+                )
+                if response:
+                    prefix = "🤖 " if force_response else ""
+                    await update.message.reply_text(f"{prefix}{response}")
+                    return
+            except Exception as e:
+                logger.error(f"AI response error: {e}")
+
+    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка новых участников"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT welcome FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        welcome_text = row[0] if row and row[0] else "Добро пожаловать!"
+        
+        for member in update.message.new_chat_members:
+            if member.is_bot:
+                continue
+            
+            self.db.get_user(member.id, member.first_name)
+            
+            user_data = self.db.get_user_by_id(member.id)
+            gender = user_data.get('gender', 'не указан')
+            
+            welcome = welcome_text.replace('{имя}', member.first_name)
+            if gender == 'м':
+                welcome = welcome.replace('{ж|м|мн}', 'присоединился')
+            elif gender == 'ж':
+                welcome = welcome.replace('{ж|м|мн}', 'присоединилась')
+            else:
+                welcome = welcome.replace('{ж|м|мн}', 'присоединился(ась)')
+            
+            await update.message.reply_text(
+                f"👋 {welcome}\n\n{member.first_name}, используй /help для команд!"
+            )
+    
+    async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка ухода участников"""
+        member = update.message.left_chat_member
+        if member.is_bot:
+            return
+        
+        await update.message.reply_text(f"👋 {member.first_name} покинул чат...")
+
+        # ===== CALLBACK КНОПКИ =====
+    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка нажатий на инлайн-кнопки"""
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        user = query.from_user
+        user_data = self.db.get_user(user.id)
+        
+        # Кнопки главного меню
+        if data == "random_chat":
+            # Поиск случайной беседы
+            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
+            row = self.db.cursor.fetchone()
+            if row:
+                await query.edit_message_text(
+                    f"🎲 **Случайная беседа найдена!**\n\n"
+                    f"📢 **Название:** {row[1]}\n"
+                    f"🆔 **ID:** `{row[0]}`\n\n"
+                    f"🔗 Присоединяйтесь!"
+                )
+            else:
+                await query.edit_message_text(
+                    "🔄 **Нет доступных бесед**\n\n"
+                    "Добавьте бота в чат и введите `!привязать`"
+                )
+        
+        elif data == "top_chats":
+            await query.edit_message_text("🏆 **Топ бесед**\n\nФункция в разработке")
+        
+        elif data == "help_menu":
+            await self.cmd_help(update, context)
+        
+        elif data == "setup_info":
+            text = """
+🔧 **УСТАНОВКА БОТА**
+
+1️⃣ Добавьте бота в группу
+2️⃣ Сделайте бота администратором
+3️⃣ Введите `!привязать` для привязки чата
+4️⃣ Настройте приветствие: `+приветствие Текст`
+5️⃣ Настройте правила: `+правила Текст`
+
+📚 Подробнее: https://telegra.ph/Iris-bot-setup
+            """
+            await query.edit_message_text(text, disable_web_page_preview=True)
+        
+        elif data == "disabled":
+            await query.answer("Эта клетка уже открыта", show_alert=False)
+        
+        elif data == "neons_info":
+            text = """
+💜 **Что такое неоны?**
+
+Неоны — основная валюта кибер-вселенной Спектра.
+
+**Как получить:**
+• Ежедневный бонус (/daily)
+• Победы в играх
+• Убийство боссов
+• Реферальная система
+
+**Команды:**
+/neons — мой баланс
+/transfer @user 100 — перевести неоны
+/farm — ферма глитчей
+            """
+            await query.edit_message_text(text)
+        
+        elif data == "bonuses_menu":
+            await self.cmd_bonuses(update, context)
+        
+        elif data == "top_chats_day":
+            context.args = ["день"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_week":
+            context.args = ["неделя"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_month":
+            context.args = ["месяц"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data.startswith("chat_card_"):
+            chat_id = int(data.split('_')[2])
+            await query.edit_message_text(
+                "📇 **Карточка чата**\n\nФункция в разработке"
+            )
+        
+        # Кнопки боссов
+        elif data.startswith("boss_attack_"):
+            boss_id = int(data.split('_')[2])
+            await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=True)
+        
+        elif data == "boss_regen":
+            await self.cmd_regen(update, context)
+        
+        elif data == "boss_buy_weapon":
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🗡 Меч (+10 урона) - 200💰", callback_data="buy_weapon_sword")],
+                [InlineKeyboardButton("⚔️ Легендарный меч (+30 урона) - 500💰", callback_data="buy_weapon_legendary")],
+                [InlineKeyboardButton("🔫 Бластер (+50 урона) - 1000💰", callback_data="buy_weapon_blaster")],
+                [InlineKeyboardButton("🔙 Назад", callback_data="boss_list")]
+            ])
+            await query.edit_message_text(
+                "⚔️ **МАГАЗИН ОРУЖИЯ**\n\nВыберите оружие:",
+                reply_markup=keyboard
+            )
+        
+        elif data.startswith("buy_weapon_"):
+            weapon = data.replace("buy_weapon_", "")
+            weapons = {
+                "sword": {"name": "🗡 Меч", "damage": 10, "price": 200},
+                "legendary": {"name": "⚔️ Легендарный меч", "damage": 30, "price": 500},
+                "blaster": {"name": "🔫 Бластер", "damage": 50, "price": 1000}
+            }
+            
+            if weapon in weapons:
+                w = weapons[weapon]
+                if user_data['coins'] >= w['price']:
+                    self.db.add_coins(user_data['id'], -w['price'])
+                    new_damage = user_data['damage'] + w['damage']
+                    self.db.update_user(user_data['id'], damage=new_damage)
+                    await query.edit_message_text(
+                        f"✅ **Куплено:** {w['name']}!\n\nТеперь ваш урон: {new_damage}"
+                    )
+                else:
+                    await query.edit_message_text(
+                        f"❌ Недостаточно монет. Нужно {w['price']} 💰"
+                    )
+        
+        elif data == "boss_list":
+            bosses = self.db.get_bosses()
+            text = "👾 **БОССЫ**\n\n"
+            for i, boss in enumerate(bosses[:5]):
+                status = "⚔️" if boss['is_alive'] else "💀"
+                health_bar = self._progress_bar(boss['health'], boss['max_health'], 10)
+                text += f"{i+1}. {status} {boss['name']}\n   {health_bar}\n\n"
+            
+            keyboard = []
+            for i, boss in enumerate(bosses[:5]):
+                if boss['is_alive']:
+                    keyboard.append([InlineKeyboardButton(
+                        f"⚔️ {boss['name']}",
+                        callback_data=f"boss_attack_{boss['id']}"
+                    )])
+            
+            keyboard.append([InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")])
+            
+            await query.edit_message_text(
+                text,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        
+        # Кнопки сапёра
+        elif data.startswith("saper_"):
+            parts = data.split('_')
+            if len(parts) >= 3:
+                game_id = f"{parts[1]}_{parts[2]}"
+                cell = int(parts[3])
+                
+                if game_id in self.games_in_progress:
+                    game = self.games_in_progress[game_id]
+                    if game['user_id'] != user.id:
+                        await query.answer("Это не ваша игра!", show_alert=True)
+                        return
+                    
+                    x = (cell - 1) // 3
+                    y = (cell - 1) % 3
+                    
+                    if x == game['mine_x'] and y == game['mine_y']:
+                        await query.edit_message_text(
+                            f"💥 **БУМ!**\n\n❌ Ты подорвался на мине!\n\nПроигрыш: {game['bet']} 💰"
+                        )
+                        del self.games_in_progress[game_id]
+                    else:
+                        game['opened'] += 1
+                        game['field'][x][y] = "✅"
+                        
+                        if game['opened'] >= 8:
+                            win = game['bet'] * 3
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+                            await query.edit_message_text(
+                                f"🎉 **ПОБЕДА!**\n\nТы открыл все безопасные клетки!\nВыигрыш: {win} 💰"
+                            )
+                            del self.games_in_progress[game_id]
+                        else:
+                            field_text = ""
+                            for i in range(3):
+                                field_text += ' '.join(game['field'][i]) + "\n"
+                            
+                            keyboard = []
+                            for i in range(3):
+                                row = []
+                                for j in range(3):
+                                    cell_num = i * 3 + j + 1
+                                    if game['field'][i][j] == "✅":
+                                        row.append(InlineKeyboardButton(f"✅", callback_data="disabled"))
+                                    else:
+                                        row.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+                                keyboard.append(row)
+                            
+                            await query.edit_message_text(
+                                f"💣 **САПЁР**\n\n{field_text}",
+                                reply_markup=InlineKeyboardMarkup(keyboard)
+                            )
+        
+        # Кнопки голосования за бан
+        elif data.startswith("vote_for_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], True):
+                await query.edit_message_text("✅ Ваш голос учтён (ЗА БАН)")
+                
+                self.db.cursor.execute("SELECT * FROM ban_votes WHERE id = ?", (vote_id,))
+                vote = self.db.cursor.fetchone()
+                if vote and vote[7] >= vote[5]:
+                    target = self.db.get_user_by_id(vote[2])
+                    if target:
+                        self.db.ban_user(target['id'], vote[3], "По результатам голосования")
+                        self.db.cursor.execute("UPDATE ban_votes SET status = 'completed' WHERE id = ?", (vote_id,))
+                        self.db.conn.commit()
+                        
+                        await context.bot.send_message(
+                            vote[1],
+                            f"🔨 Пользователь {target['first_name']} забанен по результатам голосования!"
+                        )
+            else:
+                await query.edit_message_text("❌ Не удалось проголосовать")
+        
+        elif data.startswith("vote_against_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], False):
+                await query.edit_message_text("✅ Ваш голос учтён (ПРОТИВ БАНА)")
+            else:
+                await query.edit_message_text("❌ Не удалось проголосовать")
+        
+        # Кнопки мафии
+        elif data.startswith("mafia_confirm_"):
+            chat_id = int(data.split('_')[2])
+            if chat_id in self.mafia_games:
+                game = self.mafia_games[chat_id]
+                if user.id in game.players:
+                    game.confirm_player(user.id)
+                    await query.edit_message_text(
+                        "✅ **Подтверждение получено!**\n\nОжидайте начала игры..."
+                    )
+                    
+                    if game.all_confirmed():
+                        await self._mafia_start_game(game, context)
+        
+        # Кнопки дуэлей
+        elif data.startswith("accept_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
+                return
+            
+            self.db.update_duel(duel_id, status='accepted')
+            
+            challenger = self.db.get_user_by_id(duel['challenger_id'])
+            opponent = self.db.get_user_by_id(duel['opponent_id'])
+            
+            if not challenger or not opponent:
+                await query.edit_message_text("❌ Ошибка загрузки данных")
+                return
+            
+            await query.edit_message_text(
+                f"✅ **Дуэль принята!**\n\n"
+                f"⚔️ {challenger['first_name']} VS {opponent['first_name']}\n"
+                f"💰 Ставка: {duel['bet']} 💰\n\n"
+                f"🔄 Дуэль начинается..."
+            )
+            
+            asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
+        
+        elif data.startswith("reject_duel_"):
+            duel_id = int(data.split('_')[2])
+            duel = self.db.get_duel(duel_id)
+            
+            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
+                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
+                return
+            
+            self.db.update_duel(duel_id, status='rejected')
+            self.db.add_coins(duel['challenger_id'], duel['bet'])
+            
+            await query.edit_message_text(
+                f"❌ **Дуэль отклонена**\n\nСтавка возвращена."
+            )
+        
+        # Кнопки брака
+        elif data.startswith("marry_accept_"):
+            proposer_id = int(data.split('_')[2])
+            
+            if user_data.get('spouse', 0):
+                await query.edit_message_text("❌ Вы уже в браке")
+                return
+            
+            proposer = self.db.get_user_by_id(proposer_id)
+            if not proposer:
+                await query.edit_message_text("❌ Пользователь не найден")
+                return
+            
+            if proposer.get('spouse', 0):
+                await query.edit_message_text("❌ Пользователь уже в браке")
+                return
+            
+            now = datetime.now().isoformat()
+            self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
+            self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
+            
+            self.db.add_coins(user_data['id'], 500)
+            self.db.add_coins(proposer_id, 500)
+            
+            await query.edit_message_text(
+                f"💍 **Поздравляем!**\n\n"
+                f"{user_data['first_name']} и {proposer['first_name']} теперь в браке! 🎉\n\n"
+                f"💰 Бонус молодожёнам: +500 💰 каждому"
+            )
+            
+            await context.bot.send_message(
+                proposer['telegram_id'],
+                f"💞 **ПОЗДРАВЛЯЕМ!**\n\n{user_data['first_name']} принял(а) ваше предложение!"
+            )
+        
+        elif data.startswith("marry_reject_"):
+            proposer_id = int(data.split('_')[2])
+            await query.edit_message_text("❌ Предложение отклонено")
+            await context.bot.send_message(
+                proposer_id,
+                "❌ Ваше предложение отклонили"
+            )
+        
+        # Кнопки для закладок
+        elif data == "bookmark_help":
+            text = """
+📌 **Закладки**
+
+Как использовать:
+
+• `+Закладка Название` (с новой строки содержимое) — создать
+• `закладка [ID]` — показать
+• `чатбук` — все закладки чата
+• `мои закладки` — ваши закладки
+• `-Закладка [ID]` — удалить
+            """
+            await query.edit_message_text(text)
+        
+        # Кнопки для кружков
+        elif data == "circle_help":
+            text = """
+🔄 **Кружки**
+
+Как использовать:
+
+• `создать кружок Название` (с новой строки описание) — создать
+• `кружки` — список кружков
+• `кружок [номер]` — информация
+• `+Кружок [номер]` — присоединиться
+• `-Кружок [номер]` — выйти
+            """
+            await query.edit_message_text(text)
+        
+        # Кнопки для ачивок
+        elif data == "achievements_help":
+            text = """
+🏅 **Ачивки**
+
+Как использовать:
+
+• `мои ачивки` — ваши достижения
+• `топ ачивок` — рейтинг
+• `ачивка [ID]` — информация
+• `+Ачивки` / `-Ачивки` — приватность
+            """
+            await query.edit_message_text(text)
+
+        # ===== ОБРАБОТЧИК ОШИБОК =====
+async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик ошибок"""
+    logger.error(f"Ошибка: {context.error}", exc_info=True)  # Добавлено exc_info=True для печати traceback в лог
+
+    try:
+        if update and update.effective_message:
+            # Отправляем пользователю более информативное сообщение (только для разработки!)
+            error_text = str(context.error)[:200]
+            await update.effective_message.reply_text(
+                f"❌ **Ошибка:** `{error_text}`\n\n"
+                f"Подробности в логах.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+    except:
+        pass
+
+    # Отправляем ошибку владельцу
+    try:
+        error_text = str(context.error)[:500]
+        await context.bot.send_message(
+            OWNER_ID,
+            f"⚠️ **Ошибка в боте**\n\n"
+            f"```\n{error_text}\n```"
+        )
+    except:
+        pass
+
+        # ===== ЗАПУСК =====
+    async def run(self):
+        """Запуск бота"""
+        try:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True
+            )
+            
+            logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
+            logger.info(f"👑 Владелец: {OWNER_USERNAME}")
+            logger.info(f"🤖 AI: {'Подключен' if self.ai and self.ai.is_available else 'Не подключен'}")
+            
+            while True:
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка: {e}")
+            await asyncio.sleep(5)
+            await self.run()
+
     # ========== МЕТОДЫ МАФИИ В КЛАССЕ SPECTRUMBOT ==========
 
     async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -16280,1086 +17360,6 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 1:
             await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user")
             return
-
-    def setup_handlers(self):
-        """Регистрация всех обработчиков"""
-        
-        # ===== ОСНОВНЫЕ КОМАНДЫ =====
-        self.app.add_handler(CommandHandler("start", self.cmd_start))
-        self.app.add_handler(CommandHandler("help", self.cmd_help))
-        self.app.add_handler(CommandHandler("menu", self.show_menu))
-        
-        # ===== ПРОФИЛЬ =====
-        self.app.add_handler(CommandHandler("profile", self.cmd_profile))
-        self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
-        self.app.add_handler(CommandHandler("title", self.cmd_set_title))
-        self.app.add_handler(CommandHandler("motto", self.cmd_set_motto))
-        self.app.add_handler(CommandHandler("bio", self.cmd_set_bio))
-        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))
-        self.app.add_handler(CommandHandler("city", self.cmd_set_city))
-        self.app.add_handler(CommandHandler("country", self.cmd_set_country))
-        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
-        self.app.add_handler(CommandHandler("age", self.cmd_set_age))
-        self.app.add_handler(CommandHandler("id", self.cmd_id))
-        self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile)) 
-        
-        # ===== СТАТИСТИКА =====
-        self.app.add_handler(CommandHandler("stats", self.cmd_stats))
-        self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
-        self.app.add_handler(CommandHandler("top", self.cmd_top))
-        self.app.add_handler(CommandHandler("topcoins", self.cmd_top_coins))
-        self.app.add_handler(CommandHandler("toplevel", self.cmd_top_level))
-        self.app.add_handler(CommandHandler("topneons", self.cmd_top_neons))
-        self.app.add_handler(CommandHandler("topglitches", self.cmd_top_glitches))
-        
-        # ===== МОДЕРАЦИЯ =====
-        self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
-        self.app.add_handler(CommandHandler("warns", self.cmd_warns))
-        self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
-        self.app.add_handler(CommandHandler("mutelist", self.cmd_mutelist))
-        self.app.add_handler(CommandHandler("banlist", self.cmd_banlist))
-        self.app.add_handler(CommandHandler("triggers", self.cmd_list_triggers))
-        self.app.add_handler(CommandHandler("rules", self.cmd_show_rules))
-        self.app.add_handler(CommandHandler("checkrights", self.cmd_checkrights))
-
-        
-        # ===== ЭКОНОМИКА =====
-        self.app.add_handler(CommandHandler("balance", self.cmd_balance))
-        self.app.add_handler(CommandHandler("coins", self.cmd_balance))
-        self.app.add_handler(CommandHandler("pay", self.cmd_pay))
-        self.app.add_handler(CommandHandler("daily", self.cmd_daily))
-        self.app.add_handler(CommandHandler("streak", self.cmd_streak))
-        self.app.add_handler(CommandHandler("vip", self.cmd_vip_info))
-        self.app.add_handler(CommandHandler("buyvip", self.cmd_buy_vip))
-        self.app.add_handler(CommandHandler("premium", self.cmd_premium_info))
-        self.app.add_handler(CommandHandler("buypremium", self.cmd_buy_premium))
-        self.app.add_handler(CommandHandler("shop", self.cmd_shop))
-        self.app.add_handler(CommandHandler("buy", self.cmd_buy))
-        
-        # ===== НОВАЯ ЭКОНОМИКА (НЕОНЫ, ГЛИТЧИ) =====
-        self.app.add_handler(CommandHandler("neons", self.cmd_neons))
-        self.app.add_handler(CommandHandler("glitches", self.cmd_glitches))
-        self.app.add_handler(CommandHandler("farm", self.cmd_farm))
-        self.app.add_handler(CommandHandler("transfer", self.cmd_transfer_neons))
-        self.app.add_handler(CommandHandler("exchange", self.cmd_exchange))
-        
-        # ===== РАЗВЛЕЧЕНИЯ =====
-        self.app.add_handler(CommandHandler("joke", self.cmd_joke))
-        self.app.add_handler(CommandHandler("fact", self.cmd_fact))
-        self.app.add_handler(CommandHandler("quote", self.cmd_quote))
-        self.app.add_handler(CommandHandler("whoami", self.cmd_whoami))
-        self.app.add_handler(CommandHandler("advice", self.cmd_advice))
-        self.app.add_handler(CommandHandler("compatibility", self.cmd_compatibility))
-        self.app.add_handler(CommandHandler("weather", self.cmd_weather))
-        self.app.add_handler(CommandHandler("random", self.cmd_random))
-        self.app.add_handler(CommandHandler("choose", self.cmd_choose))
-        self.app.add_handler(CommandHandler("dane", self.cmd_dane))
-        self.app.add_handler(CommandHandler("ship", self.cmd_ship))
-        self.app.add_handler(CommandHandler("pairing", self.cmd_pairing))
-        self.app.add_handler(CommandHandler("pairs", self.cmd_pairs))
-        
-        # ===== ИГРЫ =====
-        self.app.add_handler(CommandHandler("games", self.cmd_games))
-        self.app.add_handler(CommandHandler("coin", self.cmd_coin))
-        self.app.add_handler(CommandHandler("dice", self.cmd_dice))
-        self.app.add_handler(CommandHandler("dicebet", self.cmd_dice_bet))
-        self.app.add_handler(CommandHandler("rps", self.cmd_rps))
-        self.app.add_handler(CommandHandler("rr", self.cmd_russian_roulette))
-        self.app.add_handler(CommandHandler("roulette", self.cmd_roulette))
-        self.app.add_handler(CommandHandler("slots", self.cmd_slots))
-        self.app.add_handler(CommandHandler("saper", self.cmd_saper))
-        self.app.add_handler(CommandHandler("guess", self.cmd_guess))
-        self.app.add_handler(CommandHandler("bulls", self.cmd_bulls))
-        
-        # ===== БОССЫ =====
-        self.app.add_handler(CommandHandler("bosses", self.cmd_bosses))
-        self.app.add_handler(CommandHandler("boss", self.cmd_boss_fight))
-        self.app.add_handler(CommandHandler("bossinfo", self.cmd_boss_info))
-        self.app.add_handler(CommandHandler("regen", self.cmd_regen))
-        
-        # ===== ДУЭЛИ =====
-        self.app.add_handler(CommandHandler("duel", self.cmd_duel))
-        self.app.add_handler(CommandHandler("duels", self.cmd_duels))
-        self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
-
-        # ===== Мафия =====
-        self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
-        self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
-        self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
-        self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
-        self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
-        self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
-        self.app.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
-
-        # ===== БЕСЕДЫ =====
-        self.app.add_handler(CommandHandler("randomchat", self.cmd_random_chat))
-        self.app.add_handler(CommandHandler("topchats", self.cmd_top_chats))
-        
-        # ===== КЛАНЫ =====
-        self.app.add_handler(CommandHandler("clan", self.cmd_clan))
-        self.app.add_handler(CommandHandler("clans", self.cmd_clans))
-        self.app.add_handler(CommandHandler("createclan", self.cmd_create_clan))
-        self.app.add_handler(CommandHandler("joinclan", self.cmd_join_clan))
-        self.app.add_handler(CommandHandler("leaveclan", self.cmd_leave_clan))
-        
-        # ===== АЧИВКИ =====
-        self.app.add_handler(CommandHandler("achievements", self.cmd_achievements))
-        self.app.add_handler(CommandHandler("myachievements", self.cmd_my_achievements))
-        self.app.add_handler(CommandHandler("achievement", self.cmd_achievement_info))
-        self.app.add_handler(CommandHandler("topachievements", self.cmd_top_achievements))
-        
-        # ===== КРУЖКИ =====
-        self.app.add_handler(CommandHandler("circles", self.cmd_circles))
-        self.app.add_handler(CommandHandler("circle", self.cmd_circle))
-        self.app.add_handler(CommandHandler("createcircle", self.cmd_create_circle))
-        self.app.add_handler(CommandHandler("joincircle", self.cmd_join_circle))
-        self.app.add_handler(CommandHandler("leavecircle", self.cmd_leave_circle))
-        
-        # ===== ЗАКЛАДКИ =====
-        self.app.add_handler(CommandHandler("bookmarks", self.cmd_bookmarks))
-        self.app.add_handler(CommandHandler("bookmark", self.cmd_bookmark))
-        self.app.add_handler(CommandHandler("addbookmark", self.cmd_add_bookmark))
-        self.app.add_handler(CommandHandler("removebookmark", self.cmd_remove_bookmark))
-        self.app.add_handler(CommandHandler("chatbook", self.cmd_chat_bookmarks))
-        
-        # ===== ТАЙМЕРЫ =====
-        self.app.add_handler(CommandHandler("timers", self.cmd_timers))
-        self.app.add_handler(CommandHandler("timer", self.cmd_add_timer))
-        self.app.add_handler(CommandHandler("removetimer", self.cmd_remove_timer))
-        
-        # ===== НАГРАДЫ =====
-        self.app.add_handler(CommandHandler("awards", self.cmd_awards))
-        self.app.add_handler(CommandHandler("award", self.cmd_give_award))
-        self.app.add_handler(CommandHandler("removeaward", self.cmd_remove_award))
-        
-        # ===== ГОЛОСОВАНИЕ ЗА БАН =====
-        self.app.add_handler(CommandHandler("banvote", self.cmd_ban_vote))
-        self.app.add_handler(CommandHandler("stopvote", self.cmd_stop_vote))
-        self.app.add_handler(CommandHandler("voteinfo", self.cmd_vote_info))
-        self.app.add_handler(CommandHandler("votelist", self.cmd_vote_list))
-        
-        # ===== СЕТКИ ЧАТОВ =====
-        self.app.add_handler(CommandHandler("grid", self.cmd_grid))
-        self.app.add_handler(CommandHandler("grids", self.cmd_grids))
-        self.app.add_handler(CommandHandler("creategrid", self.cmd_create_grid))
-        self.app.add_handler(CommandHandler("addchat", self.cmd_add_chat_to_grid))
-        self.app.add_handler(CommandHandler("globalmod", self.cmd_global_mod))
-        
-        # ===== БОНУСЫ =====
-        self.app.add_handler(CommandHandler("bonuses", self.cmd_bonuses))
-        self.app.add_handler(CommandHandler("buybonus", self.cmd_buy_bonus))
-        self.app.add_handler(CommandHandler("bonusinfo", self.cmd_bonus_info))
-        
-        # Бонус 1: Кибер-статус
-        self.app.add_handler(CommandHandler("cyberstatus", self.cmd_cyber_status))
-        
-        # Бонус 2: Глитч-молот
-        self.app.add_handler(CommandHandler("glitchhammer", self.cmd_glitch_hammer))
-        
-        # Бонус 3: Турбо-драйв
-        self.app.add_handler(CommandHandler("turbodrive", self.cmd_turbo_drive))
-        
-        # Бонус 4: Невидимка
-        self.app.add_handler(CommandHandler("invisible", self.cmd_invisible))
-        
-        # Бонус 5: Неон-ник
-        self.app.add_handler(CommandHandler("neonick", self.cmd_neon_nick))
-        
-        # Бонус 6: Кибер-удача
-        self.app.add_handler(CommandHandler("cyberluck", self.cmd_cyber_luck))
-        
-        # Бонус 7: Файрволл
-        self.app.add_handler(CommandHandler("firewall", self.cmd_firewall))
-        
-        # Бонус 8: РП-пакет
-        self.app.add_handler(CommandHandler("rppacket", self.cmd_rp_packet))
-        
-                # РП команды для РП-пакета (через MessageHandler с regex)
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/взломать\s+@'), self.cmd_rp_hack))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/заглючить\s+@'), self.cmd_rp_glitch))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/перегрузить\s+@'), self.cmd_rp_reboot))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/закодить\s+@'), self.cmd_rp_code))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/оцифровать\s+@'), self.cmd_rp_digitize))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/хакнуть\s+@'), self.cmd_rp_hack_deep))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/скачать\s+@'), self.cmd_rp_download))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^/обновить\s+@'), self.cmd_rp_update))
-        
-        # ===== ТЕЛЕГРАМ БОНУСЫ =====
-        self.app.add_handler(CommandHandler("tgpremium", self.cmd_tg_premium))
-        self.app.add_handler(CommandHandler("tggift", self.cmd_tg_gift))
-        self.app.add_handler(CommandHandler("tgstars", self.cmd_tg_stars))
-        
-        # ===== АНКЕТА =====
-        self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile))
-        
-        # ===== СТАТИСТИКА ЧАТА (РУССКИЕ КОМАНДЫ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^стата$'), self.cmd_chat_stats_today))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^стата неделя$'), self.cmd_chat_stats_week))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^стата месяц$'), self.cmd_chat_stats_month))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^стата вся$'), self.cmd_chat_stats_all))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^топ$'), self.cmd_top_chat_today))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^топ неделя$'), self.cmd_top_chat_week))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^топ месяц$'), self.cmd_top_chat_month))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^топ вся$'), self.cmd_top_chat_all))
-        
-        # ===== АЧИВКИ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мои ачивки$'), self.cmd_my_achievements))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^топ ачивок$'), self.cmd_top_achievements))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^ачивка \d+$'), self.cmd_achievement_info))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Ачивки$'), self.cmd_achievements_public))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Ачивки$'), self.cmd_achievements_private))
-        
-        # ===== КРУЖКИ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^кружки$'), self.cmd_circles))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^кружок \d+$'), self.cmd_circle))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^создать кружок'), self.cmd_create_circle))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Кружок \d+$'), self.cmd_join_circle))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Кружок \d+$'), self.cmd_leave_circle))
-        
-        # ===== ЗАКЛАДКИ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Закладка'), self.cmd_add_bookmark))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^закладка \d+$'), self.cmd_bookmark))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^чатбук$'), self.cmd_chat_bookmarks))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мои закладки$'), self.cmd_my_bookmarks))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Закладка \d+$'), self.cmd_remove_bookmark))
-        
-        # ===== ТАЙМЕРЫ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^таймер через'), self.cmd_add_timer))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^таймер на'), self.cmd_add_timer))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^таймеры$'), self.cmd_timers))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^удалить таймер \d+$'), self.cmd_remove_timer))
-        
-        # ===== НАГРАДЫ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^наградить \d+'), self.cmd_give_award))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^награды'), self.cmd_awards))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^снять награду'), self.cmd_remove_award))
-        
-        # ===== ГОЛОСОВАНИЕ ЗА БАН (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^гб @'), self.cmd_ban_vote))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^гб стоп'), self.cmd_stop_vote))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^гб инфо'), self.cmd_vote_info))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^гб список$'), self.cmd_vote_list))
-        
-        # ===== БОНУСЫ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить кибер-статус'), self.cmd_buy_cyber_status))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^применить глитч-молот'), self.cmd_use_glitch_hammer))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить турбо-драйв'), self.cmd_buy_turbo_drive))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^невидимка '), self.cmd_use_invisible))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Невидимка'), self.cmd_allow_invisible))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Невидимка'), self.cmd_ban_invisible))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить неон-ник'), self.cmd_buy_neon_nick))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить кибер-удачу'), self.cmd_buy_cyber_luck))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить файрволл'), self.cmd_buy_firewall))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить рп-пакет'), self.cmd_buy_rp_packet))
-        
-        # ===== ТЕЛЕГРАМ БОНУСЫ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг прем'), self.cmd_buy_tg_premium))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^подарить тг прем'), self.cmd_gift_tg_premium))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг подарок'), self.cmd_buy_tg_gift))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^подарить тг подарок'), self.cmd_gift_tg_gift))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^купить тг зв'), self.cmd_buy_tg_stars))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^передать тг зв'), self.cmd_transfer_tg_stars))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^где мои тг зв'), self.cmd_my_tg_stars))
-        
-        # ===== АНКЕТА (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^моя анкета$'), self.cmd_my_profile))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мой пол '), self.cmd_set_gender))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Пол$'), self.cmd_remove_gender))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мой город '), self.cmd_set_city))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мой др '), self.cmd_set_birth))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Анкета$'), self.cmd_profile_public))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-Анкета$'), self.cmd_profile_private))
-        
-        # ===== МОДЕРАЦИЯ (РУССКИЕ) =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить$'), self.cmd_set_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2$'), self.cmd_set_rank2))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3$'), self.cmd_set_rank3))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 4|^!модер 4|^повысить 4$'), self.cmd_set_rank4))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 5|^!модер 5|^повысить 5$'), self.cmd_set_rank5))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^понизить'), self.cmd_lower_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^снять |^разжаловать'), self.cmd_remove_rank))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^варн|^пред'), self.cmd_warn))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^снять варн'), self.cmd_unwarn))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^снять все варны'), self.cmd_unwarn_all))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^мут'), self.cmd_mute))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^размут'), self.cmd_unmute))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^бан'), self.cmd_ban))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^разбан'), self.cmd_unban))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^кик'), self.cmd_kick))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+триггер'), self.cmd_add_trigger))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^-триггер'), self.cmd_remove_trigger))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^антимат'), self.cmd_set_antimat))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^антиссылки'), self.cmd_set_antilink))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^антифлуд'), self.cmd_set_antiflood))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка'), self.cmd_clear))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^чистка от'), self.cmd_clear_user))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
-
-        # ===== РУССКИЕ ТЕКСТОВЫЕ КОМАНДЫ =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^Случайная беседа$'), self.cmd_random_chat))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^Беседы топ дня$'), self.cmd_top_chats))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^Команды$'), self.cmd_help))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^Установка$'), self.cmd_setup_info))
-        
-        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы$'), self.cmd_themes))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \d+$'), self.cmd_apply_theme))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \w+$'), self.cmd_apply_theme_by_name))
-        
-        # ===== ПРИВЯЗКА ЧАТА =====
-        self.app.add_handler(MessageHandler(filters.Regex(r'^!привязать$'), self.cmd_bind_chat))
-        
-        # ===== КОД ЧАТА =====
-        self.app.add_handler(CommandHandler("chatcode", self.cmd_chat_code))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^код чата$'), self.cmd_chat_code))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^сменить код'), self.cmd_change_chat_code))
-        
-        # ===== КУБЫШКА =====
-        self.app.add_handler(CommandHandler("treasury", self.cmd_treasury))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка$'), self.cmd_treasury))
-        self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка в неоны$'), self.cmd_treasury_withdraw))
-        
-        # ===== ОБРАБОТЧИК ЦИФРОВОГО МЕНЮ =====
-        self.app.add_handler(MessageHandler(filters.Regex('^[0-9]$'), self.handle_numbers))
-        
-        # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
-        self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
-        self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
-        
-        # ===== CALLBACK КНОПКИ =====
-        self.app.add_handler(CallbackQueryHandler(self.button_callback))
-        
-        self.app.add_error_handler(self.error_handler)
-        
-        logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
-
-        # ===== ОБРАБОТЧИК ЦИФРОВОГО МЕНЮ =====
-    async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка цифр меню"""
-        text = update.message.text.strip()
-        
-        if text == "1":
-            await self.cmd_profile(update, context)
-        elif text == "2":
-            await self.cmd_stats(update, context)
-        elif text == "3":
-            await self.cmd_games(update, context)
-        elif text == "4":
-            await self.cmd_shop(update, context)
-        elif text == "5":
-            await self.show_chart(update, context)
-        elif text == "6":
-            await self.cmd_help(update, context)
-        elif text == "7":
-            await self.show_contacts(update, context)
-        elif text == "0":
-            await self.show_menu(update, context)
-        else:
-            await update.message.reply_text("❌ Неверный номер. Введите 0-7")
-    
-    async def check_spam(self, update: Update) -> bool:
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        
-        if has_permission(user_data, 2):
-            return False
-        
-        now = time.time()
-        user_id = user.id
-        
-        self.spam_tracker[user_id] = [t for t in self.spam_tracker[user_id] if now - t < SPAM_WINDOW]
-        self.spam_tracker[user_id].append(now)
-        
-        if len(self.spam_tracker[user_id]) > SPAM_LIMIT:
-            self.db.mute_user(user_data['id'], SPAM_MUTE_TIME, 0, "Авто-спам")
-            await update.message.reply_text(s.error(f"Спам! Мут на {SPAM_MUTE_TIME} минут"))
-            self.spam_tracker[user_id] = []
-            return True
-        return False
-
-        # ===== ОБРАБОТЧИК СООБЩЕНИЙ =====
-    async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка всех текстовых сообщений"""
-        user = update.effective_user
-        message_text = update.message.text
-        chat = update.effective_chat
-        
-        if not user or not message_text:
-            return
-        
-        # Сохраняем сообщение в БД
-        self.db.save_message(
-            user.id, 
-            user.username, 
-            user.first_name, 
-            message_text, 
-            chat.id, 
-            chat.title
-        )
-        
-        if message_text.startswith('/'):
-            return
-        
-        user_data = self.db.get_user(user.id, user.first_name)
-        self.db.update_user(user_data['id'], messages_count=user_data.get('messages_count', 0) + 1)
-        
-        if self.db.is_banned(user_data['id']):
-            return
-        
-        if self.db.is_muted(user_data['id']):
-            await update.message.reply_text("🔇 Ты в муте")
-            return
-        
-        # Проверка на файрволл (защита от наказаний)
-        if user_data.get('firewall_expires') and datetime.fromisoformat(user_data['firewall_expires']) > datetime.now():
-            if user_data.get('firewall_used') == 0:
-                # Файрволл активен, но пока не использован
-                pass
-        
-        if await self.check_spam(update):
-            return
-        
-        if self.db.is_word_blacklisted(message_text):
-            await update.message.delete()
-            await update.message.reply_text("⚠️ Запрещенное слово! Сообщение удалено.")
-            return
-        
-        # Обработка RPS (камень-ножницы-бумага)
-        if context.user_data.get('awaiting_rps'):
-            if message_text in ["1", "2", "3"]:
-                context.user_data['awaiting_rps'] = False
-                
-                choices = {1: "🪨 Камень", 2: "✂️ Ножницы", 3: "📄 Бумага"}
-                results = {
-                    (1,2): "win", (2,3): "win", (3,1): "win",
-                    (2,1): "lose", (3,2): "lose", (1,3): "lose"
-                }
-                
-                player_choice = int(message_text)
-                bot_choice = random.randint(1, 3)
-                
-                text = f"✊ **КНБ**\n\n"
-                text += f"👤 Вы: {choices[player_choice]}\n"
-                text += f"🤖 Бот: {choices[bot_choice]}\n\n"
-                
-                if player_choice == bot_choice:
-                    self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
-                    text += "🤝 НИЧЬЯ!"
-                elif results.get((player_choice, bot_choice)) == "win":
-                    self.db.update_user(user_data['id'], rps_wins=user_data.get('rps_wins', 0) + 1)
-                    reward = random.randint(10, 30)
-                    self.db.add_coins(user_data['id'], reward)
-                    text += f"🎉 ПОБЕДА! +{reward} 💰"
-                else:
-                    self.db.update_user(user_data['id'], rps_losses=user_data.get('rps_losses', 0) + 1)
-                    text += "😢 ПОРАЖЕНИЕ!"
-                
-                await update.message.reply_text(text)
-                return
-        
-        # Обработка голосования в мафии
-        if message_text.lower().startswith('голосовать '):
-            try:
-                vote_num = int(message_text.split()[1])
-                for game in self.mafia_games.values():
-                    if game.chat_id == chat.id and game.phase == "day" and user.id in game.get_alive_players():
-                        alive_players = game.get_alive_players()
-                        if 1 <= vote_num <= len(alive_players):
-                            target_id = alive_players[vote_num - 1]
-                            game.votes[user.id] = target_id
-                            await update.message.reply_text(f"✅ Ваш голос учтён за игрока #{vote_num}")
-                            break
-            except:
-                pass
-            return
-        
-        # Проверка на активные игры
-        for game_id, game in list(self.games_in_progress.items()):
-            if game.get('user_id') == user.id:
-                if game_id.startswith('guess_'):
-                    try:
-                        guess = int(message_text)
-                        game['attempts'] += 1
-                        
-                        if guess == game['number']:
-                            win = game['bet'] * 2
-                            self.db.add_coins(user_data['id'], win)
-                            self.db.update_user(user_data['id'], guess_wins=user_data.get('guess_wins', 0) + 1)
-                            await update.message.reply_text(
-                                f"🎉 **ПОБЕДА!**\n\n"
-                                f"Число {game['number']}!\n"
-                                f"Попыток: {game['attempts']}\n"
-                                f"Выигрыш: {win} 💰"
-                            )
-                            del self.games_in_progress[game_id]
-                        elif game['attempts'] >= game['max_attempts']:
-                            self.db.update_user(user_data['id'], guess_losses=user_data.get('guess_losses', 0) + 1)
-                            await update.message.reply_text(
-                                f"❌ Попытки кончились! Было число {game['number']}"
-                            )
-                            del self.games_in_progress[game_id]
-                        elif guess < game['number']:
-                            await update.message.reply_text(f"📈 Загаданное число больше {guess}")
-                        else:
-                            await update.message.reply_text(f"📉 Загаданное число меньше {guess}")
-                    except ValueError:
-                        await update.message.reply_text("❌ Введите число от 1 до 100")
-                    return
-                
-                elif game_id.startswith('bulls_'):
-                    if len(message_text) != 4 or not message_text.isdigit():
-                        await update.message.reply_text("❌ Введите 4 цифры")
-                        return
-                    
-                    guess = message_text
-                    if len(set(guess)) != 4:
-                        await update.message.reply_text("❌ Цифры не должны повторяться")
-                        return
-                    
-                    bulls = 0
-                    cows = 0
-                    for i in range(4):
-                        if guess[i] == game['number'][i]:
-                            bulls += 1
-                        elif guess[i] in game['number']:
-                            cows += 1
-                    
-                    game['attempts'].append((guess, bulls, cows))
-                    
-                    if bulls == 4:
-                        win = game['bet'] * 3
-                        self.db.add_coins(user_data['id'], win)
-                        self.db.update_user(user_data['id'], bulls_wins=user_data.get('bulls_wins', 0) + 1)
-                        await update.message.reply_text(
-                            f"🎉 **ПОБЕДА!**\n\n"
-                            f"Число {game['number']}!\n"
-                            f"Попыток: {len(game['attempts'])}\n"
-                            f"Выигрыш: {win} 💰"
-                        )
-                        del self.games_in_progress[game_id]
-                    elif len(game['attempts']) >= game['max_attempts']:
-                        self.db.update_user(user_data['id'], bulls_losses=user_data.get('bulls_losses', 0) + 1)
-                        await update.message.reply_text(
-                            f"❌ Попытки кончились! Было число {game['number']}"
-                        )
-                        del self.games_in_progress[game_id]
-                    else:
-                        await update.message.reply_text(
-                            f"🔍 Быки: {bulls}, Коровы: {cows}\n"
-                            f"Осталось попыток: {game['max_attempts'] - len(game['attempts'])}"
-                        )
-                    return
-
-        # Проверяем, нужно ли AI ответить
-        is_reply_to_bot = (update.message.reply_to_message and 
-                          update.message.reply_to_message.from_user.id == context.bot.id)
-        
-        should_respond = False
-        force_response = False
-        ai_message = message_text
-        
-        # Всегда отвечаем на "Спектр"
-        if ai_message.lower().startswith("спектр"):
-            should_respond = True
-            force_response = True
-            ai_message = ai_message[6:].strip()
-            if not ai_message:
-                ai_message = "Привет"
-        # В личке отвечаем на всё
-        elif chat.type == "private":
-            should_respond = True
-            force_response = True
-        # В группах проверяем по алгоритму
-        elif self.ai and self.ai.is_available:
-            should_respond = await self.ai.should_respond(ai_message, is_reply_to_bot)
-            force_response = False
-        
-        if should_respond and self.ai and self.ai.is_available:
-            try:
-                await update.message.chat.send_action(action="typing")
-                response = await self.ai.get_response(
-                    user.id, 
-                    ai_message, 
-                    user.first_name,
-                    force_response=force_response
-                )
-                if response:
-                    prefix = "🤖 " if force_response else ""
-                    await update.message.reply_text(f"{prefix}{response}")
-                    return
-            except Exception as e:
-                logger.error(f"AI response error: {e}")
-
-    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка новых участников"""
-        chat_id = update.effective_chat.id
-        
-        self.db.cursor.execute("SELECT welcome FROM chat_settings WHERE chat_id = ?", (chat_id,))
-        row = self.db.cursor.fetchone()
-        welcome_text = row[0] if row and row[0] else "Добро пожаловать!"
-        
-        for member in update.message.new_chat_members:
-            if member.is_bot:
-                continue
-            
-            self.db.get_user(member.id, member.first_name)
-            
-            user_data = self.db.get_user_by_id(member.id)
-            gender = user_data.get('gender', 'не указан')
-            
-            welcome = welcome_text.replace('{имя}', member.first_name)
-            if gender == 'м':
-                welcome = welcome.replace('{ж|м|мн}', 'присоединился')
-            elif gender == 'ж':
-                welcome = welcome.replace('{ж|м|мн}', 'присоединилась')
-            else:
-                welcome = welcome.replace('{ж|м|мн}', 'присоединился(ась)')
-            
-            await update.message.reply_text(
-                f"👋 {welcome}\n\n{member.first_name}, используй /help для команд!"
-            )
-    
-    async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка ухода участников"""
-        member = update.message.left_chat_member
-        if member.is_bot:
-            return
-        
-        await update.message.reply_text(f"👋 {member.first_name} покинул чат...")
-
-        # ===== CALLBACK КНОПКИ =====
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка нажатий на инлайн-кнопки"""
-        query = update.callback_query
-        await query.answer()
-        data = query.data
-        user = query.from_user
-        user_data = self.db.get_user(user.id)
-        
-        # Кнопки главного меню
-        if data == "random_chat":
-            # Поиск случайной беседы
-            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
-            row = self.db.cursor.fetchone()
-            if row:
-                await query.edit_message_text(
-                    f"🎲 **Случайная беседа найдена!**\n\n"
-                    f"📢 **Название:** {row[1]}\n"
-                    f"🆔 **ID:** `{row[0]}`\n\n"
-                    f"🔗 Присоединяйтесь!"
-                )
-            else:
-                await query.edit_message_text(
-                    "🔄 **Нет доступных бесед**\n\n"
-                    "Добавьте бота в чат и введите `!привязать`"
-                )
-        
-        elif data == "top_chats":
-            await query.edit_message_text("🏆 **Топ бесед**\n\nФункция в разработке")
-        
-        elif data == "help_menu":
-            await self.cmd_help(update, context)
-        
-        elif data == "setup_info":
-            text = """
-🔧 **УСТАНОВКА БОТА**
-
-1️⃣ Добавьте бота в группу
-2️⃣ Сделайте бота администратором
-3️⃣ Введите `!привязать` для привязки чата
-4️⃣ Настройте приветствие: `+приветствие Текст`
-5️⃣ Настройте правила: `+правила Текст`
-
-📚 Подробнее: https://telegra.ph/Iris-bot-setup
-            """
-            await query.edit_message_text(text, disable_web_page_preview=True)
-        
-        elif data == "disabled":
-            await query.answer("Эта клетка уже открыта", show_alert=False)
-        
-        elif data == "neons_info":
-            text = """
-💜 **Что такое неоны?**
-
-Неоны — основная валюта кибер-вселенной Спектра.
-
-**Как получить:**
-• Ежедневный бонус (/daily)
-• Победы в играх
-• Убийство боссов
-• Реферальная система
-
-**Команды:**
-/neons — мой баланс
-/transfer @user 100 — перевести неоны
-/farm — ферма глитчей
-            """
-            await query.edit_message_text(text)
-        
-        elif data == "bonuses_menu":
-            await self.cmd_bonuses(update, context)
-        
-        elif data == "top_chats_day":
-            context.args = ["день"]
-            await self.cmd_top_chats(update, context)
-        
-        elif data == "top_chats_week":
-            context.args = ["неделя"]
-            await self.cmd_top_chats(update, context)
-        
-        elif data == "top_chats_month":
-            context.args = ["месяц"]
-            await self.cmd_top_chats(update, context)
-        
-        elif data.startswith("chat_card_"):
-            chat_id = int(data.split('_')[2])
-            await query.edit_message_text(
-                "📇 **Карточка чата**\n\nФункция в разработке"
-            )
-        
-        # Кнопки боссов
-        elif data.startswith("boss_attack_"):
-            boss_id = int(data.split('_')[2])
-            await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=True)
-        
-        elif data == "boss_regen":
-            await self.cmd_regen(update, context)
-        
-        elif data == "boss_buy_weapon":
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("🗡 Меч (+10 урона) - 200💰", callback_data="buy_weapon_sword")],
-                [InlineKeyboardButton("⚔️ Легендарный меч (+30 урона) - 500💰", callback_data="buy_weapon_legendary")],
-                [InlineKeyboardButton("🔫 Бластер (+50 урона) - 1000💰", callback_data="buy_weapon_blaster")],
-                [InlineKeyboardButton("🔙 Назад", callback_data="boss_list")]
-            ])
-            await query.edit_message_text(
-                "⚔️ **МАГАЗИН ОРУЖИЯ**\n\nВыберите оружие:",
-                reply_markup=keyboard
-            )
-        
-        elif data.startswith("buy_weapon_"):
-            weapon = data.replace("buy_weapon_", "")
-            weapons = {
-                "sword": {"name": "🗡 Меч", "damage": 10, "price": 200},
-                "legendary": {"name": "⚔️ Легендарный меч", "damage": 30, "price": 500},
-                "blaster": {"name": "🔫 Бластер", "damage": 50, "price": 1000}
-            }
-            
-            if weapon in weapons:
-                w = weapons[weapon]
-                if user_data['coins'] >= w['price']:
-                    self.db.add_coins(user_data['id'], -w['price'])
-                    new_damage = user_data['damage'] + w['damage']
-                    self.db.update_user(user_data['id'], damage=new_damage)
-                    await query.edit_message_text(
-                        f"✅ **Куплено:** {w['name']}!\n\nТеперь ваш урон: {new_damage}"
-                    )
-                else:
-                    await query.edit_message_text(
-                        f"❌ Недостаточно монет. Нужно {w['price']} 💰"
-                    )
-        
-        elif data == "boss_list":
-            bosses = self.db.get_bosses()
-            text = "👾 **БОССЫ**\n\n"
-            for i, boss in enumerate(bosses[:5]):
-                status = "⚔️" if boss['is_alive'] else "💀"
-                health_bar = self._progress_bar(boss['health'], boss['max_health'], 10)
-                text += f"{i+1}. {status} {boss['name']}\n   {health_bar}\n\n"
-            
-            keyboard = []
-            for i, boss in enumerate(bosses[:5]):
-                if boss['is_alive']:
-                    keyboard.append([InlineKeyboardButton(
-                        f"⚔️ {boss['name']}",
-                        callback_data=f"boss_attack_{boss['id']}"
-                    )])
-            
-            keyboard.append([InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")])
-            
-            await query.edit_message_text(
-                text,
-                reply_markup=InlineKeyboardMarkup(keyboard)
-            )
-        
-        # Кнопки сапёра
-        elif data.startswith("saper_"):
-            parts = data.split('_')
-            if len(parts) >= 3:
-                game_id = f"{parts[1]}_{parts[2]}"
-                cell = int(parts[3])
-                
-                if game_id in self.games_in_progress:
-                    game = self.games_in_progress[game_id]
-                    if game['user_id'] != user.id:
-                        await query.answer("Это не ваша игра!", show_alert=True)
-                        return
-                    
-                    x = (cell - 1) // 3
-                    y = (cell - 1) % 3
-                    
-                    if x == game['mine_x'] and y == game['mine_y']:
-                        await query.edit_message_text(
-                            f"💥 **БУМ!**\n\n❌ Ты подорвался на мине!\n\nПроигрыш: {game['bet']} 💰"
-                        )
-                        del self.games_in_progress[game_id]
-                    else:
-                        game['opened'] += 1
-                        game['field'][x][y] = "✅"
-                        
-                        if game['opened'] >= 8:
-                            win = game['bet'] * 3
-                            self.db.add_coins(user_data['id'], win)
-                            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
-                            await query.edit_message_text(
-                                f"🎉 **ПОБЕДА!**\n\nТы открыл все безопасные клетки!\nВыигрыш: {win} 💰"
-                            )
-                            del self.games_in_progress[game_id]
-                        else:
-                            field_text = ""
-                            for i in range(3):
-                                field_text += ' '.join(game['field'][i]) + "\n"
-                            
-                            keyboard = []
-                            for i in range(3):
-                                row = []
-                                for j in range(3):
-                                    cell_num = i * 3 + j + 1
-                                    if game['field'][i][j] == "✅":
-                                        row.append(InlineKeyboardButton(f"✅", callback_data="disabled"))
-                                    else:
-                                        row.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
-                                keyboard.append(row)
-                            
-                            await query.edit_message_text(
-                                f"💣 **САПЁР**\n\n{field_text}",
-                                reply_markup=InlineKeyboardMarkup(keyboard)
-                            )
-        
-        # Кнопки голосования за бан
-        elif data.startswith("vote_for_"):
-            vote_id = int(data.split('_')[2])
-            if self.db.vote_for_ban(vote_id, user_data['id'], True):
-                await query.edit_message_text("✅ Ваш голос учтён (ЗА БАН)")
-                
-                self.db.cursor.execute("SELECT * FROM ban_votes WHERE id = ?", (vote_id,))
-                vote = self.db.cursor.fetchone()
-                if vote and vote[7] >= vote[5]:
-                    target = self.db.get_user_by_id(vote[2])
-                    if target:
-                        self.db.ban_user(target['id'], vote[3], "По результатам голосования")
-                        self.db.cursor.execute("UPDATE ban_votes SET status = 'completed' WHERE id = ?", (vote_id,))
-                        self.db.conn.commit()
-                        
-                        await context.bot.send_message(
-                            vote[1],
-                            f"🔨 Пользователь {target['first_name']} забанен по результатам голосования!"
-                        )
-            else:
-                await query.edit_message_text("❌ Не удалось проголосовать")
-        
-        elif data.startswith("vote_against_"):
-            vote_id = int(data.split('_')[2])
-            if self.db.vote_for_ban(vote_id, user_data['id'], False):
-                await query.edit_message_text("✅ Ваш голос учтён (ПРОТИВ БАНА)")
-            else:
-                await query.edit_message_text("❌ Не удалось проголосовать")
-        
-        # Кнопки мафии
-        elif data.startswith("mafia_confirm_"):
-            chat_id = int(data.split('_')[2])
-            if chat_id in self.mafia_games:
-                game = self.mafia_games[chat_id]
-                if user.id in game.players:
-                    game.confirm_player(user.id)
-                    await query.edit_message_text(
-                        "✅ **Подтверждение получено!**\n\nОжидайте начала игры..."
-                    )
-                    
-                    if game.all_confirmed():
-                        await self._mafia_start_game(game, context)
-        
-        # Кнопки дуэлей
-        elif data.startswith("accept_duel_"):
-            duel_id = int(data.split('_')[2])
-            duel = self.db.get_duel(duel_id)
-            
-            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
-                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
-                return
-            
-            self.db.update_duel(duel_id, status='accepted')
-            
-            challenger = self.db.get_user_by_id(duel['challenger_id'])
-            opponent = self.db.get_user_by_id(duel['opponent_id'])
-            
-            if not challenger or not opponent:
-                await query.edit_message_text("❌ Ошибка загрузки данных")
-                return
-            
-            await query.edit_message_text(
-                f"✅ **Дуэль принята!**\n\n"
-                f"⚔️ {challenger['first_name']} VS {opponent['first_name']}\n"
-                f"💰 Ставка: {duel['bet']} 💰\n\n"
-                f"🔄 Дуэль начинается..."
-            )
-            
-            asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
-        
-        elif data.startswith("reject_duel_"):
-            duel_id = int(data.split('_')[2])
-            duel = self.db.get_duel(duel_id)
-            
-            if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
-                await query.edit_message_text("❌ Дуэль не найдена или уже обработана")
-                return
-            
-            self.db.update_duel(duel_id, status='rejected')
-            self.db.add_coins(duel['challenger_id'], duel['bet'])
-            
-            await query.edit_message_text(
-                f"❌ **Дуэль отклонена**\n\nСтавка возвращена."
-            )
-        
-        # Кнопки брака
-        elif data.startswith("marry_accept_"):
-            proposer_id = int(data.split('_')[2])
-            
-            if user_data.get('spouse', 0):
-                await query.edit_message_text("❌ Вы уже в браке")
-                return
-            
-            proposer = self.db.get_user_by_id(proposer_id)
-            if not proposer:
-                await query.edit_message_text("❌ Пользователь не найден")
-                return
-            
-            if proposer.get('spouse', 0):
-                await query.edit_message_text("❌ Пользователь уже в браке")
-                return
-            
-            now = datetime.now().isoformat()
-            self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
-            self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
-            
-            self.db.add_coins(user_data['id'], 500)
-            self.db.add_coins(proposer_id, 500)
-            
-            await query.edit_message_text(
-                f"💍 **Поздравляем!**\n\n"
-                f"{user_data['first_name']} и {proposer['first_name']} теперь в браке! 🎉\n\n"
-                f"💰 Бонус молодожёнам: +500 💰 каждому"
-            )
-            
-            await context.bot.send_message(
-                proposer['telegram_id'],
-                f"💞 **ПОЗДРАВЛЯЕМ!**\n\n{user_data['first_name']} принял(а) ваше предложение!"
-            )
-        
-        elif data.startswith("marry_reject_"):
-            proposer_id = int(data.split('_')[2])
-            await query.edit_message_text("❌ Предложение отклонено")
-            await context.bot.send_message(
-                proposer_id,
-                "❌ Ваше предложение отклонили"
-            )
-        
-        # Кнопки для закладок
-        elif data == "bookmark_help":
-            text = """
-📌 **Закладки**
-
-Как использовать:
-
-• `+Закладка Название` (с новой строки содержимое) — создать
-• `закладка [ID]` — показать
-• `чатбук` — все закладки чата
-• `мои закладки` — ваши закладки
-• `-Закладка [ID]` — удалить
-            """
-            await query.edit_message_text(text)
-        
-        # Кнопки для кружков
-        elif data == "circle_help":
-            text = """
-🔄 **Кружки**
-
-Как использовать:
-
-• `создать кружок Название` (с новой строки описание) — создать
-• `кружки` — список кружков
-• `кружок [номер]` — информация
-• `+Кружок [номер]` — присоединиться
-• `-Кружок [номер]` — выйти
-            """
-            await query.edit_message_text(text)
-        
-        # Кнопки для ачивок
-        elif data == "achievements_help":
-            text = """
-🏅 **Ачивки**
-
-Как использовать:
-
-• `мои ачивки` — ваши достижения
-• `топ ачивок` — рейтинг
-• `ачивка [ID]` — информация
-• `+Ачивки` / `-Ачивки` — приватность
-            """
-            await query.edit_message_text(text)
-
-        # ===== ОБРАБОТЧИК ОШИБОК =====
-async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик ошибок"""
-    logger.error(f"Ошибка: {context.error}", exc_info=True)  # Добавлено exc_info=True для печати traceback в лог
-
-    try:
-        if update and update.effective_message:
-            # Отправляем пользователю более информативное сообщение (только для разработки!)
-            error_text = str(context.error)[:200]
-            await update.effective_message.reply_text(
-                f"❌ **Ошибка:** `{error_text}`\n\n"
-                f"Подробности в логах.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-    except:
-        pass
-
-    # Отправляем ошибку владельцу
-    try:
-        error_text = str(context.error)[:500]
-        await context.bot.send_message(
-            OWNER_ID,
-            f"⚠️ **Ошибка в боте**\n\n"
-            f"```\n{error_text}\n```"
-        )
-    except:
-        pass
-
-        # ===== ЗАПУСК =====
-    async def run(self):
-        """Запуск бота"""
-        try:
-            await self.app.initialize()
-            await self.app.start()
-            await self.app.updater.start_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True
-            )
-            
-            logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
-            logger.info(f"👑 Владелец: {OWNER_USERNAME}")
-            logger.info(f"🤖 AI: {'Подключен' if self.ai and self.ai.is_available else 'Не подключен'}")
-            
-            while True:
-                await asyncio.sleep(1)
-        except Exception as e:
-            logger.error(f"❌ Критическая ошибка: {e}")
-            await asyncio.sleep(5)
-            await self.run()
         
         username = context.args[0].replace('@', '')
         chat_id = update.effective_chat.id
