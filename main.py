@@ -7805,6 +7805,30 @@ class SpectrumBot:
         self.app.add_error_handler(self.error_handler)
         
         logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
+
+        # ===== ОБРАБОТЧИК ЦИФРОВОГО МЕНЮ =====
+    async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка цифр меню"""
+        text = update.message.text.strip()
+        
+        if text == "1":
+            await self.cmd_profile(update, context)
+        elif text == "2":
+            await self.cmd_stats(update, context)
+        elif text == "3":
+            await self.cmd_games(update, context)
+        elif text == "4":
+            await self.cmd_shop(update, context)
+        elif text == "5":
+            await self.show_chart(update, context)
+        elif text == "6":
+            await self.cmd_help(update, context)
+        elif text == "7":
+            await self.show_contacts(update, context)
+        elif text == "0":
+            await self.show_menu(update, context)
+        else:
+            await update.message.reply_text("❌ Неверный номер. Введите 0-7")
     
     async def check_spam(self, update: Update) -> bool:
         user = update.effective_user
