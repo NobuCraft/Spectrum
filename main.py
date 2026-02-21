@@ -420,7 +420,7 @@ class MafiaGame:
     def get_alive_players(self) -> list:
         return [pid for pid in self.players if self.alive.get(pid, False)]
     
-    def check_win(self) -> Optional[str]:
+    def check_win(self):
         alive = self.get_alive_players()
         if not alive:
             return None
@@ -438,7 +438,7 @@ class MafiaGame:
             return "mafia"
         return None
     
-    def process_night(self) -> dict:
+    def process_night(self):
         killed = self.night_actions.get("mafia_kill")
         saved = self.night_actions.get("doctor_save")
         
@@ -454,7 +454,7 @@ class MafiaGame:
         
         return {"killed": killed}
     
-    def process_voting(self) -> Optional[int]:
+    def process_voting(self):
         if not self.votes:
             return None
         
@@ -587,66 +587,6 @@ class MafiaGame:
         await update.message.reply_text(f"✅ {user.first_name} {username_display} покинул игру")
         
         await self._update_mafia_game_message(game, context)
-    
-    async def _mafia_day_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        """Таймер дня"""
-        await asyncio.sleep(MAFIA_DAY_TIME)
-        
-        if game.chat_id not in self.mafia_games or game.phase != "day":
-            return
-        
-        executed = game.process_voting()
-        
-        if executed:
-            game.alive[executed] = False
-            executed_name = game.players_data[executed]['name']
-            role = game.roles.get(executed, "неизвестно")
-            
-            await context.bot.send_message(
-                game.chat_id,
-                f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
-                f"🔨 **Исключён:** {executed_name}\n"
-                f"🎭 **Роль:** {role}\n\n"
-                f"🌙 Ночь скоро..."
-            )
-            
-            try:
-                await context.bot.send_message(
-                    executed,
-                    "🔨 **ВАС ИСКЛЮЧИЛИ ДНЁМ**\n\nВы больше не участвуете"
-                )
-            except:
-                pass
-        else:
-            await context.bot.send_message(
-                game.chat_id,
-                "📢 Никто не был исключён"
-            )
-        
-        winner = game.check_win()
-        
-        if winner == "citizens":
-            await context.bot.send_message(
-                game.chat_id,
-                "🏆 **ПОБЕДА ГОРОДА!**\n\nМафия уничтожена!"
-            )
-            del self.mafia_games[game.chat_id]
-            return
-        elif winner == "mafia":
-            await context.bot.send_message(
-                game.chat_id,
-                "🏆 **ПОБЕДА МАФИИ!**\n\nМафия захватила город!"
-            )
-            del self.mafia_games[game.chat_id]
-            return
-        
-        game.phase = "night"
-        await context.bot.send_message(
-            game.chat_id,
-            f"🔫 **МАФИЯ | НОЧЬ {game.day}**\n\n🌙 Наступает ночь..."
-        )
-        
-        asyncio.create_task(self._mafia_night_timer(game, context))
     
     async def cmd_mafia_roles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Список ролей"""
