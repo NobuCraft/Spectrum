@@ -6656,30 +6656,30 @@ class SpectrumBot:
         text += f"📊 **Всего:** {len(warns_list)}/4"
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user_data = self.db.get_user(update.effective_user.id)
-        warns_list = self.db.get_warns(user_data['id'])
-        
-        if not warns_list:
-            await update.message.reply_text("✅ **У вас нет предупреждений**", parse_mode=ParseMode.MARKDOWN)
-            return
-        
-        user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
-        text = f"📋 **МОИ ПРЕДУПРЕЖДЕНИЯ: {user_name}**\n\n"
-        
-        for warn in warns_list:
-            admin = self.db.get_user_by_id(warn['admin_id'])
-            admin_name = f"@{admin['username']}" if admin and admin.get('username') else (admin['first_name'] if admin else 'Система')
-            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
-            text += (
-                f"⚠️ **ID {warn['id']}**\n"
-                f"💬 **Причина:** {warn['reason']}\n
-                f"🦸 **Модератор:** {admin_name}\n"
-                f"📅 **Дата:** {date}\n\n"
-            )
-        
-        text += f"📊 **Всего:** {len(warns_list)}/4"
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_data = self.db.get_user(update.effective_user.id)
+    warns_list = self.db.get_warns(user_data['id'])
+    
+    if not warns_list:
+        await update.message.reply_text("✅ **У вас нет предупреждений**", parse_mode=ParseMode.MARKDOWN)
+        return
+    
+    user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
+    text = f"📋 **МОИ ПРЕДУПРЕЖДЕНИЯ: {user_name}**\n\n"
+    
+    for warn in warns_list:
+        admin = self.db.get_user_by_id(warn['admin_id'])
+        admin_name = f"@{admin['username']}" if admin and admin.get('username') else (admin['first_name'] if admin else 'Система')
+        date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+        text += (
+            f"⚠️ **ID {warn['id']}**\n"
+            f"💬 **Причина:** {warn['reason']}\n"
+            f"🦸 **Модератор:** {admin_name}\n"
+            f"📅 **Дата:** {date}\n\n"
+        )
+    
+    text += f"📊 **Всего:** {len(warns_list)}/4"
+    await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
