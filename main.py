@@ -539,7 +539,7 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.create_tables()
-        self.conn.commit()  # Важно! Фиксируем создание таблиц
+        self.conn.commit()
         self.init_data()
         logger.info("✅ База данных инициализирована")
     
@@ -653,118 +653,105 @@ class Database:
                 achievements_visible INTEGER DEFAULT 1,
                 stats_visible INTEGER DEFAULT 1,
                 last_farm TEXT
-        )
-    ''')
-    
-    # Добавляем колонки для банов
-    try:
-        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT")
-        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_date TEXT")
-        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_admin INTEGER")
-        self.conn.commit()
-    except sqlite3.OperationalError:
-        # Колонки уже существуют - игнорируем
-        pass
-
-    # Таблица сообщений
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS messages (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            username TEXT,
-            first_name TEXT,
-            message_text TEXT,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-            chat_id INTEGER,
-            chat_title TEXT
-        )
-    ''')
-
-    # Таблица дневной статистики
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS daily_stats (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            date DATE,
-            count INTEGER DEFAULT 0,
-            UNIQUE(user_id, date)
-        )
-    ''')
-
-    # Таблица логов
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            action TEXT,
-            details TEXT,
-            chat_id INTEGER,
-            timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
-    
-    # ПРОДОЛЖАЙТЕ ЗДЕСЬ СО СЛЕДУЮЩЕЙ ТАБЛИЦЕЙ...
-    # Убедитесь, что каждая следующая строка имеет ТОЧНО такие же отступы
+            )
+        ''')
         
-    # Таблица чёрного списка
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS blacklist (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            word TEXT UNIQUE,
-            added_by INTEGER,
-            added_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+        # Таблица сообщений
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                username TEXT,
+                first_name TEXT,
+                message_text TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                chat_id INTEGER,
+                chat_title TEXT
+            )
+        ''')
         
-    # Таблица настроек чатов
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS chat_settings (
-            chat_id INTEGER PRIMARY KEY,
-            welcome TEXT,
-            rules TEXT,
-            antiflood INTEGER DEFAULT 1,
-            antispam INTEGER DEFAULT 1,
-            antilink INTEGER DEFAULT 0,
-            captcha INTEGER DEFAULT 0,
-            lang TEXT DEFAULT 'ru',
-            chat_code TEXT UNIQUE,
-            chat_name TEXT,
-            circle_limit INTEGER DEFAULT 20,
-            treasury_neons INTEGER DEFAULT 0,
-            treasury_glitches INTEGER DEFAULT 0,
-            glitch_hammer_price INTEGER DEFAULT 50,
-            glitch_hammer_enabled INTEGER DEFAULT 1,
-            glitch_hammer_min_rank INTEGER DEFAULT 0,
-            invisible_price INTEGER DEFAULT 30,
-            invisible_enabled INTEGER DEFAULT 1,
-            neon_nick_price INTEGER DEFAULT 100,
-            neon_nick_enabled INTEGER DEFAULT 1,
-            turbo_drive_price INTEGER DEFAULT 200,
-            turbo_drive_boost INTEGER DEFAULT 30,
-            turbo_drive_enabled INTEGER DEFAULT 1,
-            cyber_luck_price INTEGER DEFAULT 150,
-            cyber_luck_boost INTEGER DEFAULT 15,
-            cyber_luck_enabled INTEGER DEFAULT 1,
-            firewall_price INTEGER DEFAULT 80,
-            firewall_enabled INTEGER DEFAULT 1,
-            rp_packet_price INTEGER DEFAULT 120,
-            rp_packet_enabled INTEGER DEFAULT 1,
-            speech_enabled INTEGER DEFAULT 0
-        )
-    ''')
+        # Таблица дневной статистики
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS daily_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                date DATE,
+                count INTEGER DEFAULT 0,
+                UNIQUE(user_id, date)
+            )
+        ''')
         
-    # Таблица дуэлей
-    self.cursor.execute('''
-        CREATE TABLE IF NOT EXISTS duels (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            challenger_id INTEGER,
-            opponent_id INTEGER,
-            obet INTEGER,
-            status TEXT DEFAULT 'pending',
-            winner_id INTEGER,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        )
-    ''')
+        # Таблица логов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT,
+                details TEXT,
+                chat_id INTEGER,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица чёрного списка
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS blacklist (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                word TEXT UNIQUE,
+                added_by INTEGER,
+                added_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица настроек чатов
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chat_settings (
+                chat_id INTEGER PRIMARY KEY,
+                welcome TEXT,
+                rules TEXT,
+                antiflood INTEGER DEFAULT 1,
+                antispam INTEGER DEFAULT 1,
+                antilink INTEGER DEFAULT 0,
+                captcha INTEGER DEFAULT 0,
+                lang TEXT DEFAULT 'ru',
+                chat_code TEXT UNIQUE,
+                chat_name TEXT,
+                circle_limit INTEGER DEFAULT 20,
+                treasury_neons INTEGER DEFAULT 0,
+                treasury_glitches INTEGER DEFAULT 0,
+                glitch_hammer_price INTEGER DEFAULT 50,
+                glitch_hammer_enabled INTEGER DEFAULT 1,
+                glitch_hammer_min_rank INTEGER DEFAULT 0,
+                invisible_price INTEGER DEFAULT 30,
+                invisible_enabled INTEGER DEFAULT 1,
+                neon_nick_price INTEGER DEFAULT 100,
+                neon_nick_enabled INTEGER DEFAULT 1,
+                turbo_drive_price INTEGER DEFAULT 200,
+                turbo_drive_boost INTEGER DEFAULT 30,
+                turbo_drive_enabled INTEGER DEFAULT 1,
+                cyber_luck_price INTEGER DEFAULT 150,
+                cyber_luck_boost INTEGER DEFAULT 15,
+                cyber_luck_enabled INTEGER DEFAULT 1,
+                firewall_price INTEGER DEFAULT 80,
+                firewall_enabled INTEGER DEFAULT 1,
+                rp_packet_price INTEGER DEFAULT 120,
+                rp_packet_enabled INTEGER DEFAULT 1,
+                speech_enabled INTEGER DEFAULT 0
+            )
+        ''')
+        
+        # Таблица дуэлей
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS duels (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                challenger_id INTEGER,
+                opponent_id INTEGER,
+                bet INTEGER,
+                status TEXT DEFAULT 'pending',
+                winner_id INTEGER,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
         
         # Таблица игр мафии
         self.cursor.execute('''
@@ -973,7 +960,6 @@ class Database:
         self.cursor.execute("SELECT COUNT(*) FROM bosses")
         if self.cursor.fetchone()[0] == 0:
             bosses = [
-                # name, level, health, max_health, damage, reward_coins, reward_exp, reward_neons, reward_glitches, is_alive, respawn_time
                 ("👾 Ядовитый комар", 5, 500, 500, 15, 250, 50, 1, 10, 1, None),
                 ("👾 Лесной тролль", 10, 1000, 1000, 25, 500, 100, 2, 25, 1, None),
                 ("👾 Огненный дракон", 15, 2000, 2000, 40, 1000, 200, 5, 50, 1, None),
