@@ -1975,6 +1975,14 @@ class SpectrumBot:
         self.setup_handlers()
         logger.info(f"✅ Бот {BOT_NAME} инициализирован")
 
+    async def close(self):
+        """Закрытие бота"""
+        logger.info("👋 Завершение работы бота...")
+        if self.ai:
+            await self.ai.close()
+        self.db.close()
+        logger.info("✅ Бот остановлен")
+
     def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
@@ -1994,12 +2002,6 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("country", self.cmd_set_country))
         self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
         self.app.add_handler(CommandHandler("age", self.cmd_set_age))
-        self.app.add_handler(CommandHandler("id", self.cmd_id))
-        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))  # добавьте
-        self.app.add_handler(CommandHandler("city", self.cmd_set_city))      # добавьте
-        self.app.add_handler(CommandHandler("country", self.cmd_set_country)) # добавьте
-        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))    # добавьте
-        self.app.add_handler(CommandHandler("age", self.cmd_set_age))        # добавьте
         self.app.add_handler(CommandHandler("id", self.cmd_id))
         self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile)) 
         
@@ -3060,14 +3062,6 @@ async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE
             logger.error(f"❌ Критическая ошибка: {e}")
             await asyncio.sleep(5)
             await self.run()
-    
-    async def close(self):
-        """Закрытие бота"""
-        logger.info("👋 Завершение работы бота...")
-        if self.ai:
-            await self.ai.close()
-        self.db.close()
-        logger.info("✅ Бот остановлен")
 
     # ========== МЕТОДЫ МАФИИ В КЛАССЕ SPECTRUMBOT ==========
 
