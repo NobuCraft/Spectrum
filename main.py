@@ -331,7 +331,7 @@ class MafiaGame:
         self.chat_id = chat_id
         self.game_id = game_id
         self.creator_id = creator_id
-        self.status = "waiting"  # waiting, night, day, voting, ended
+        self.status = "waiting"
         self.players = []
         self.players_data = {}
         self.roles = {}
@@ -394,7 +394,6 @@ class MafiaGame:
         roles.append(MafiaRole.COMMISSIONER)
         roles.append(MafiaRole.DOCTOR)
         
-        # Добавляем маньяка если игроков достаточно
         if num_players >= 10:
             roles.append(MafiaRole.MANIAC)
         
@@ -477,7 +476,6 @@ class MafiaGame:
         
         self.votes = {}
         return None
-
 
 # ========== МЕТОДЫ МАФИИ В КЛАССЕ SPECTRUMBOT ==========
 
