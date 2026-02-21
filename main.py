@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 """
-СПЕКТР v5.0 ULTIMATE - Полное объединение v3.0 + v4.0 с AI, Тайным Орденом, играми и ВК поддержкой
+СПЕКТР v4.0 ULTIMATE 
 """
 
 import os
@@ -8186,6 +8186,118 @@ class SpectrumBot:
             await update.message.reply_text(f"✅ {target['first_name']} исключен")
         except Exception as e:
             await update.message.reply_text(f"❌ Ошибка: {e}")
+
+    # ===== КЛАНЫ =====  
+    async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о своем клане"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text("ℹ️ Вы не состоите в клане")
+            return
+        
+        clan = self.get_clan(user_data['clan_id'])
+        if not clan:
+            await update.message.reply_text("❌ Клан не найден")
+            return
+        
+        members = self.get_clan_members(clan['id'])
+        
+        text = f"🏰 **КЛАН: {clan['name']}**\n\n"
+        text += f"📊 **Уровень:** {clan.get('level', 1)}\n"
+        text += f"💰 **Казна:** {clan.get('coins', 0)} 💰\n"
+        text += f"👥 **Участников:** {len(members)}\n\n"
+        text += "**Участники:**\n"
+        
+        for member in members:
+            name = member.get('nickname') or member['first_name']
+            role_emoji = "👑" if member.get('clan_role') == 'owner' else "🛡" if member.get('clan_role') == 'admin' else "👤"
+            text += f"{role_emoji} {name}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_clans(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список кланов"""
+        self.db.cursor.execute("SELECT name, level, members FROM clans ORDER BY level DESC LIMIT 10")
+        clans = self.db.cursor.fetchall()
+        
+        if not clans:
+            await update.message.reply_text("ℹ️ Нет созданных кланов")
+            return
+        
+        text = "🏰 **ТОП КЛАНОВ**\n\n"
+        for i, clan in enumerate(clans, 1):
+            text += f"{i}. **{clan[0]}** — ур.{clan[1]}, {clan[2]} участников\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать клан"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название клана: /createclan Название")
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы уже в клане")
+            return
+        
+        if user_data['coins'] < 1000:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно 1000 💰")
+            return
+        
+        clan_id = self.db.create_clan(update.effective_chat.id, name, "", user_data['id'])
+        if not clan_id:
+            await update.message.reply_text("❌ Клан с таким названием уже существует")
+            return
+        
+        self.db.add_coins(user_data['id'], -1000)
+        
+        await update.message.reply_text(f"✅ Клан '{name}' создан!")
+    
+    async def cmd_join_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Вступить в клан"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название клана: /joinclan Название")
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы уже в клане")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM clans WHERE name = ? AND chat_id = ?", (name, update.effective_chat.id))
+        clan = self.db.cursor.fetchone()
+        
+        if not clan:
+            await update.message.reply_text("❌ Клан не найден")
+            return
+        
+        if self.db.join_clan(clan[0], user_data['id']):
+            await update.message.reply_text(f"✅ Вы вступили в клан '{name}'")
+        else:
+            await update.message.reply_text("❌ Не удалось вступить в клан")
+    
+    async def cmd_leave_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Покинуть клан"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы не в клане")
+            return
+        
+        if user_data.get('clan_role') == 'owner':
+            await update.message.reply_text("❌ Владелец не может покинуть клан")
+            return
+        
+        if self.db.leave_clan(user_data['id']):
+            await update.message.reply_text("✅ Вы покинули клан")
+        else:
+            await update.message.reply_text("❌ Не удалось покинуть клан")
     
     async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Проверка прав бота в чате"""
