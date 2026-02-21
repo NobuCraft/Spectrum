@@ -4808,6 +4808,132 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         self.db.update_user(user_data['id'], achievements_visible=0)
         await update.message.reply_text(s.success("✅ Ваши ачивки теперь скрыты от других"))
 
+        # ===== КРУЖКИ =====
+    async def cmd_circles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if not circles:
+            await update.message.reply_text(s.info("В этом чате нет кружков"))
+            return
+        
+        text = s.header("🔄 КРУЖКИ ЧАТА") + "\n\n"
+        for i, circle in enumerate(circles, 1):
+            circle = dict(circle)
+            members = json.loads(circle['members'])
+            text += f"{i}. {circle['name']} — {len(members)} участников\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите номер кружка: /circle 1"))
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Номер должен быть числом"))
+            return
+        
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text(s.error("❌ Кружок с таким номером не найден"))
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        members = json.loads(circle['members'])
+        
+        creator = self.db.get_user_by_id(circle['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        
+        text = (
+            s.header(f"🔄 КРУЖОК: {circle['name']}") + "\n\n"
+            f"📝 {circle['description']}\n\n"
+            f"👑 Создатель: {creator_name}\n"
+            f"👥 Участников: {len(members)}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("❌ Укажите название кружка: /createcircle Название"))
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        circle_id = self.db.create_circle(chat_id, name, "", user_data['id'])
+        
+        if not circle_id:
+            await update.message.reply_text(s.error("❌ Не удалось создать кружок"))
+            return
+        
+        await update.message.reply_text(s.success(f"✅ Кружок '{name}' создан!"))
+    
+    async def cmd_join_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите номер кружка: /joincircle 1"))
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Номер должен быть числом"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text(s.error("❌ Кружок с таким номером не найден"))
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        
+        if self.db.join_circle(circle['id'], user_data['id']):
+            await update.message.reply_text(s.success(f"✅ Вы присоединились к кружку '{circle['name']}'"))
+        else:
+            await update.message.reply_text(s.error("❌ Не удалось присоединиться"))
+    
+    async def cmd_leave_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите номер кружка: /leavecircle 1"))
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Номер должен быть числом"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text(s.error("❌ Кружок с таким номером не найден"))
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        
+        if self.db.leave_circle(circle['id'], user_data['id']):
+            await update.message.reply_text(s.success(f"✅ Вы покинули кружок '{circle['name']}'"))
+        else:
+            await update.message.reply_text(s.error("❌ Не удалось покинуть кружок"))
+
     async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка цифр меню"""
         text = update.message.text.strip()
@@ -7565,6 +7691,117 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(s.success(f"✅ Вы покинули кружок '{circle['name']}'"))
         else:
             await update.message.reply_text(s.error("❌ Не удалось покинуть кружок"))
+
+        # ===== ЗАКЛАДКИ =====
+    async def cmd_add_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /addbookmark Название ссылка"))
+            return
+        
+        name = context.args[0]
+        content = " ".join(context.args[1:])
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        bookmark_id = self.db.add_bookmark(chat_id, user_data['id'], name, content)
+        
+        await update.message.reply_text(s.success(f"✅ Закладка '{name}' сохранена! ID: {bookmark_id}"))
+    
+    async def cmd_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        bookmarks = self.db.get_user_bookmarks(user_data['id'], chat_id)
+        
+        if not bookmarks:
+            await update.message.reply_text(s.info("У вас нет закладок в этом чате"))
+            return
+        
+        text = s.header("📌 МОИ ЗАКЛАДКИ") + "\n\n"
+        for bm in bookmarks:
+            text += f"ID {bm['id']}: {bm['name']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ID закладки: /bookmark 123"))
+            return
+        
+        try:
+            bookmark_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ ID должен быть числом"))
+            return
+        
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("SELECT * FROM bookmarks WHERE id = ? AND chat_id = ?", (bookmark_id, chat_id))
+        bm = self.db.cursor.fetchone()
+        
+        if not bm:
+            await update.message.reply_text(s.error("❌ Закладка не найдена"))
+            return
+        
+        bm = dict(bm)
+        user = self.db.get_user_by_id(bm['user_id'])
+        user_name = user.get('nickname') or user['first_name'] if user else "Неизвестно"
+        
+        text = (
+            s.header(f"📌 ЗАКЛАДКА: {bm['name']}") + "\n\n"
+            f"{bm['content']}\n\n"
+            f"👤 Добавил: {user_name}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ID закладки: /removebookmark 123"))
+            return
+        
+        try:
+            bookmark_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ ID должен быть числом"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT user_id FROM bookmarks WHERE id = ? AND chat_id = ?", (bookmark_id, chat_id))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(s.error("❌ Закладка не найдена"))
+            return
+        
+        if row[0] != user_data['id'] and user_data['rank'] < 2:
+            await update.message.reply_text(s.error("❌ У вас нет прав на удаление этой закладки"))
+            return
+        
+        self.db.cursor.execute("DELETE FROM bookmarks WHERE id = ?", (bookmark_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Закладка удалена"))
+    
+    async def cmd_chat_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        bookmarks = self.db.get_chat_bookmarks(chat_id)
+        
+        if not bookmarks:
+            await update.message.reply_text(s.info("В этом чате нет публичных закладок"))
+            return
+        
+        text = s.header("📚 ЧАТБУК") + "\n\n"
+        for bm in bookmarks[:20]:
+            name = bm.get('nickname') or bm['first_name']
+            text += f"ID {bm['id']}: {bm['name']} (от {name})\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bookmarks(update, context)
     
     # ===== ЗАКЛАДКИ =====
     async def cmd_add_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7640,6 +7877,181 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text += f"\n\n{s.cmd('закладка [ID]', 'показать закладку')}"
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        # ===== ТАЙМЕРЫ =====
+    async def cmd_add_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /addtimer 30м /ping"))
+            return
+        
+        time_str = context.args[0]
+        command = " ".join(context.args[1:])
+        
+        minutes = parse_time(time_str)
+        if not minutes:
+            await update.message.reply_text(s.error("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        execute_at = datetime.now() + timedelta(minutes=minutes)
+        
+        timer_id = self.db.add_timer(chat_id, user_data['id'], execute_at, command)
+        
+        if not timer_id:
+            await update.message.reply_text(s.error("❌ Достигнут лимит таймеров в чате (макс. 5)"))
+            return
+        
+        await update.message.reply_text(
+            s.success(f"✅ Таймер #{timer_id} установлен на {execute_at.strftime('%d.%m.%Y %H:%M')}")
+        )
+    
+    async def cmd_timers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("""
+            SELECT * FROM timers 
+            WHERE chat_id = ? AND status = 'pending' 
+            ORDER BY execute_at
+        """, (chat_id,))
+        timers = self.db.cursor.fetchall()
+        
+        if not timers:
+            await update.message.reply_text(s.info("В этом чате нет активных таймеров"))
+            return
+        
+        text = s.header("⏰ ТАЙМЕРЫ ЧАТА") + "\n\n"
+        for timer in timers:
+            timer = dict(timer)
+            execute_at = datetime.fromisoformat(timer['execute_at']).strftime('%d.%m.%Y %H:%M')
+            text += f"#{timer['id']} — {execute_at}\n   Команда: {timer['command']}\n\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ID таймера: /removetimer 1"))
+            return
+        
+        try:
+            timer_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ ID должен быть числом"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT user_id FROM timers WHERE id = ? AND chat_id = ?", (timer_id, chat_id))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(s.error("❌ Таймер не найден"))
+            return
+        
+        if row[0] != user_data['id'] and user_data['rank'] < 2:
+            await update.message.reply_text(s.error("❌ У вас нет прав на удаление этого таймера"))
+            return
+        
+        self.db.cursor.execute("UPDATE timers SET status = 'cancelled' WHERE id = ?", (timer_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ Таймер #{timer_id} удалён"))
+
+        # ===== НАГРАДЫ =====
+    async def cmd_give_award(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 3:
+            await update.message.reply_text(s.error("❌ Использование: /giveaward 4 @user Текст"))
+            return
+        
+        try:
+            degree = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Степень должна быть числом от 1 до 8"))
+            return
+        
+        username = context.args[1].replace('@', '')
+        text = " ".join(context.args[2:])
+        
+        if degree < 1 or degree > 8:
+            await update.message.reply_text(s.error("❌ Степень должна быть от 1 до 8"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        if degree > user_data['rank'] and user_data['rank'] < 8:
+            await update.message.reply_text(s.error(f"❌ Ваш ранг позволяет выдавать только степени до {user_data['rank']}"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        award_id = self.db.give_award(update.effective_chat.id, target['id'], user_data['id'], degree, text)
+        
+        await update.message.reply_text(s.success(f"✅ Награда #{award_id} степени {degree} выдана {target['first_name']}!"))
+    
+    async def cmd_awards(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        username = None
+        if context.args:
+            username = context.args[0].replace('@', '')
+        
+        if username:
+            target = self.db.get_user_by_username(username)
+        else:
+            target = self.db.get_user(update.effective_user.id)
+        
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        awards = self.db.get_user_awards(target['id'], update.effective_chat.id)
+        
+        if not awards:
+            name = target.get('nickname') or target['first_name']
+            await update.message.reply_text(s.info(f"У {name} нет наград"))
+            return
+        
+        name = target.get('nickname') or target['first_name']
+        text = s.header(f"🏅 НАГРАДЫ: {name}") + "\n\n"
+        
+        for award in awards:
+            date = datetime.fromisoformat(award['awarded_at']).strftime('%d.%m.%Y')
+            text += f"• Степень {award['degree']} — {award['text']}\n"
+            text += f"  От {award['awarded_by_name']}, {date}\n\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_award(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /removeaward 123 @user"))
+            return
+        
+        try:
+            award_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ ID награды должен быть числом"))
+            return
+        
+        username = context.args[1].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 2:
+            await update.message.reply_text(s.error("❌ Недостаточно прав для снятия наград"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        self.db.cursor.execute("DELETE FROM awards WHERE id = ? AND chat_id = ?", (award_id, update.effective_chat.id))
+        self.db.conn.commit()
+        
+        if self.db.cursor.rowcount > 0:
+            await update.message.reply_text(s.success(f"✅ Награда #{award_id} снята"))
+        else:
+            await update.message.reply_text(s.error("❌ Награда не найдена"))
     
     async def cmd_my_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Мои закладки (русская команда)"""
@@ -8011,6 +8423,242 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         
         await update.message.reply_text(s.error("❌ Неверный формат команды"))
+
+        # ===== ГОЛОСОВАНИЕ ЗА БАН =====
+    async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("❌ Использование: /banvote @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        required_votes = 5
+        min_rank = 0
+        
+        if len(context.args) >= 3:
+            try:
+                required_votes = int(context.args[1])
+                min_rank = int(context.args[2])
+            except:
+                pass
+        
+        vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
+                InlineKeyboardButton("❌ ПРОТИВ", callback_data=f"vote_against_{vote_id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            f"{s.header('🗳 ГОЛОСОВАНИЕ ЗА БАН')}\n\n"
+            f"Цель: {target['first_name']}\n"
+            f"Требуется голосов: {required_votes}\n"
+            f"Голосуйте!",
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_stop_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /stopvote @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text(s.error("❌ Активное голосование не найдено"))
+            return
+        
+        vote = dict(vote)
+        
+        if vote['created_by'] != user_data['id'] and user_data['rank'] < 3:
+            await update.message.reply_text(s.error("❌ У вас нет прав на остановку этого голосования"))
+            return
+        
+        self.db.cursor.execute("UPDATE ban_votes SET status = 'stopped' WHERE id = ?", (vote['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success("✅ Голосование остановлено"))
+    
+    async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("❌ Укажите пользователя: /voteinfo @user"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text(s.error("❌ Активное голосование не найдено"))
+            return
+        
+        vote = dict(vote)
+        
+        text = (
+            s.header("🗳 ИНФОРМАЦИЯ О ГОЛОСОВАНИИ") + "\n\n"
+            f"Цель: {target['first_name']}\n"
+            f"Требуется голосов: {vote['required_votes']}\n"
+            f"Голосов ЗА: {vote['votes_for']}\n"
+            f"Голосов ПРОТИВ: {vote['votes_against']}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_vote_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND status = 'active'", (chat_id,))
+        votes = self.db.cursor.fetchall()
+        
+        if not votes:
+            await update.message.reply_text(s.info("Нет активных голосований"))
+            return
+        
+        text = s.header("🗳 АКТИВНЫЕ ГОЛОСОВАНИЯ") + "\n\n"
+        for vote in votes:
+            vote = dict(vote)
+            target = self.db.get_user_by_id(vote['target_id'])
+            target_name = target['first_name'] if target else "Неизвестно"
+            text += f"• {target_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        # ===== КОД ЧАТА =====
+    async def cmd_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT chat_code FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(s.error("❌ Чат не привязан. Используйте !привязать"))
+            return
+        
+        await update.message.reply_text(f"🔑 Код чата: `{row[0]}`", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_change_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("❌ Укажите новый код: /changecode x5g7k9"))
+            return
+        
+        new_code = context.args[0]
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("❌ Недостаточно прав"))
+            return
+        
+        if len(new_code) < 3 or len(new_code) > 10:
+            await update.message.reply_text(s.error("❌ Код должен быть от 3 до 10 символов"))
+            return
+        
+        self.db.cursor.execute("SELECT chat_id FROM chat_settings WHERE chat_code = ?", (new_code,))
+        if self.db.cursor.fetchone():
+            await update.message.reply_text(s.error("❌ Этот код уже занят"))
+            return
+        
+        self.db.cursor.execute("UPDATE chat_settings SET chat_code = ? WHERE chat_id = ?", (new_code, chat_id))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ Код чата изменён на `{new_code}`"))
+    
+    async def cmd_bind_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            await update.message.reply_text(s.error("❌ Эта команда работает только в группах"))
+            return
+        
+        chat_id = update.effective_chat.id
+        chat_title = update.effective_chat.title
+        
+        chat_code = hashlib.md5(f"{chat_id}_{random.randint(1000,9999)}".encode()).hexdigest()[:8]
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, chat_name, chat_code)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET chat_code = excluded.chat_code
+        ''', (chat_id, chat_title, chat_code))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(
+            f"{s.success('✅ Чат привязан!')}\n\n"
+            f"Код чата: `{chat_code}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ===== КУБЫШКА =====
+    async def cmd_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT treasury_neons, treasury_glitches FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(s.error("❌ Настройки чата не найдены"))
+            return
+        
+        neons, glitches = row[0], row[1]
+        
+        text = (
+            s.header("💰 КУБЫШКА ЧАТА") + "\n\n"
+            f"{s.stat('Неонов', f'{neons} 💜')}\n"
+            f"{s.stat('Глитчей', f'{glitches} 🖥')}\n\n"
+            f"{s.cmd('/treasurywithdraw', 'вывести неоны в кошелёк')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_treasury_withdraw(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("❌ Недостаточно прав"))
+            return
+        
+        self.db.cursor.execute("SELECT treasury_neons FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row or row[0] == 0:
+            await update.message.reply_text(s.error("❌ В кубышке нет неонов"))
+            return
+        
+        neons = row[0]
+        
+        self.db.add_neons(user_data['id'], neons)
+        self.db.cursor.execute("UPDATE chat_settings SET treasury_neons = 0 WHERE chat_id = ?", (chat_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(s.success(f"✅ {neons} 💜 переведены в ваш кошелёк!"))
     
     # ===== ГОЛОСОВАНИЕ ЗА БАН =====
     async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -9692,35 +10340,6 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
                     return
             except Exception as e:
                 logger.error(f"AI response error: {e}")
-        
-        # AI отвечает если:
-        # 1. Это личка (чат с ботом) - всегда отвечает
-        # 2. В группе - только если сообщение начинается со слова "Спектр"
-        should_respond = False
-        
-        if chat.type == "private":
-            should_respond = True
-        elif message_text.lower().startswith("спектр"):
-            message_text = message_text[6:].strip()
-            if not message_text:
-                message_text = "Привет"
-            should_respond = True
-        
-        if should_respond and self.ai and self.ai.is_available:
-            try:
-                await update.message.chat.send_action(action="typing")
-                response = await self.ai.get_response(user.id, message_text, user.first_name)
-                if response:
-                    await update.message.reply_text(f"🤖 Спектр: {response}", parse_mode=ParseMode.MARKDOWN)
-                    return
-            except Exception as e:
-                logger.error(f"AI response error: {e}")
-        
-        # Если AI не сработал, но это личка, отправляем подсказку
-        if chat.type == "private" and not should_respond:
-            await update.message.reply_text(
-                "🤖 Я здесь! Используй /help для списка команд или просто напиши мне что-нибудь."
-            )
     
     async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
