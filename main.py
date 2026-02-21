@@ -3469,6 +3469,3886 @@ class SpectrumBot:
         except Exception as e:
             await update.message.reply_text(f"❌ Ошибка проверки: {e}")
 
+        # ===== ТРИГГЕРЫ =====
+    async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить триггер"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        text = text[9:].strip()
+        if "=" not in text:
+            await update.message.reply_text("❌ Формат: +триггер слово = действие")
+            return
+        
+        word, action = text.split("=", 1)
+        word = word.strip().lower()
+        action = action.strip()
+        
+        action_parts = action.split()
+        action_type = action_parts[0].lower()
+        action_value = action_parts[1] if len(action_parts) > 1 else None
+        
+        if action_type not in ["delete", "mute", "warn", "ban"]:
+            await update.message.reply_text("❌ Действие должно быть: delete, mute, warn, ban")
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO triggers (chat_id, word, action, action_value, created_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (update.effective_chat.id, word, action_type, action_value, user_data['id']))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ Триггер добавлен: {word} -> {action}")
+    
+    async def cmd_remove_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить триггер"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        trigger_id = text[9:].strip()
+        if not trigger_id.isdigit():
+            await update.message.reply_text("❌ Укажите ID триггера")
+            return
+        
+        self.db.cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", 
+                             (int(trigger_id), update.effective_chat.id))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Триггер удален")
+    
+    async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список триггеров в чате"""
+        self.db.cursor.execute("SELECT id, word, action, action_value FROM triggers WHERE chat_id = ?", 
+                             (update.effective_chat.id,))
+        triggers = self.db.cursor.fetchall()
+        
+        if not triggers:
+            await update.message.reply_text("ℹ️ В этом чате нет триггеров")
+            return
+        
+        text = "🔹 **ТРИГГЕРЫ ЧАТА**\n\n"
+        for trigger in triggers:
+            action_text = trigger[2]
+            if trigger[3]:
+                action_text += f" {trigger[3]}"
+            text += f"ID: {trigger[0]} | {trigger[1]} → {action_text}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def _toggle_setting(self, update: Update, setting: str):
+        """Включить/выключить настройку"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите on или off")
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute(f'''
+            INSERT INTO chat_settings (chat_id, {setting})
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+        
+        status = "включен" if state else "выключен"
+        names = {"antimat": "Антимат", "antilink": "Антиссылки", "antiflood": "Антифлуд"}
+        await update.message.reply_text(f"✅ {names.get(setting, setting)} {status}")
+    
+    async def cmd_set_antimat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antimat")
+    
+    async def cmd_set_antilink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antilink")
+    
+    async def cmd_set_antiflood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antiflood")
+    
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистить сообщения"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите количество: чистка 50")
+            return
+        
+        try:
+            count = int(parts[1])
+            if count > 100:
+                count = 100
+        except:
+            await update.message.reply_text("❌ Количество должно быть числом")
+            return
+        
+        try:
+            await update.message.delete()
+            messages = []
+            async for msg in context.bot.get_chat_history(update.effective_chat.id, limit=count):
+                messages.append(msg.message_id)
+            
+            if messages:
+                await context.bot.delete_messages(update.effective_chat.id, messages)
+                await context.bot.send_message(
+                    update.effective_chat.id, 
+                    f"✅ Удалено {len(messages)} сообщений",
+                    disable_notification=True
+                )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+    
+    async def cmd_clear_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистить сообщения пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        username = text.replace('чистка от', '').strip().replace('@', '')
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        await update.message.reply_text(f"🔄 Удаляю сообщения {target['first_name']}...")
+    
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить приветствие"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        welcome_text = update.message.text[12:].strip()
+        if not welcome_text:
+            await update.message.reply_text("❌ Укажите текст приветствия")
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, welcome)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET welcome = excluded.welcome
+        ''', (update.effective_chat.id, welcome_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Приветствие установлено")
+    
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить правила"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        rules_text = update.message.text[9:].strip()
+        if not rules_text:
+            await update.message.reply_text("❌ Укажите текст правил")
+            return
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, rules)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET rules = excluded.rules
+        ''', (update.effective_chat.id, rules_text))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Правила установлены")
+    
+    async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать правила"""
+        self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (update.effective_chat.id,))
+        row = self.db.cursor.fetchone()
+        
+        if row and row[0]:
+            await update.message.reply_text(f"📜 **Правила чата:**\n\n{row[0]}")
+        else:
+            await update.message.reply_text("ℹ️ В этом чате ещё не установлены правила")
+    
+    async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Включить/выключить капчу"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+        
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите on или off")
+            return
+        
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, captcha)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET captcha = excluded.captcha
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+        
+        status = "включена" if state else "выключена"
+        await update.message.reply_text(f"✅ Капча {status}")
+
+        # ===== ЭКОНОМИКА =====
+    async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать баланс пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        vip_status = "✅ Активен" if self.db.is_vip(user_data['id']) else "❌ Не активен"
+        vip_until = ""
+        if self.db.is_vip(user_data['id']):
+            vip_until = self.db.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_data['id'],)).fetchone()[0]
+            vip_until = datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
+        
+        premium_status = "✅ Активен" if self.db.is_premium(user_data['id']) else "❌ Не активен"
+        
+        text = (
+            f"💰 **Кошелёк пользователя {user.first_name}**\n\n"
+            f"💰 Монеты: {user_data['coins']:,}\n"
+            f"💜 Неоны: {user_data['neons']:,}\n"
+            f"🖥 Глитчи: {user_data['glitches']:,}\n\n"
+            f"💎 VIP статус: {vip_status}\n"
+            f"{f'📅 VIP до: {vip_until}' if self.db.is_vip(user_data['id']) else ''}\n"
+            f"👑 PREMIUM: {premium_status}\n\n"
+            f"🔥 Стрик: {user_data['daily_streak']} дней\n"
+            f"🎁 /daily — доступно"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать баланс монет"""
+        await self.cmd_balance(update, context)
+    
+    async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Перевести монеты другому пользователю"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /pay @user сумма")
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            amount = int(context.args[1])
+        except:
+            await update.message.reply_text("❌ Сумма должна быть числом")
+            return
+        
+        if amount <= 0:
+            await update.message.reply_text("❌ Сумма должна быть больше 0")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < amount:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text("❌ Нельзя перевести самому себе")
+            return
+        
+        self.db.add_coins(user_data['id'], -amount)
+        self.db.add_coins(target['id'], amount)
+        
+        commission_text = ""
+        if not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+            self.db.add_coins(user_data['id'], -commission)
+            commission_text = f"\n💸 Комиссия: {commission} (5%)"
+        
+        target_name = target.get('nickname') or target['first_name']
+        user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
+        
+        await update.message.reply_text(
+            f"💸 **ПЕРЕВОД**\n\n"
+            f"👤 **Получатель:** {target_name}\n"
+            f"💰 **Сумма:** {amount} 💰{commission_text}\n\n"
+            f"✅ Перевод выполнен!"
+        )
+        self.db.log_action(user_data['id'], 'pay', f"{amount}💰 -> {target['id']}")
+    
+    async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Ежедневный бонус"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if user_data.get('last_daily'):
+            last = datetime.fromisoformat(user_data['last_daily'])
+            if (datetime.now() - last).seconds < DAILY_COOLDOWN:
+                remain = DAILY_COOLDOWN - (datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(f"⏳ Бонус через {hours}ч {minutes}м")
+                return
+        
+        streak = self.db.add_daily_streak(user_data['id'])
+        
+        coins = random.randint(100, 300)
+        neons = random.randint(1, 5)
+        exp = random.randint(20, 60)
+        energy = 20
+        
+        coins = int(coins * (1 + min(streak, 30) * 0.05))
+        neons = int(neons * (1 + min(streak, 30) * 0.05))
+        exp = int(exp * (1 + min(streak, 30) * 0.05))
+        
+        if self.db.is_vip(user_data['id']):
+            coins = int(coins * 1.5)
+            neons = int(neons * 1.5)
+            exp = int(exp * 1.5)
+            energy = int(energy * 1.5)
+        if self.db.is_premium(user_data['id']):
+            coins = int(coins * 2)
+            neons = int(neons * 2)
+            exp = int(exp * 2)
+            energy = int(energy * 2)
+        
+        self.db.add_coins(user_data['id'], coins)
+        self.db.add_neons(user_data['id'], neons)
+        self.db.add_exp(user_data['id'], exp)
+        self.db.add_energy(user_data['id'], energy)
+        
+        await update.message.reply_text(
+            f"🎁 **Ежедневный бонус**\n\n"
+            f"💰 Монеты: +{coins}\n"
+            f"💜 Неоны: +{neons}\n"
+            f"🔥 Стрик: {streak} дней\n"
+            f"✨ Опыт: +{exp}\n"
+            f"⚡️ Энергия: +{energy}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + coins} 💰\n"
+            f"💜 Новые неоны: {user_data['neons'] + neons}\n\n"
+            f"⏳ Следующий бонус через: 24 часа"
+        )
+        self.db.log_action(user_data['id'], 'daily', f'+{coins}💰 +{neons}💜')
+    
+    async def cmd_streak(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать текущий стрик"""
+        user_data = self.db.get_user(update.effective_user.id)
+        streak = user_data.get('daily_streak', 0)
+        
+        await update.message.reply_text(
+            f"🔥 **ТЕКУЩИЙ СТРИК**\n\n"
+            f"📆 Дней подряд: {streak}\n"
+            f"📈 Множитель: x{1 + min(streak, 30) * 0.05:.2f}\n\n"
+            f"ℹ️ Чем больше стрик, тем выше бонус!"
+        )
+    
+    async def cmd_shop(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Магазин"""
+        text = """
+🛍 **МАГАЗИН**
+
+💊 **ЗЕЛЬЯ**
+• `/buy зелье здоровья` — 50 💰 (❤️+30)
+• `/buy большое зелье` — 100 💰 (❤️+70)
+
+⚔️ **ОРУЖИЕ**
+• `/buy меч` — 200 💰 (⚔️+10)
+• `/buy легендарный меч` — 500 💰 (⚔️+30)
+
+⚡️ **ЭНЕРГИЯ**
+• `/buy энергетик` — 30 💰 (⚡️+20)
+• `/buy батарейка` — 80 💰 (⚡️+50)
+
+💎 **ПРИВИЛЕГИИ**
+• /vip — VIP (5000 💰 / 30 дней)
+• /premium — PREMIUM (15000 💰 / 30 дней)
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_buy(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить предмет в магазине"""
+        if not context.args:
+            await update.message.reply_text("❌ Что купить? /buy [предмет]")
+            return
+        
+        item = " ".join(context.args).lower()
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        items = {
+            "зелье здоровья": {"price": 50, "heal": 30},
+            "большое зелье": {"price": 100, "heal": 70},
+            "меч": {"price": 200, "damage": 10},
+            "легендарный меч": {"price": 500, "damage": 30},
+            "энергетик": {"price": 30, "energy": 20},
+            "батарейка": {"price": 80, "energy": 50}
+        }
+        
+        if item not in items:
+            await update.message.reply_text("❌ Такого товара нет в магазине")
+            return
+        
+        item_data = items[item]
+        
+        if user_data['coins'] < item_data['price']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно {item_data['price']} 💰")
+            return
+        
+        self.db.add_coins(user_data['id'], -item_data['price'])
+        
+        effects = []
+        if 'heal' in item_data:
+            new_health = self.db.heal(user_data['id'], item_data['heal'])
+            effects.append(f"❤️ Здоровье +{item_data['heal']} (теперь {new_health})")
+        
+        if 'damage' in item_data:
+            new_damage = user_data['damage'] + item_data['damage']
+            self.db.update_user(user_data['id'], damage=new_damage)
+            effects.append(f"⚔️ Урон +{item_data['damage']} (теперь {new_damage})")
+        
+        if 'energy' in item_data:
+            new_energy = self.db.add_energy(user_data['id'], item_data['energy'])
+            effects.append(f"⚡️ Энергия +{item_data['energy']} (теперь {new_energy})")
+        
+        effects_text = "\n".join([f"• {e}" for e in effects])
+        
+        await update.message.reply_text(
+            f"✅ **Покупка совершена!**\n\n"
+            f"📦 **Предмет:** {item}\n"
+            f"{effects_text}"
+        )
+        
+        self.db.log_action(user_data['id'], 'buy', item)
+    
+    async def cmd_vip_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о VIP статусе"""
+        await update.message.reply_text(
+            f"💎 **VIP СТАТУС**\n\n"
+            f"💰 Цена: {VIP_PRICE} 💰 / {VIP_DAYS} дней\n\n"
+            f"⚔️ Урон в битвах +20%\n"
+            f"💰 Награда с боссов +50%\n"
+            f"🎁 Ежедневный бонус +50%\n"
+            f"💎 Алмазы +1 в день\n\n"
+            f"/buyvip — купить VIP"
+        )
+    
+    async def cmd_premium_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о PREMIUM статусе"""
+        await update.message.reply_text(
+            f"👑 **PREMIUM СТАТУС**\n\n"
+            f"💰 Цена: {PREMIUM_PRICE} 💰 / {PREMIUM_DAYS} дней\n\n"
+            f"⚔️ Урон в битвах +50%\n"
+            f"💰 Награда с боссов +100%\n"
+            f"🎁 Ежедневный бонус +100%\n"
+            f"💎 Алмазы +3 в день\n"
+            f"🚫 Игнорирование спам-фильтра\n\n"
+            f"/buypremium — купить PREMIUM"
+        )
+    
+    async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить VIP статус"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < VIP_PRICE:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно {VIP_PRICE} 💰")
+            return
+        
+        if self.db.is_vip(user_data['id']):
+            await update.message.reply_text("❌ VIP статус уже активен")
+            return
+        
+        self.db.add_coins(user_data['id'], -VIP_PRICE)
+        until = self.db.set_vip(user_data['id'], VIP_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        await update.message.reply_text(
+            f"✨ **VIP СТАТУС АКТИВИРОВАН**\n\n"
+            f"📅 Срок: до {date_str}\n\n"
+            f"ℹ️ Спасибо за поддержку!"
+        )
+        self.db.log_action(user_data['id'], 'buy_vip')
+    
+    async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить PREMIUM статус"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['coins'] < PREMIUM_PRICE:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно {PREMIUM_PRICE} 💰")
+            return
+        
+        if self.db.is_premium(user_data['id']):
+            await update.message.reply_text("❌ PREMIUM статус уже активен")
+            return
+        
+        self.db.add_coins(user_data['id'], -PREMIUM_PRICE)
+        until = self.db.set_premium(user_data['id'], PREMIUM_DAYS)
+        date_str = until.strftime("%d.%m.%Y")
+        
+        await update.message.reply_text(
+            f"✨ **PREMIUM СТАТУС АКТИВИРОВАН**\n\n"
+            f"📅 Срок: до {date_str}\n\n"
+            f"ℹ️ Спасибо за поддержку!"
+        )
+        self.db.log_action(user_data['id'], 'buy_premium')
+
+        # ===== НОВАЯ ЭКОНОМИКА (НЕОНЫ, ГЛИТЧИ) =====
+    async def cmd_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Просмотр баланса неонов"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        await update.message.reply_text(
+            f"💜 **МОИ НЕОНЫ**\n\n"
+            f"💜 Баланс: {user_data['neons']}\n"
+            f"🖥 В глитчах: {user_data['glitches']}\n\n"
+            f"📝 **Команды:**\n"
+            f"• /transfer @user 100 — передать неоны\n"
+            f"• /exchange 100 — обменять глитчи на неоны\n"
+            f"• /farm — ферма глитчей"
+        )
+    
+    async def cmd_glitches(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Просмотр баланса глитчей"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        neons_from_glitches = user_data['glitches'] // NEON_PRICE
+        
+        await update.message.reply_text(
+            f"🖥 **МОИ ГЛИТЧИ**\n\n"
+            f"🖥 Баланс: {user_data['glitches']}\n"
+            f"💜 Можно обменять: {neons_from_glitches}\n\n"
+            f"📝 **Команды:**\n"
+            f"• /exchange 100 — обменять глитчи на неоны\n"
+            f"• /farm — ферма глитчей"
+        )
+    
+    async def cmd_farm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Ферма глитчей"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        last_farm = user_data.get('last_farm')
+        if last_farm:
+            last = datetime.fromisoformat(last_farm)
+            if (datetime.now() - last).seconds < GLITCH_FARM_COOLDOWN:
+                remain = GLITCH_FARM_COOLDOWN - (datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(f"⏳ Ферма будет доступна через {hours}ч {minutes}м")
+                return
+        
+        glitches_earned = random.randint(10, 50)
+        
+        if self.db.is_vip(user_data['id']):
+            glitches_earned = int(glitches_earned * 1.2)
+        if self.db.is_premium(user_data['id']):
+            glitches_earned = int(glitches_earned * 1.3)
+        
+        self.db.add_glitches(user_data['id'], glitches_earned)
+        self.db.update_user(user_data['id'], last_farm=datetime.now().isoformat())
+        
+        await update.message.reply_text(
+            f"🖥 **ФЕРМА ГЛИТЧЕЙ**\n\n"
+            f"✅ Вы успешно нафармили!\n"
+            f"📦 Добыто: {glitches_earned} 🖥\n\n"
+            f"💰 Теперь у вас: {user_data['glitches'] + glitches_earned} 🖥\n\n"
+            f"⏳ Следующая ферма через 4 часа"
+        )
+        
+        self.db.check_glitch_achievements(user_data['id'])
+    
+    async def cmd_transfer_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Перевод неонов другому пользователю"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /transfer @user 100")
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            amount = int(context.args[1])
+        except:
+            await update.message.reply_text("❌ Сумма должна быть числом")
+            return
+        
+        if amount <= 0:
+            await update.message.reply_text("❌ Сумма должна быть больше 0")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['neons'] < amount:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Баланс: {user_data['neons']} 💜")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text("❌ Нельзя перевести самому себе")
+            return
+        
+        commission = 0
+        if not self.db.is_vip(user_data['id']) and not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+        
+        self.db.transfer_neons(user_data['id'], target['id'], amount, commission)
+        
+        target_name = target.get('nickname') or target['first_name']
+        user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
+        
+        text = f"💜 **ПЕРЕВОД НЕОНОВ**\n\n"
+        text += f"👤 **Получатель:** {target_name}\n"
+        text += f"💜 **Сумма:** {amount}\n"
+        
+        if commission > 0:
+            text += f"💸 **Комиссия:** {commission} (5%)\n"
+        
+        text += f"\n✅ Перевод выполнен!"
+        
+        await update.message.reply_text(text)
+        self.db.log_action(user_data['id'], 'transfer_neons', f"{amount}💜 -> {target['id']}")
+    
+    async def cmd_exchange(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обмен глитчей на неоны"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите количество глитчей для обмена")
+            return
+        
+        try:
+            glitches = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Количество должно быть числом")
+            return
+        
+        if glitches < NEON_PRICE:
+            await update.message.reply_text(f"❌ Минимум для обмена: {NEON_PRICE} глитчей")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['glitches'] < glitches:
+            await update.message.reply_text(f"❌ Недостаточно глитчей. Баланс: {user_data['glitches']} 🖥")
+            return
+        
+        neons = glitches // NEON_PRICE
+        used_glitches = neons * NEON_PRICE
+        remainder = glitches - used_glitches
+        
+        self.db.add_glitches(user_data['id'], -used_glitches)
+        self.db.add_neons(user_data['id'], neons)
+        
+        text = f"💱 **ОБМЕН ВАЛЮТ**\n\n"
+        text += f"📦 Обменено: {used_glitches} 🖥 → {neons} 💜\n"
+        text += f"💰 Остаток глитчей: {user_data['glitches'] - used_glitches + remainder} 🖥\n"
+        text += f"💜 Новый баланс неонов: {user_data['neons'] + neons}\n\n"
+        text += f"✅ Обмен выполнен!"
+        
+        if remainder > 0:
+            text += f"\nℹ️ Остаток {remainder} глитчей не обменян (нужно {NEON_PRICE} для 1 неона)"
+        
+        await update.message.reply_text(text)
+
+        # ===== ИГРЫ =====
+    async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Меню игр"""
+        text = """
+🎮 **ИГРЫ**
+
+🔫 /rr [ставка] — Русская рулетка
+🎲 /dicebet [ставка] — Кости
+🎰 /slots [ставка] — Слоты
+✊ /rps — Камень-ножницы-бумага
+💣 /saper [ставка] — Сапёр
+🔢 /guess [ставка] — Угадай число
+🐂 /bulls [ставка] — Быки и коровы
+
+💰 Баланс: /balance
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Подбросить монетку"""
+        result = random.choice(["Орёл", "Решка"])
+        await update.message.reply_text(f"🪙 **МОНЕТКА**\n\n• Выпало: {result}")
+    
+    async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Бросить кубик"""
+        result = random.randint(1, 6)
+        await update.message.reply_text(f"🎲 **КУБИК**\n\n• Выпало: {result}")
+    
+    async def cmd_dice_bet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Кости на деньги"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ставку: /dicebet 100")
+            return
+        
+        try:
+            bet = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Ставка должна быть числом")
+            return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text("❌ Ставка должна быть больше 0")
+            return
+        
+        dice1 = random.randint(1, 6)
+        dice2 = random.randint(1, 6)
+        total = dice1 + dice2
+        
+        win_multiplier = 1
+        if total in [7, 11]:
+            win_multiplier = 2
+            self.db.update_user(user_data['id'], dice_wins=user_data.get('dice_wins', 0) + 1)
+            result_text = "🎉 ВЫИГРЫШ!"
+        elif total in [2, 3, 12]:
+            win_multiplier = 0
+            self.db.update_user(user_data['id'], dice_losses=user_data.get('dice_losses', 0) + 1)
+            result_text = "💀 ПРОИГРЫШ!"
+        else:
+            win_multiplier = 1
+            result_text = "🔄 НИЧЬЯ!"
+        
+        win_amount = bet * win_multiplier if win_multiplier > 0 else -bet
+        
+        if win_multiplier > 0:
+            self.db.add_coins(user_data['id'], win_amount - bet if win_multiplier > 1 else 0)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+        
+        text = (
+            f"🎲 **КОСТИ**\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"🎲 {dice1} + {dice2} = {total}\n\n"
+            f"{result_text}\n"
+        )
+        
+        if win_multiplier > 1:
+            text += f"+{win_amount - bet} 💰\n"
+        elif win_multiplier == 0:
+            text += f"-{bet} 💰\n"
+        else:
+            text += f"Ставка возвращена\n"
+        
+        text += f"\n💰 Новый баланс: {user_data['coins'] + (win_amount - bet if win_multiplier > 1 else -bet if win_multiplier == 0 else 0)} 💰"
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Рулетка"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        choice = "red"
+        
+        if context.args:
+            try:
+                bet = int(context.args[0])
+                if len(context.args) > 1:
+                    choice = context.args[1].lower()
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text("❌ Ставка должна быть больше 0")
+            return
+        
+        num = random.randint(0, 36)
+        red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
+        
+        if num == 0:
+            color = "green"
+        elif num in red_numbers:
+            color = "red"
+        else:
+            color = "black"
+        
+        win = False
+        multiplier = 0
+        
+        if choice.isdigit() and int(choice) == num:
+            win = True
+            multiplier = 36
+        elif choice in ["red", "black", "green"] and choice == color:
+            win = True
+            multiplier = 2 if choice in ["red", "black"] else 36
+        
+        if win:
+            win_amount = bet * multiplier
+            self.db.add_coins(user_data['id'], win_amount)
+            self.db.update_user(user_data['id'], casino_wins=user_data.get('casino_wins', 0) + 1)
+            result = f"🎉 ВЫИГРЫШ! +{win_amount} 💰"
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], casino_losses=user_data.get('casino_losses', 0) + 1)
+            result = f"💀 ПРОИГРЫШ! -{bet} 💰"
+        
+        await update.message.reply_text(
+            f"🎰 **РУЛЕТКА**\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"🎯 Выбрано: {choice}\n\n"
+            f"🎰 Выпало: {num} {color}\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win_amount if win else -bet)} 💰"
+        )
+        self.db.log_action(user_data['id'], 'roulette', f"{'win' if win else 'lose'} {bet}")
+    
+    async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Слоты"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text("❌ Ставка должна быть больше 0")
+            return
+        
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "⭐️"]
+        spin = [random.choice(symbols) for _ in range(3)]
+        
+        if len(set(spin)) == 1:
+            if spin[0] == "7️⃣":
+                win = bet * 50
+            elif spin[0] == "💎":
+                win = bet * 30
+            elif spin[0] == "⭐️":
+                win = bet * 20
+            else:
+                win = bet * 10
+            result = f"🎉 ДЖЕКПОТ! +{win} 💰"
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        elif len(set(spin)) == 2:
+            win = bet * 2
+            result = f"🎉 ВЫИГРЫШ! +{win} 💰"
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        else:
+            win = 0
+            result = f"💀 ПРОИГРЫШ! -{bet} 💰"
+            self.db.update_user(user_data['id'], slots_losses=user_data.get('slots_losses', 0) + 1)
+        
+        if win > 0:
+            self.db.add_coins(user_data['id'], win)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"🎰 **СЛОТЫ**\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"[ {' | '.join(spin)} ]\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win if win > 0 else -bet)} 💰"
+        )
+    
+    async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Камень-ножницы-бумага"""
+        text = """
+✊ **КАМЕНЬ-НОЖНИЦЫ-БУМАГА**
+
+Выберите жест (напишите цифру):
+
+1️⃣ 🪨 Камень
+2️⃣ ✂️ Ножницы
+3️⃣ 📄 Бумага
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+        context.user_data['awaiting_rps'] = True
+    
+    async def cmd_russian_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Русская рулетка"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                await update.message.reply_text("❌ Ставка должна быть числом")
+                return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text("❌ Ставка должна быть больше 0")
+            return
+        
+        chamber = random.randint(1, 6)
+        shot = random.randint(1, 6)
+        
+        await asyncio.sleep(2)
+        
+        if chamber == shot:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], rr_losses=user_data.get('rr_losses', 0) + 1)
+            result_text = "💥 *Бах!* Выстрел..."
+            win_text = f"💀 ВЫ ПРОИГРАЛИ! -{bet} 💰"
+        else:
+            win = bet * 5
+            self.db.add_coins(user_data['id'], win)
+            self.db.update_user(user_data['id'], rr_wins=user_data.get('rr_wins', 0) + 1)
+            result_text = "🔫 *Щёлк...* В этот раз повезло!"
+            win_text = f"🎉 ВЫ ВЫИГРАЛИ! +{win} 💰"
+        
+        await update.message.reply_text(
+            f"🔫 **РУССКАЯ РУЛЕТКА**\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"{result_text}\n\n"
+            f"{win_text}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win if chamber != shot else -bet)} 💰"
+        )
+        self.db.log_action(user_data['id'], 'rr', f"{'win' if chamber != shot else 'lose'} {bet}")
+    
+    async def cmd_saper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сапёр"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        field = [['⬜️' for _ in range(3)] for _ in range(3)]
+        mine_x, mine_y = random.randint(0, 2), random.randint(0, 2)
+        
+        game_id = f"saper_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'field': field,
+            'mine_x': mine_x,
+            'mine_y': mine_y,
+            'bet': bet,
+            'opened': 0
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        keyboard = []
+        for i in range(3):
+            row = []
+            for j in range(3):
+                cell_num = i * 3 + j + 1
+                row.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+            keyboard.append(row)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"💣 **САПЁР**\n\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"🎯 Выберите клетку:\n\n"
+            f"ℹ️ Нажимайте на кнопки, чтобы открыть клетки",
+            reply_markup=reply_markup
+        )
+    
+    async def cmd_guess(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Угадай число"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        number = random.randint(1, 100)
+        game_id = f"guess_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': 0,
+            'max_attempts': 7,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"🔢 **УГАДАЙ ЧИСЛО**\n\n"
+            f"🎯 Я загадал число от 1 до 100\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"📊 Попыток: 7\n\n"
+            f"💬 Напиши свой вариант..."
+        )
+    
+    async def cmd_bulls(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Быки и коровы"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        digits = random.sample(range(10), 4)
+        number = ''.join(map(str, digits))
+        
+        game_id = f"bulls_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': [],
+            'max_attempts': 10,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"🐂 **БЫКИ И КОРОВЫ**\n\n"
+            f"🎯 Я загадал 4-значное число без повторов\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"📊 Попыток: 10\n"
+            f"🐂 Бык — цифра на своём месте\n"
+            f"🐄 Корова — цифра есть, но не на своём месте\n\n"
+            f"💬 Напиши свой вариант (4 цифры)..."
+        )
+
+        # ===== БОССЫ =====
+    async def cmd_bosses(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список боссов"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        bosses = self.db.get_bosses()
+        
+        if not bosses:
+            self.db.respawn_bosses()
+            bosses = self.db.get_bosses()
+        
+        text = "👾 **БОССЫ**\n\n"
+        
+        for i, boss in enumerate(bosses[:5]):
+            health_bar = self._progress_bar(boss['health'], boss['max_health'])
+            text += (
+                f"{i+1}. {boss['name']} (ур.{boss['level']})\n"
+                f"   ❤️ {health_bar}\n"
+                f"   ⚔️ Урон: {boss['damage']}\n"
+                f"   💰 Награда: {boss['reward_coins']} 💰, ✨ {boss['reward_exp']}\n"
+                f"   💜 Неоны: {boss['reward_neons']}, 🖥 Глитчи: {boss['reward_glitches']}\n\n"
+            )
+        
+        text += (
+            f"**ТВОИ ПОКАЗАТЕЛИ**\n"
+            f"❤️ Здоровье: {user_data['health']}/{user_data['max_health']}\n"
+            f"⚡️ Энергия: {user_data['energy']}/100\n"
+            f"⚔️ Урон: {user_data['damage']}\n"
+            f"👾 Боссов убито: {user_data['boss_kills']}\n\n"
+            f"📝 **Команды:**\n"
+            f"• /boss [ID] — атаковать босса\n"
+            f"• /regen — восстановить ❤️ и ⚡️"
+        )
+        
+        keyboard = []
+        for i, boss in enumerate(bosses[:5]):
+            status = "⚔️" if boss['is_alive'] else "💀"
+            keyboard.append([InlineKeyboardButton(
+                f"{status} {boss['name']} (❤️ {boss['health']}/{boss['max_health']})",
+                callback_data=f"boss_attack_{boss['id']}"
+            )])
+        
+        keyboard.append([InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")])
+        keyboard.append([InlineKeyboardButton("⚔️ Купить оружие", callback_data="boss_buy_weapon")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(text, reply_markup=reply_markup)
+    
+    def _progress_bar(self, current: int, total: int, length: int = 10) -> str:
+        """Прогресс-бар"""
+        filled = int((current / total) * length) if total > 0 else 0
+        bar = "█" * filled + "░" * (length - filled)
+        return f"`{bar}` {current}/{total}"
+    
+    async def cmd_boss_fight(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Атаковать босса"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажи ID босса: /boss 1")
+            return
+        
+        try:
+            boss_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Неверный ID")
+            return
+        
+        await self._process_boss_attack(update, context, user, user_data, boss_id, False)
+    
+    async def _process_boss_attack(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
+                                   user, user_data, boss_id: int, is_callback: bool = False):
+        """Общая логика атаки босса"""
+        boss = self.db.get_boss(boss_id)
+        
+        if not boss or not boss['is_alive']:
+            msg = "❌ Босс не найден или уже повержен"
+            if is_callback:
+                await update.callback_query.edit_message_text(msg)
+            else:
+                await update.message.reply_text(msg)
+            return
+        
+        if user_data['energy'] < 10:
+            msg = "❌ Недостаточно энергии. Используй /regen"
+            if is_callback:
+                await update.callback_query.edit_message_text(msg)
+            else:
+                await update.message.reply_text(msg)
+            return
+        
+        self.db.add_energy(user_data['id'], -10)
+        
+        damage_bonus = 1.0
+        if self.db.is_vip(user_data['id']):
+            damage_bonus += 0.2
+        if self.db.is_premium(user_data['id']):
+            damage_bonus += 0.3
+        
+        base_damage = user_data['damage'] * damage_bonus
+        player_damage = int(base_damage) + random.randint(-5, 5)
+        
+        crit = random.randint(1, 100) <= user_data['crit_chance']
+        if crit:
+            player_damage = int(player_damage * user_data['crit_multiplier'] / 100)
+            crit_text = "💥 КРИТИЧЕСКИЙ УДАР! "
+        else:
+            crit_text = ""
+        
+        boss_damage = boss['damage'] + random.randint(-5, 5)
+        armor_reduction = user_data['armor'] // 2
+        player_taken = max(1, boss_damage - armor_reduction)
+        
+        killed = self.db.damage_boss(boss_id, player_damage)
+        self.db.damage(user_data['id'], player_taken)
+        
+        total_damage = user_data.get('boss_damage', 0) + player_damage
+        self.db.update_user(user_data['id'], boss_damage=total_damage)
+        
+        text = f"⚔️ **БИТВА С БОССОМ**\n\n"
+        text += f"• {crit_text}Твой урон: {player_damage}\n"
+        text += f"• Урон босса: {player_taken}\n\n"
+        
+        if killed:
+            reward_coins = boss['reward_coins']
+            reward_exp = boss['reward_exp']
+            reward_neons = boss['reward_neons']
+            reward_glitches = boss['reward_glitches']
+            
+            if self.db.is_vip(user_data['id']):
+                reward_coins = int(reward_coins * 1.5)
+                reward_exp = int(reward_exp * 1.5)
+                reward_neons = int(reward_neons * 1.5)
+                reward_glitches = int(reward_glitches * 1.5)
+            if self.db.is_premium(user_data['id']):
+                reward_coins = int(reward_coins * 2)
+                reward_exp = int(reward_exp * 2)
+                reward_neons = int(reward_neons * 2)
+                reward_glitches = int(reward_glitches * 2)
+            
+            self.db.add_coins(user_data['id'], reward_coins)
+            self.db.add_neons(user_data['id'], reward_neons)
+            self.db.add_glitches(user_data['id'], reward_glitches)
+            leveled_up = self.db.add_exp(user_data['id'], reward_exp)
+            self.db.add_boss_kill(user_data['id'])
+            
+            text += f"✅ **ПОБЕДА!**\n"
+            text += f"• 💰 Монеты: +{reward_coins}\n"
+            text += f"• 💜 Неоны: +{reward_neons}\n"
+            text += f"• 🖥 Глитчи: +{reward_glitches}\n"
+            text += f"• ✨ Опыт: +{reward_exp}\n"
+            
+            if leveled_up:
+                text += f"✨ **УРОВЕНЬ ПОВЫШЕН!**\n"
+        else:
+            boss_info = self.db.get_boss(boss_id)
+            text += f"⚠️ Босс ещё жив!\n"
+            text += f"❤️ Осталось: {boss_info['health']} здоровья\n"
+        
+        if user_data['health'] <= player_taken:
+            self.db.heal(user_data['id'], 50)
+            text += f"\nℹ️ Ты погиб и воскрешён с 50❤️"
+        
+        user_data = self.db.get_user(user.id)
+        
+        text += f"\n• ❤️ Твое здоровье: {user_data['health']}/{user_data['max_health']}"
+        text += f"\n• ⚡️ Энергия: {user_data['energy']}/100"
+        
+        keyboard = [
+            [InlineKeyboardButton("⚔️ Атаковать снова", callback_data=f"boss_attack_{boss_id}")],
+            [InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen")],
+            [InlineKeyboardButton("📋 К списку боссов", callback_data="boss_list")]
+        ]
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if is_callback:
+            await update.callback_query.edit_message_text(text, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(text, reply_markup=reply_markup)
+        
+        self.db.log_action(user_data['id'], 'boss_fight', f"Урон {player_damage}")
+    
+    async def cmd_boss_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о боссе"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажи ID босса: /bossinfo 1")
+            return
+        
+        try:
+            boss_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Неверный ID")
+            return
+        
+        boss = self.db.get_boss(boss_id)
+        if not boss:
+            await update.message.reply_text("❌ Босс не найден")
+            return
+        
+        status = "ЖИВ" if boss['is_alive'] else "ПОВЕРЖЕН"
+        health_bar = self._progress_bar(boss['health'], boss['max_health'], 20)
+        
+        await update.message.reply_text(
+            f"👾 **{boss['name']}**\n\n"
+            f"📊 **Характеристики**\n"
+            f"• Уровень: {boss['level']}\n"
+            f"• ❤️ Здоровье: {health_bar}\n"
+            f"• ⚔️ Урон: {boss['damage']}\n"
+            f"• 💰 Монеты: {boss['reward_coins']}\n"
+            f"• 💜 Неоны: {boss['reward_neons']}\n"
+            f"• 🖥 Глитчи: {boss['reward_glitches']}\n"
+            f"• ✨ Опыт: {boss['reward_exp']}\n"
+            f"• 📊 Статус: {status}"
+        )
+    
+    async def cmd_regen(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Регенерация"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        cost = 20
+        if user_data['coins'] < cost:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно {cost} 💰")
+            return
+        
+        self.db.add_coins(user_data['id'], -cost)
+        self.db.heal(user_data['id'], 50)
+        self.db.add_energy(user_data['id'], 20)
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        await update.message.reply_text(
+            f"✅ **Регенерация завершена!**\n\n"
+            f"❤️ Здоровье +50 (теперь {user_data['health']})\n"
+            f"⚡️ Энергия +20 (теперь {user_data['energy']})\n"
+            f"💰 Потрачено: {cost}"
+        )
+
+    # ===== ДУЭЛИ =====
+    async def cmd_duel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Вызвать на дуэль"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /duel @user ставка")
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            bet = int(context.args[1])
+        except:
+            await update.message.reply_text("❌ Ставка должна быть числом")
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text("❌ Ставка должна быть больше 0")
+            return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text("❌ Нельзя вызвать на дуэль самого себя")
+            return
+        
+        self.db.cursor.execute(
+            "SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
+            (user_data['id'], user_data['id'])
+        )
+        if self.db.cursor.fetchone():
+            await update.message.reply_text("❌ У тебя уже есть активная дуэль")
+            return
+        
+        duel_id = self.db.create_duel(user_data['id'], target['id'], bet)
+        self.db.add_coins(user_data['id'], -bet)
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ПРИНЯТЬ", callback_data=f"accept_duel_{duel_id}"),
+                InlineKeyboardButton("❌ ОТКЛОНИТЬ", callback_data=f"reject_duel_{duel_id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            f"⚔️ **ДУЭЛЬ**\n\n"
+            f"👤 {user.first_name} VS {target_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"{target_name}, прими вызов!",
+            reply_markup=keyboard
+        )
+        
+        self.duels_in_progress[duel_id] = {
+            'challenger': user_data['id'],
+            'opponent': target['id'],
+            'bet': bet,
+            'chat_id': update.effective_chat.id,
+            'status': 'pending'
+        }
+    
+    async def _process_duel(self, duel_id: int, challenger: Dict, opponent: Dict, bet: int, chat_id: int, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка дуэли"""
+        await asyncio.sleep(2)
+        
+        challenger_roll = random.randint(1, 100)
+        opponent_roll = random.randint(1, 100)
+        
+        if self.db.is_vip(challenger['id']):
+            challenger_roll += 5
+        if self.db.is_vip(opponent['id']):
+            opponent_roll += 5
+        
+        if challenger_roll > opponent_roll:
+            winner = challenger
+            loser = opponent
+            winner_score = challenger_roll
+            loser_score = opponent_roll
+        elif opponent_roll > challenger_roll:
+            winner = opponent
+            loser = challenger
+            winner_score = opponent_roll
+            loser_score = challenger_roll
+        else:
+            await context.bot.send_message(chat_id, "🤝 Ничья! Перебрасываем...")
+            await asyncio.sleep(1)
+            await self._process_duel(duel_id, challenger, opponent, bet, chat_id, context)
+            return
+        
+        win_amount = bet * 2
+        self.db.add_coins(winner['id'], win_amount)
+        
+        self.db.update_user(winner['id'], 
+                          duel_wins=self.db.get_user_by_id(winner['id']).get('duel_wins', 0) + 1,
+                          duel_rating=self.db.get_user_by_id(winner['id']).get('duel_rating', 1000) + 25)
+        
+        self.db.update_user(loser['id'], 
+                          duel_losses=self.db.get_user_by_id(loser['id']).get('duel_losses', 0) + 1,
+                          duel_rating=self.db.get_user_by_id(loser['id']).get('duel_rating', 1000) - 15)
+        
+        await context.bot.send_message(
+            chat_id,
+            f"⚔️ **РЕЗУЛЬТАТ ДУЭЛИ**\n\n"
+            f"👤 {winner['first_name']} VS {loser['first_name']}\n\n"
+            f"🎲 **Результаты:**\n"
+            f"• {winner['first_name']}: {winner_score}\n"
+            f"• {loser['first_name']}: {loser_score}\n\n"
+            f"🏆 **Победитель:** {winner['first_name']}\n"
+            f"💰 Выигрыш: {win_amount} 💰\n\n"
+            f"✅ Поздравляем!"
+        )
+        
+        self.db.update_duel(duel_id, status='completed', winner_id=winner['id'])
+    
+    async def cmd_duels(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список активных дуэлей"""
+        self.db.cursor.execute("SELECT * FROM duels WHERE status = 'pending'")
+        duels = self.db.cursor.fetchall()
+        
+        if not duels:
+            await update.message.reply_text("ℹ️ Нет активных дуэлей")
+            return
+        
+        text = "⚔️ **АКТИВНЫЕ ДУЭЛИ**\n\n"
+        for duel in duels:
+            challenger = self.db.get_user_by_id(duel[1])
+            opponent = self.db.get_user_by_id(duel[2])
+            if challenger and opponent:
+                text += f"• {challenger['first_name']} vs {opponent['first_name']} — ставка {duel[3]} 💰\n"
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_duel_rating(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Рейтинг дуэлянтов"""
+        self.db.cursor.execute("SELECT first_name, nickname, duel_rating FROM users WHERE duel_rating > 0 ORDER BY duel_rating DESC LIMIT 10")
+        top = self.db.cursor.fetchall()
+        
+        if not top:
+            await update.message.reply_text("ℹ️ Рейтинг пуст")
+            return
+        
+        text = "⚔️ **ТОП ДУЭЛЯНТОВ**\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} очков\n"
+        
+        await update.message.reply_text(text)
+
+        # ===== АЧИВКИ =====
+    async def cmd_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация об ачивках"""
+        text = """
+🏅 **АЧИВКИ**
+
+**Команды:**
+• /achievements — эта информация
+• /myachievements — мои ачивки
+• /achievement [ID] — информация об ачивке
+• /topachievements — топ коллекционеров
+
+**Категории:**
+💜 По богатству
+🖥 По глитчам
+🎲 По играм
+⚔️ По дуэлям
+👾 По боссам
+🔥 По активности
+📆 По стрикам
+💎 VIP-ачивки
+🎁 Особые
+🤖 Секретные
+
+**Приватность:**
+• +Ачивки — открыть доступ
+• -Ачивки — скрыть ачивки
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_my_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Мои ачивки"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('achievements_visible', 1) and user_data['rank'] < 1:
+            if context.args:
+                username = context.args[0].replace('@', '')
+                target = self.db.get_user_by_username(username)
+                if target and not target.get('achievements_visible', 1):
+                    await update.message.reply_text("❌ Пользователь скрыл свои ачивки")
+                    return
+                user_data = target or user_data
+            else:
+                await update.message.reply_text("❌ Ваши ачивки скрыты. Используйте +Ачивки чтобы открыть")
+                return
+        
+        achievements = self.db.get_user_achievements(user_data['id'])
+        
+        if not achievements:
+            await update.message.reply_text("ℹ️ У вас пока нет ачивок")
+            return
+        
+        categories = {
+            'wealth': '💜 БОГАТСТВО',
+            'glitches': '🖥 ГЛИТЧИ',
+            'games': '🎲 ИГРЫ',
+            'duels': '⚔️ ДУЭЛИ',
+            'bosses': '👾 БОССЫ',
+            'activity': '🔥 АКТИВНОСТЬ',
+            'streak': '📆 СТРИКИ',
+            'vip': '💎 VIP',
+            'gifts': '🎁 ОСОБЫЕ',
+            'secret': '🤖 СЕКРЕТНЫЕ'
+        }
+        
+        grouped = defaultdict(list)
+        for ach in achievements:
+            if ach['secret'] and user_data['rank'] < 1:
+                continue
+            grouped[ach['category']].append(ach)
+        
+        name = user_data.get('nickname') or user_data['first_name']
+        text = f"🏅 **АЧИВКИ: {name}**\nВсего: {len(achievements)}\n\n"
+        
+        for cat_key, cat_name in categories.items():
+            if cat_key in grouped:
+                text += f"{cat_name}\n"
+                for ach in grouped[cat_key]:
+                    text += f"  • {ach['name']} — {ach['description']}\n"
+                text += "\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_achievement_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о конкретной ачивке"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ID ачивки: /achievement 1")
+            return
+        
+        try:
+            ach_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID должен быть числом")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM achievements_list WHERE id = ?", (ach_id,))
+        ach = self.db.cursor.fetchone()
+        
+        if not ach:
+            await update.message.reply_text("❌ Ачивка не найдена")
+            return
+        
+        ach = dict(ach)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        self.db.cursor.execute("SELECT unlocked_at FROM achievements WHERE user_id = ? AND achievement_id = ?",
+                             (user_data['id'], ach_id))
+        unlocked = self.db.cursor.fetchone()
+        
+        status = "✅ ПОЛУЧЕНО" if unlocked else "❌ НЕ ПОЛУЧЕНО"
+        if unlocked:
+            date = datetime.fromisoformat(unlocked[0]).strftime("%d.%m.%Y %H:%M")
+            status += f" ({date})"
+        
+        secret_note = " (СЕКРЕТНАЯ)" if ach['secret'] else ""
+        
+        text = f"🏅 **Ачивка {ach_id}{secret_note}**\n\n"
+        text += f"**{ach['name']}**\n"
+        text += f"{ach['description']}\n\n"
+        text += f"**Награда:**\n"
+        
+        if ach['reward_neons'] > 0:
+            text += f"• {ach['reward_neons']} 💜 неонов\n"
+        if ach['reward_glitches'] > 0:
+            text += f"• {ach['reward_glitches']} 🖥 глитчей\n"
+        if ach['reward_title']:
+            text += f"• Титул: {ach['reward_title']}\n"
+        if ach['reward_status']:
+            text += f"• Статус: {ach['reward_status']}\n"
+        
+        text += f"\n**Статус:** {status}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ коллекционеров ачивок"""
+        self.db.cursor.execute("""
+            SELECT u.first_name, u.nickname, COUNT(a.id) as count
+            FROM users u
+            LEFT JOIN achievements a ON u.id = a.user_id
+            GROUP BY u.id
+            ORDER BY count DESC
+            LIMIT 10
+        """)
+        
+        top = self.db.cursor.fetchall()
+        
+        if not top or top[0][2] == 0:
+            await update.message.reply_text("ℹ️ Топ ачивок пуст")
+            return
+        
+        text = "🏆 **ТОП КОЛЛЕКЦИОНЕРОВ**\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} ачивок\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_achievements_public(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сделать ачивки публичными"""
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], achievements_visible=1)
+        await update.message.reply_text("✅ Ваши ачивки теперь видны всем")
+    
+    async def cmd_achievements_private(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Скрыть ачивки"""
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], achievements_visible=0)
+        await update.message.reply_text("✅ Ваши ачивки теперь скрыты")
+
+        # ===== КРУЖКИ =====
+    async def cmd_circles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список кружков в чате"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if not circles:
+            await update.message.reply_text("ℹ️ В этом чате нет кружков")
+            return
+        
+        text = "🔄 **КРУЖКИ ЧАТА**\n\n"
+        for i, circle in enumerate(circles, 1):
+            circle = dict(circle)
+            members = json.loads(circle['members'])
+            text += f"{i}. **{circle['name']}** — {len(members)} участников\n"
+            if circle.get('description'):
+                text += f"   _{circle['description']}_\n"
+        
+        text += f"\n📝 /circle [номер] — информация о кружке\n"
+        text += f"➕ /joincircle [номер] — присоединиться\n"
+        text += f"➖ /leavecircle [номер] — выйти"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о кружке"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите номер кружка: /circle 1")
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Номер должен быть числом")
+            return
+        
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text("❌ Кружок с таким номером не найден")
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        members = json.loads(circle['members'])
+        
+        creator = self.db.get_user_by_id(circle['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        
+        member_names = []
+        for member_id in members[:10]:
+            member = self.db.get_user_by_id(member_id)
+            if member:
+                member_names.append(member.get('nickname') or member['first_name'])
+        
+        text = f"🔄 **КРУЖОК: {circle['name']}**\n\n"
+        if circle.get('description'):
+            text += f"📝 {circle['description']}\n\n"
+        text += f"👑 Создатель: {creator_name}\n"
+        text += f"👥 Участников: {len(members)}\n\n"
+        
+        if member_names:
+            text += "**Участники:**\n"
+            for name in member_names:
+                text += f"• {name}\n"
+        
+        if len(members) > 10:
+            text += f"... и ещё {len(members) - 10}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать кружок"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите название кружка: /createcircle Название")
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        circle_id = self.db.create_circle(chat_id, name, "", user_data['id'])
+        
+        if not circle_id:
+            await update.message.reply_text("❌ Не удалось создать кружок. Возможно, достигнут лимит")
+            return
+        
+        await update.message.reply_text(f"✅ Кружок '{name}' создан!")
+    
+    async def cmd_join_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Присоединиться к кружку"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите номер кружка: /joincircle 1")
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Номер должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text("❌ Кружок с таким номером не найден")
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        
+        if self.db.join_circle(circle['id'], user_data['id']):
+            await update.message.reply_text(f"✅ Вы присоединились к кружку '{circle['name']}'")
+        else:
+            await update.message.reply_text("❌ Не удалось присоединиться к кружку")
+    
+    async def cmd_leave_circle(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Покинуть кружок"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите номер кружка: /leavecircle 1")
+            return
+        
+        try:
+            circle_num = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Номер должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM circles WHERE chat_id = ? ORDER BY created_at", (chat_id,))
+        circles = self.db.cursor.fetchall()
+        
+        if circle_num < 1 or circle_num > len(circles):
+            await update.message.reply_text("❌ Кружок с таким номером не найден")
+            return
+        
+        circle = dict(circles[circle_num - 1])
+        
+        if self.db.leave_circle(circle['id'], user_data['id']):
+            await update.message.reply_text(f"✅ Вы покинули кружок '{circle['name']}'")
+        else:
+            await update.message.reply_text("❌ Не удалось покинуть кружок")
+
+        # ===== ЗАКЛАДКИ =====
+    async def cmd_add_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить закладку"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /addbookmark Название ссылка")
+            return
+        
+        name = context.args[0]
+        content = " ".join(context.args[1:])
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        message_id = update.message.reply_to_message.message_id if update.message.reply_to_message else None
+        
+        bookmark_id = self.db.add_bookmark(chat_id, user_data['id'], name, content, message_id)
+        
+        await update.message.reply_text(f"✅ Закладка '{name}' сохранена! ID: {bookmark_id}")
+    
+    async def cmd_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Мои закладки"""
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        bookmarks = self.db.get_user_bookmarks(user_data['id'], chat_id)
+        
+        if not bookmarks:
+            await update.message.reply_text("ℹ️ У вас нет закладок в этом чате")
+            return
+        
+        text = "📌 **МОИ ЗАКЛАДКИ**\n\n"
+        for i, bm in enumerate(bookmarks, 1):
+            text += f"{i}. **{bm['name']}** — закладка {bm['id']}\n"
+        
+        text += f"\n📝 /bookmark [ID] — показать закладку"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать закладку"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ID закладки: /bookmark 123")
+            return
+        
+        try:
+            bookmark_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID должен быть числом")
+            return
+        
+        chat_id = update.effective_chat.id
+        self.db.cursor.execute("SELECT * FROM bookmarks WHERE id = ? AND chat_id = ?", (bookmark_id, chat_id))
+        bm = self.db.cursor.fetchone()
+        
+        if not bm:
+            await update.message.reply_text("❌ Закладка не найдена")
+            return
+        
+        bm = dict(bm)
+        user = self.db.get_user_by_id(bm['user_id'])
+        user_name = user.get('nickname') or user['first_name'] if user else "Неизвестно"
+        
+        text = f"📌 **ЗАКЛАДКА: {bm['name']}**\n\n"
+        text += f"{bm['content']}\n\n"
+        text += f"👤 Добавил: {user_name}\n"
+        text += f"📅 {datetime.fromisoformat(bm['created_at']).strftime('%d.%m.%Y %H:%M')}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_bookmark(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить закладку"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ID закладки: /removebookmark 123")
+            return
+        
+        try:
+            bookmark_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT user_id FROM bookmarks WHERE id = ? AND chat_id = ?", (bookmark_id, chat_id))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text("❌ Закладка не найдена")
+            return
+        
+        if row[0] != user_data['id'] and user_data['rank'] < 2:
+            await update.message.reply_text("❌ У вас нет прав на удаление этой закладки")
+            return
+        
+        self.db.cursor.execute("DELETE FROM bookmarks WHERE id = ?", (bookmark_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Закладка удалена")
+    
+    async def cmd_chat_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Чатбук - все закладки чата"""
+        chat_id = update.effective_chat.id
+        
+        bookmarks = self.db.get_chat_bookmarks(chat_id)
+        
+        if not bookmarks:
+            await update.message.reply_text("ℹ️ В этом чате нет публичных закладок")
+            return
+        
+        text = "📚 **ЧАТБУК**\n\n"
+        for i, bm in enumerate(bookmarks[:20], 1):
+            name = bm.get('nickname') or bm['first_name']
+            text += f"{i}. **{bm['name']}** (от {name}) — закладка {bm['id']}\n"
+        
+        if len(bookmarks) > 20:
+            text += f"\n... и ещё {len(bookmarks) - 20}"
+        
+        text += f"\n\n📝 /bookmark [ID] — показать закладку"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_my_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Мои закладки (русская команда)"""
+        await self.cmd_bookmarks(update, context)
+
+        # ===== ТАЙМЕРЫ =====
+    async def cmd_add_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить таймер"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /addtimer 30м /ping")
+            return
+        
+        time_str = context.args[0]
+        command = " ".join(context.args[1:])
+        
+        minutes = parse_time(time_str)
+        if not minutes:
+            await update.message.reply_text("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        execute_at = datetime.now() + timedelta(minutes=minutes)
+        
+        timer_id = self.db.add_timer(chat_id, user_data['id'], execute_at, command)
+        
+        if not timer_id:
+            await update.message.reply_text("❌ Достигнут лимит таймеров в чате (макс. 5)")
+            return
+        
+        await update.message.reply_text(
+            f"✅ Таймер #{timer_id} установлен на {execute_at.strftime('%d.%m.%Y %H:%M')}"
+        )
+    
+    async def cmd_timers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список таймеров"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("""
+            SELECT * FROM timers 
+            WHERE chat_id = ? AND status = 'pending' 
+            ORDER BY execute_at
+        """, (chat_id,))
+        timers = self.db.cursor.fetchall()
+        
+        if not timers:
+            await update.message.reply_text("ℹ️ В этом чате нет активных таймеров")
+            return
+        
+        text = "⏰ **ТАЙМЕРЫ ЧАТА**\n\n"
+        for i, timer in enumerate(timers, 1):
+            timer = dict(timer)
+            creator = self.db.get_user_by_id(timer['user_id'])
+            creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+            execute_at = datetime.fromisoformat(timer['execute_at']).strftime('%d.%m.%Y %H:%M')
+            text += f"{i}. #{timer['id']} — {execute_at}\n   Команда: {timer['command']}\n   Создатель: {creator_name}\n\n"
+        
+        text += "📝 /removetimer [номер] — удалить таймер"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить таймер"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите номер таймера: /removetimer 1")
+            return
+        
+        try:
+            timer_num = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Номер должен быть числом")
+            return
+        
+        chat_id = update.effective_chat.id
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        self.db.cursor.execute("""
+            SELECT * FROM timers 
+            WHERE chat_id = ? AND status = 'pending' 
+            ORDER BY execute_at
+        """, (chat_id,))
+        timers = self.db.cursor.fetchall()
+        
+        if timer_num < 1 or timer_num > len(timers):
+            await update.message.reply_text("❌ Таймер с таким номером не найден")
+            return
+        
+        timer = dict(timers[timer_num - 1])
+        
+        if timer['user_id'] != user_data['id'] and user_data['rank'] < 2:
+            await update.message.reply_text("❌ У вас нет прав на удаление этого таймера")
+            return
+        
+        self.db.cursor.execute("UPDATE timers SET status = 'cancelled' WHERE id = ?", (timer['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ Таймер #{timer['id']} удалён")
+
+        # ===== НАГРАДЫ =====
+    async def cmd_give_award(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Выдать награду"""
+        if len(context.args) < 3:
+            await update.message.reply_text("❌ Использование: /giveaward 4 @user Текст")
+            return
+        
+        try:
+            degree = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ Степень должна быть числом от 1 до 8")
+            return
+        
+        username = context.args[1].replace('@', '')
+        award_text = " ".join(context.args[2:])
+        
+        if degree < 1 or degree > 8:
+            await update.message.reply_text("❌ Степень должна быть от 1 до 8")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        if degree > user_data['rank'] and user_data['rank'] < 8:
+            await update.message.reply_text(f"❌ Ваш ранг позволяет выдавать только степени до {user_data['rank']}")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        award_id = self.db.give_award(update.effective_chat.id, target['id'], user_data['id'], degree, award_text)
+        
+        await update.message.reply_text(f"✅ Награда #{award_id} степени {degree} выдана {target['first_name']}!")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"🏅 **ВАМ ВЫДАЛИ НАГРАДУ!**\n\n"
+                f"Степень: {degree}\n"
+                f"Текст: {award_text}\n"
+                f"От: {update.effective_user.first_name}"
+            )
+        except:
+            pass
+    
+    async def cmd_awards(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Просмотр наград пользователя"""
+        username = None
+        if context.args:
+            username = context.args[0].replace('@', '')
+        
+        if username:
+            target = self.db.get_user_by_username(username)
+        else:
+            target = self.db.get_user(update.effective_user.id)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        awards = self.db.get_user_awards(target['id'], update.effective_chat.id)
+        
+        if not awards:
+            name = target.get('nickname') or target['first_name']
+            await update.message.reply_text(f"ℹ️ У {name} нет наград")
+            return
+        
+        name = target.get('nickname') or target['first_name']
+        text = f"🏅 **НАГРАДЫ: {name}**\n\n"
+        
+        for award in awards:
+            date = datetime.fromisoformat(award['awarded_at']).strftime('%d.%m.%Y')
+            text += f"• Степень {award['degree']} — {award['text']}\n"
+            text += f"  От {award['awarded_by_name']}, {date}\n\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_remove_award(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять награду"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /removeaward 123 @user")
+            return
+        
+        try:
+            award_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID награды должен быть числом")
+            return
+        
+        username = context.args[1].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 2:
+            await update.message.reply_text("❌ Недостаточно прав для снятия наград")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("DELETE FROM awards WHERE id = ? AND chat_id = ?", (award_id, update.effective_chat.id))
+        self.db.conn.commit()
+        
+        if self.db.cursor.rowcount > 0:
+            await update.message.reply_text(f"✅ Награда #{award_id} снята")
+        else:
+            await update.message.reply_text("❌ Награда не найдена")
+
+        # ===== ГОЛОСОВАНИЕ ЗА БАН =====
+    async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать голосование за бан"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /banvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        required_votes = 5
+        min_rank = 0
+        
+        if len(context.args) >= 3:
+            try:
+                required_votes = int(context.args[1])
+                min_rank = int(context.args[2])
+            except:
+                pass
+        
+        vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
+                InlineKeyboardButton("❌ ПРОТИВ", callback_data=f"vote_against_{vote_id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            f"🗳 **ГОЛОСОВАНИЕ ЗА БАН**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {update.effective_user.first_name}\n"
+            f"📊 **Требуется голосов:** {required_votes}\n"
+            f"🎚 **Мин. ранг:** {min_rank}\n\n"
+            f"Голосуйте!",
+            reply_markup=keyboard
+        )
+    
+    async def cmd_stop_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Остановить голосование"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /stopvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        
+        if vote['created_by'] != user_data['id'] and user_data['rank'] < 3:
+            await update.message.reply_text("❌ У вас нет прав на остановку этого голосования")
+            return
+        
+        self.db.cursor.execute("UPDATE ban_votes SET status = 'stopped' WHERE id = ?", (vote['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Голосование остановлено")
+    
+    async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о голосовании"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        creator = self.db.get_user_by_id(vote['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        
+        text = (
+            f"🗳 **ИНФОРМАЦИЯ О ГОЛОСОВАНИИ**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {creator_name}\n"
+            f"📊 **Требуется голосов:** {vote['required_votes']}\n"
+            f"🎚 **Мин. ранг:** {vote['min_rank']}\n"
+            f"✅ **Голосов ЗА:** {vote['votes_for']}\n"
+            f"❌ **Голосов ПРОТИВ:** {vote['votes_against']}"
+        )
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_vote_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список активных голосований"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND status = 'active'", (chat_id,))
+        votes = self.db.cursor.fetchall()
+        
+        if not votes:
+            await update.message.reply_text("ℹ️ Нет активных голосований")
+            return
+        
+        text = "🗳 **АКТИВНЫЕ ГОЛОСОВАНИЯ**\n\n"
+        for vote in votes:
+            vote = dict(vote)
+            target = self.db.get_user_by_id(vote['target_id'])
+            target_name = target.get('nickname') or target['first_name'] if target else "Неизвестно"
+            text += f"• {target_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+        
+        await update.message.reply_text(text)
+
+        # ===== СЕТКИ ЧАТОВ =====
+    async def cmd_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о сетке"""
+        await update.message.reply_text("ℹ️ Используйте /grids для списка сеток")
+    
+    async def cmd_grids(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список сеток пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        grids = self.db.get_user_grids(user_data['id'])
+        
+        if not grids:
+            await update.message.reply_text("ℹ️ У вас нет созданных сеток")
+            return
+        
+        text = "🔗 **МОИ СЕТКИ**\n\n"
+        for grid in grids:
+            text += f"ID: {grid['id']} | {grid['name']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать сетку чатов"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название сетки: /creategrid main")
+            return
+        
+        name = context.args[0]
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['id'] != OWNER_ID and user_data['rank'] < 5:
+            await update.message.reply_text("❌ Только создатель может создавать сетки")
+            return
+        
+        grid_id = self.db.create_grid(user_data['id'], name)
+        
+        await update.message.reply_text(f"✅ Сетка '{name}' (ID: {grid_id}) создана!")
+    
+    async def cmd_add_chat_to_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить чат в сетку"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ID сетки: /addchat 1")
+            return
+        
+        try:
+            grid_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID сетки должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text("❌ Сетка не найдена")
+            return
+        
+        if row[0] != user_data['id'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text("❌ Вы не владелец этой сетки")
+            return
+        
+        if self.db.add_chat_to_grid(grid_id, chat_id):
+            await update.message.reply_text("✅ Чат добавлен в сетку!")
+        else:
+            await update.message.reply_text("❌ Чат уже в сетке")
+    
+    async def cmd_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Назначить глобального модератора"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'\+глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            username = match.group(1)
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text("❌ Пользователь не найден")
+                return
+            
+            await update.message.reply_text(f"✅ {target['first_name']} назначен глобальным модератором")
+            return
+        
+        match = re.search(r'сетка (\d+)\s+(!+)модер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            grid_id = int(match.group(1))
+            rank = len(match.group(2))
+            username = match.group(3)
+            
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text("❌ Пользователь не найден")
+                return
+            
+            self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+            row = self.db.cursor.fetchone()
+            
+            if not row:
+                await update.message.reply_text("❌ Сетка не найдена")
+                return
+            
+            if row[0] != user_data['id'] and user_data['id'] != OWNER_ID:
+                await update.message.reply_text("❌ Вы не владелец этой сетки")
+                return
+            
+            self.db.cursor.execute("INSERT OR REPLACE INTO global_moderators (grid_id, user_id, rank) VALUES (?, ?, ?)",
+                                 (grid_id, target['id'], rank))
+            self.db.conn.commit()
+            
+            await update.message.reply_text(f"✅ {target['first_name']} получил ранг {rank} во всех чатах сетки")
+            return
+        
+        await update.message.reply_text("❌ Неверный формат команды")
+    
+    async def cmd_global_mods_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список глобальных модераторов"""
+        self.db.cursor.execute("""
+            SELECT gm.*, u.first_name, u.username 
+            FROM global_moderators gm
+            JOIN users u ON gm.user_id = u.id
+        """)
+        mods = self.db.cursor.fetchall()
+        
+        if not mods:
+            await update.message.reply_text("ℹ️ Нет глобальных модераторов")
+            return
+        
+        text = "🌐 **ГЛОБАЛЬНЫЕ МОДЕРАТОРЫ**\n\n"
+        for mod in mods:
+            text += f"• {mod['first_name']} (@{mod['username']}) — ранг {mod['rank']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_add_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить глобального модератора"""
+        await self.cmd_global_mod(update, context)
+    
+    async def cmd_remove_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить глобального модератора"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'-глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя: -глмодер @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("DELETE FROM global_moderators WHERE user_id = ?", (target['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ {target['first_name']} снят с глобальной модерации")
+    
+    async def cmd_grid_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить ранг во всех чатах сетки"""
+        await self.cmd_global_mod(update, context)
+
+        # ===== БЕСЕДЫ =====
+    async def cmd_random_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Поиск случайной беседы"""
+        self.db.cursor.execute("""
+            SELECT cs.chat_id, cs.chat_name, cs.chat_code, 
+                   COUNT(DISTINCT m.user_id) as members,
+                   MIN(m.timestamp) as created,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-1 day') THEN 1 ELSE 0 END) as day_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-7 day') THEN 1 ELSE 0 END) as week_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-30 day') THEN 1 ELSE 0 END) as month_active,
+                   COUNT(m.id) as total_messages
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+        
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(
+                "🍬 **В базе пока нет бесед**\n\n"
+                "Добавьте бота в чат и введите `!привязать`"
+            )
+            return
+        
+        chat = dict(row)
+        created_date = datetime.fromisoformat(chat['created']).strftime("%d.%m.%Y") if chat['created'] else "неизвестно"
+        chat_type = "открытый" if random.choice([True, False]) else "закрытый"
+        entry_type = "свободный" if random.choice([True, False]) else "по заявкам"
+        
+        day_active = chat['day_active'] or 0
+        week_active = chat['week_active'] or 0
+        month_active = chat['month_active'] or 0
+        total = chat['total_messages'] or 0
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📩 Попроситься в чат", url=f"https://t.me/{chat['chat_name']}" if chat['chat_name'] else None)],
+            [InlineKeyboardButton("📇 Карточка в каталоге", callback_data=f"chat_card_{chat['chat_id']}")],
+            [InlineKeyboardButton("🔄 Другую беседу", callback_data="random_chat")]
+        ])
+        
+        text = (
+            f"🍬 **Случайная беседа**\n\n"
+            f"📢 **Чат «{chat['chat_name'] or 'Без названия'}»**\n"
+            f"👤 **Попроситься в чат:** [ссылка]\n"
+            f"📇 **Карточка в каталоге**\n\n"
+            f"🏆 **Рейтинг:** {random.randint(100000, 999999):,}\n"
+            f"📅 **Создан:** {created_date}\n"
+            f"👥 **Участников:** {chat['members'] or 0}\n"
+            f"🔒 **Тип:** {chat_type}, вход {entry_type}\n"
+            f"📊 **Актив:** {day_active} | {week_active} | {month_active} | {total:,}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=keyboard)
+    
+    async def cmd_top_chats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ бесед по активности"""
+        period = "день"
+        if context.args and context.args[0] in ["день", "неделя", "месяц", "всё"]:
+            period = context.args[0]
+        
+        time_filter = {
+            "день": "datetime('now', '-1 day')",
+            "неделя": "datetime('now', '-7 day')",
+            "месяц": "datetime('now', '-30 day')",
+            "всё": "datetime('2000-01-01')"
+        }.get(period, "datetime('now', '-1 day')")
+        
+        self.db.cursor.execute(f"""
+            SELECT cs.chat_name, COUNT(m.id) as msg_count
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id AND m.timestamp > {time_filter}
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            HAVING msg_count > 0
+            ORDER BY msg_count DESC
+            LIMIT 10
+        """)
+        
+        chats = self.db.cursor.fetchall()
+        
+        if not chats:
+            await update.message.reply_text(f"📊 Нет данных за {period}")
+            return
+        
+        text = f"🏆 **ТОП БЕСЕД ЗА {period.upper()}**\n\n"
+        for i, chat in enumerate(chats, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            name = chat[0] or f"Чат {i}"
+            text += f"{medal} **{name}** — {chat[1]} 💬\n"
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📅 День", callback_data="top_chats_day"),
+                InlineKeyboardButton("📆 Неделя", callback_data="top_chats_week"),
+                InlineKeyboardButton("📆 Месяц", callback_data="top_chats_month")
+            ],
+            [InlineKeyboardButton("🔄 Случайная беседа", callback_data="random_chat")]
+        ])
+        
+        await update.message.reply_text(text, reply_markup=keyboard)
+    
+    async def cmd_setup_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация об установке"""
+        text = (
+            "🔧 **УСТАНОВКА БОТА**\n\n"
+            "1️⃣ Добавьте бота в группу\n"
+            "2️⃣ Сделайте бота администратором\n"
+            "3️⃣ Введите `!привязать` для привязки чата\n"
+            "4️⃣ Настройте приветствие: `+приветствие Текст`\n"
+            "5️⃣ Настройте правила: `+правила Текст`\n\n"
+            "📚 Подробнее: https://telegra.ph/Iris-bot-setup"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        # ===== КЛАНЫ =====
+    async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о своем клане"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text("ℹ️ Вы не состоите в клане")
+            return
+        
+        clan = self.get_clan(user_data['clan_id'])
+        if not clan:
+            await update.message.reply_text("❌ Клан не найден")
+            return
+        
+        members = self.get_clan_members(clan['id'])
+        
+        text = f"🏰 **КЛАН: {clan['name']}**\n\n"
+        text += f"📊 **Уровень:** {clan.get('level', 1)}\n"
+        text += f"💰 **Казна:** {clan.get('coins', 0)} 💰\n"
+        text += f"👥 **Участников:** {len(members)}\n\n"
+        text += "**Участники:**\n"
+        
+        for member in members:
+            name = member.get('nickname') or member['first_name']
+            role_emoji = "👑" if member.get('clan_role') == 'owner' else "🛡" if member.get('clan_role') == 'admin' else "👤"
+            text += f"{role_emoji} {name}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_clans(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список кланов"""
+        self.db.cursor.execute("SELECT name, level, members FROM clans ORDER BY level DESC LIMIT 10")
+        clans = self.db.cursor.fetchall()
+        
+        if not clans:
+            await update.message.reply_text("ℹ️ Нет созданных кланов")
+            return
+        
+        text = "🏰 **ТОП КЛАНОВ**\n\n"
+        for i, clan in enumerate(clans, 1):
+            text += f"{i}. **{clan[0]}** — ур.{clan[1]}, {clan[2]} участников\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_create_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать клан"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название клана: /createclan Название")
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы уже в клане")
+            return
+        
+        if user_data['coins'] < 1000:
+            await update.message.reply_text(f"❌ Недостаточно монет. Нужно 1000 💰")
+            return
+        
+        clan_id = self.db.create_clan(update.effective_chat.id, name, "", user_data['id'])
+        if not clan_id:
+            await update.message.reply_text("❌ Клан с таким названием уже существует")
+            return
+        
+        self.db.add_coins(user_data['id'], -1000)
+        
+        await update.message.reply_text(f"✅ Клан '{name}' создан!")
+    
+    async def cmd_join_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Вступить в клан"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название клана: /joinclan Название")
+            return
+        
+        name = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы уже в клане")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM clans WHERE name = ? AND chat_id = ?", (name, update.effective_chat.id))
+        clan = self.db.cursor.fetchone()
+        
+        if not clan:
+            await update.message.reply_text("❌ Клан не найден")
+            return
+        
+        if self.db.join_clan(clan[0], user_data['id']):
+            await update.message.reply_text(f"✅ Вы вступили в клан '{name}'")
+        else:
+            await update.message.reply_text("❌ Не удалось вступить в клан")
+    
+    async def cmd_leave_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Покинуть клан"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not user_data.get('clan_id', 0):
+            await update.message.reply_text("❌ Вы не в клане")
+            return
+        
+        if user_data.get('clan_role') == 'owner':
+            await update.message.reply_text("❌ Владелец не может покинуть клан")
+            return
+        
+        if self.db.leave_clan(user_data['id']):
+            await update.message.reply_text("✅ Вы покинули клан")
+        else:
+            await update.message.reply_text("❌ Не удалось покинуть клан")
+    
+    def get_clan(self, clan_id: int) -> Optional[Dict]:
+        """Получить информацию о клане"""
+        self.db.cursor.execute("SELECT * FROM clans WHERE id = ?", (clan_id,))
+        row = self.db.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_clan_members(self, clan_id: int) -> List[Dict]:
+        """Получить список участников клана"""
+        self.db.cursor.execute("SELECT id, first_name, nickname, clan_role FROM users WHERE clan_id = ?", (clan_id,))
+        return [dict(row) for row in self.db.cursor.fetchall()]
+
+        # ===== БОНУСЫ =====
+    async def cmd_bonuses(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о бонусах"""
+        text = """
+🎁 **КИБЕР-БОНУСЫ**
+
+1. 👾 **Кибер-статус** — 100💜/мес
+   Премиум-доступ, неоновый ник
+
+2. 🔨 **Глитч-молот** — 50💜
+   Временно замутить любого пользователя
+
+3. ⚡ **Турбо-драйв** — 200💜/мес
+   Ускоренная прокачка +50%
+
+4. 👻 **Невидимка** — 30💜/30дней
+   Анонимные сообщения
+
+5. 🌈 **Неон-ник** — 100💜
+   Фиолетовое свечение ника
+
+6. 🎰 **Кибер-удача** — 150💜/3дня
+   +15% удачи в играх
+
+7. 🔒 **Файрволл** — 80💜
+   Защита от наказаний
+
+8. 🤖 **РП-пакет** — 120💜/мес
+   Эксклюзивные РП-команды
+
+/bonusinfo [название] — подробнее
+/buybonus [название] [срок] — купить
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_bonus_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о конкретном бонусе"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название бонуса")
+            return
+        
+        name = " ".join(context.args).lower()
+        bonuses = {
+            "кибер-статус": ("👾 Кибер-статус", 100, "месяц", 
+                            "Премиум-доступ, неоновый ник, эксклюзивные РП-команды"),
+            "глитч-молот": ("🔨 Глитч-молот", 50, "единоразово",
+                           "Временно замутить любого пользователя на 24ч"),
+            "турбо-драйв": ("⚡ Турбо-драйв", 200, "месяц",
+                           "Ускоренная прокачка +50% к опыту"),
+            "невидимка": ("👻 Невидимка", 30, "30 дней",
+                         "Анонимные сообщения в чат через ЛС"),
+            "неон-ник": ("🌈 Неон-ник", 100, "навсегда",
+                        "Фиолетовое свечение ника"),
+            "кибер-удача": ("🎰 Кибер-удача", 150, "3 дня",
+                           "+15% к удаче во всех играх"),
+            "файрволл": ("🔒 Файрволл", 80, "до использования",
+                        "Одноразовая защита от мутов и банов"),
+            "рп-пакет": ("🤖 РП-пакет", 120, "месяц",
+                        "Эксклюзивные кибер-РП команды")
+        }
+        
+        for key, (title, price, duration, desc) in bonuses.items():
+            if key in name:
+                text = (
+                    f"**{title}**\n\n"
+                    f"💰 Цена: {price} 💜\n"
+                    f"⏳ Длительность: {duration}\n\n"
+                    f"{desc}\n\n"
+                    f"🛒 Купить: /buybonus {key} 1"
+                )
+                await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+                return
+        
+        await update.message.reply_text("❌ Бонус не найден")
+    
+    async def cmd_buy_bonus(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить бонус"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Использование: /buybonus [название] [срок]")
+            return
+        
+        name = context.args[0].lower()
+        try:
+            duration = int(context.args[1])
+        except:
+            await update.message.reply_text("❌ Срок должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        prices = {
+            "кибер-статус": 100,
+            "глитч-молот": 50,
+            "турбо-драйв": 200,
+            "невидимка": 30,
+            "неон-ник": 100,
+            "кибер-удача": 150,
+            "файрволл": 80,
+            "рп-пакет": 120
+        }
+        
+        bonus_type = None
+        price = None
+        for key, p in prices.items():
+            if key in name:
+                price = p
+                bonus_type = key
+                break
+        
+        if not price:
+            await update.message.reply_text("❌ Бонус не найден")
+            return
+        
+        total = price * duration
+        
+        if user_data['neons'] < total:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно {total} 💜")
+            return
+        
+        if self.db.buy_bonus(user_data['id'], bonus_type, duration, total):
+            await update.message.reply_text(f"✅ Бонус '{name}' куплен на {duration} мес. за {total} 💜")
+        else:
+            await update.message.reply_text("❌ Ошибка при покупке")
+    
+    async def _check_rp_packet(self, user_id: int) -> bool:
+        """Проверка наличия РП-пакета"""
+        user = self.db.get_user_by_id(user_id)
+        if not user:
+            return False
+        
+        if user.get('rp_packet_until') and datetime.fromisoformat(user['rp_packet_until']) > datetime.now():
+            return True
+        if user.get('cyber_status_until') and datetime.fromisoformat(user['cyber_status_until']) > datetime.now():
+            return True
+        
+        return False
+    
+    async def cmd_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о кибер-статусе"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить кибер-статус"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'купить кибер-статус\s+(\d+)(?:\s+@?(\S+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: купить кибер-статус 3 [@user]")
+            return
+        
+        months = int(match.group(1))
+        target_username = match.group(2) if match.group(2) else None
+        
+        target_id = user_data['id']
+        target_name = user_data['first_name']
+        
+        if target_username:
+            target = self.db.get_user_by_username(target_username)
+            if not target:
+                await update.message.reply_text("❌ Пользователь не найден")
+                return
+            target_id = target['id']
+            target_name = target['first_name']
+        
+        price = 100 * months
+        
+        if user_data['neons'] < price and target_username:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно {price} 💜")
+            return
+        
+        if self.db.buy_bonus(target_id, 'cyber_status', months * 30, price if target_username else price):
+            await update.message.reply_text(f"✅ Кибер-статус куплен для {target_name} на {months} мес.")
+        else:
+            await update.message.reply_text("❌ Ошибка при покупке")
+    
+    async def cmd_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о глитч-молоте"""
+        text = """
+🔨 **Глитч-молот**
+
+💰 Цена: 50 💜
+⏳ Длительность: единоразово
+
+📝 Использование: `применить глитч-молот @user`
+
+Позволяет временно заглючить (замутить) любого пользователя сроком до 24 часов.
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_use_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Применить глитч-молот"""
+        text = update.message.text
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        chat_id = update.effective_chat.id
+        
+        match = re.search(r'применить глитч-молот\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя: применить глитч-молот @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя применить к модератору выше рангом")
+            return
+        
+        if self.db.use_glitch_hammer(user_data['id'], chat_id, target['id']):
+            until = self.db.mute_user(target['id'], 24*60, user_data['id'], "Глитч-молот")
+            await update.message.reply_text(f"✅ Глитч-молот применён к {target['first_name']} на 24 часа!")
+        else:
+            await update.message.reply_text("❌ У вас нет активного глитч-молота")
+    
+    async def cmd_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о турбо-драйве"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить турбо-драйв"""
+        await self.cmd_buy_bonus(update, context)
+    
+    async def cmd_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о невидимке"""
+        text = """
+👻 **Невидимка**
+
+💰 Цена: 30 💜
+⏳ Длительность: 30 дней
+
+📝 Использование в ЛС: `Невидимка Текст сообщения`
+
+Позволяет отправлять анонимные сообщения в чат.
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_use_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Отправить анонимное сообщение (только в ЛС)"""
+        if update.effective_chat.type != "private":
+            await update.message.reply_text("❌ Эта команда работает только в личных сообщениях с ботом")
+            return
+        
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if not text.startswith('Невидимка '):
+            return
+        
+        message_text = text.replace('Невидимка ', '', 1).strip()
+        
+        if not message_text:
+            await update.message.reply_text("❌ Укажите текст сообщения")
+            return
+        
+        if not self.db.has_invisible_bonus(user_data['id']):
+            await update.message.reply_text("❌ У вас нет активного бонуса 'Невидимка'")
+            return
+        
+        await update.message.reply_text("✅ Анонимное сообщение отправлено!")
+    
+    async def cmd_allow_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Разрешить пользователю использовать невидимку"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'\+Невидимка\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя: +Невидимка @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("DELETE FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, target['id']))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ {target['first_name']} может использовать невидимку")
+    
+    async def cmd_ban_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Запретить пользователю использовать невидимку"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'-Невидимка\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя: -Невидимка @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("INSERT OR REPLACE INTO invisible_bans (chat_id, user_id, banned_by) VALUES (?, ?, ?)",
+                             (chat_id, target['id'], user_data['id']))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ {target['first_name']} забанен в невидимке")
+    
+    async def cmd_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о неон-нике"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить неон-ник"""
+        await self.cmd_buy_bonus(update, context)
+    
+    async def cmd_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о кибер-удаче"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить кибер-удачу"""
+        await self.cmd_buy_bonus(update, context)
+    
+    async def cmd_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о файрволле"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить файрволл"""
+        await self.cmd_buy_bonus(update, context)
+    
+    async def cmd_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о РП-пакете"""
+        await self.cmd_bonus_info(update, context)
+    
+    async def cmd_buy_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить РП-пакет"""
+        await self.cmd_buy_bonus(update, context)
+
+        # ===== РП КОМАНДЫ =====
+    async def cmd_rp_hack(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/взломать @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /взломать @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        actions = [
+            f"💻 Взломал аккаунт {target_name} и получил доступ к его переписке",
+            f"🔓 Взломал базу данных и узнал все секреты {target_name}",
+            f"📱 Взломал телефон {target_name} и теперь читает его сообщения",
+            f"🖥 Взломал компьютер {target_name} и скачал все файлы"
+        ]
+        
+        await update.message.reply_text(f"🤖 {random.choice(actions)}")
+    
+    async def cmd_rp_glitch(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/заглючить @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /заглючить @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        actions = [
+            f"⚡ Вызвал системный глитч у {target_name}, теперь он двоится в глазах",
+            f"💫 Заглючил {target_name}, теперь он разговаривает с самим собой",
+            f"🌀 Внёс ошибку в код {target_name}, теперь он делает странные вещи",
+            f"📟 Отправил вирус {target_name}, теперь его аватарка мерцает"
+        ]
+        
+        await update.message.reply_text(f"🤖 {random.choice(actions)}")
+    
+    async def cmd_rp_reboot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/перегрузить @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /перегрузить @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        await update.message.reply_text(f"🤖 Перезагрузил {target_name}. Подождите 5 секунд... 🔄")
+    
+    async def cmd_rp_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/закодить @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /закодить @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        code = f"function {target_name}() {{ return 'робот'; }}"
+        
+        await update.message.reply_text(f"🤖 Закодил {target_name} в функцию:\n`{code}`", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_rp_digitize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/оцифровать @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /оцифровать @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        binary = ' '.join(format(ord(c), '08b') for c in target_name[:3])
+        
+        await update.message.reply_text(f"🤖 Оцифровал {target_name}: `{binary}...`", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_rp_hack_deep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/хакнуть @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /хакнуть @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        data = {
+            'IP': f'192.168.{random.randint(1,255)}.{random.randint(1,255)}',
+            'Пароль': '*' * random.randint(6, 12),
+            'Баланс': f'{random.randint(0,1000)} 💰',
+            'Последний вход': 'только что'
+        }
+        
+        text = f"🤖 Данные {target_name}:\n"
+        for key, value in data.items():
+            text += f"• {key}: {value}\n"
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_rp_download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/скачать @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /скачать @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        size = random.randint(1, 100)
+        
+        await update.message.reply_text(f"🤖 Скачиваю данные {target_name}... {size}% [░░░░░░░░░░]")
+        await asyncio.sleep(1)
+        await update.message.reply_text(f"🤖 Скачивание завершено! Получено {random.randint(10,500)} МБ данных.")
+    
+    async def cmd_rp_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """/обновить @user"""
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text("❌ Для этой команды нужен РП-пакет или Кибер-статус")
+            return
+        
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /обновить @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+        
+        version = f"v{random.randint(1,9)}.{random.randint(0,9)}.{random.randint(0,9)}"
+        
+        await update.message.reply_text(f"🤖 Обновляю {target_name} до версии {version}...")
+        await asyncio.sleep(1)
+        await update.message.reply_text(f"🤖 Обновление завершено! Добавлены новые функции.")
+
+        # ===== TELEGRAM БОНУСЫ =====
+    async def cmd_tg_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о Telegram Premium"""
+        text = """
+⭐️ **TELEGRAM PREMIUM**
+
+💰 **Цены:**
+• 3 месяца — 1500 💜
+• 6 месяцев — 2500 💜
+• 12 месяцев — 4000 💜
+
+📝 **Команды:**
+• `купить тг прем 3` — купить себе на 3 месяца
+• `подарить тг прем 3 @user` — подарить на 3 месяца
+
+💡 **Бонусы Telegram Premium:**
+• Увеличенные лимиты
+• Стикеры премиум
+• Реакции
+• Голосовые в 2 раза дольше
+• И многое другое!
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_buy_tg_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить Telegram Premium"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'купить тг прем\s+(\d+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: купить тг прем 3")
+            return
+        
+        months = int(match.group(1))
+        
+        prices = {3: 1500, 6: 2500, 12: 4000}
+        if months not in prices:
+            await update.message.reply_text("❌ Доступные периоды: 3, 6, 12 месяцев")
+            return
+        
+        price = prices[months]
+        
+        if user_data['neons'] < price:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно {price} 💜")
+            return
+        
+        self.db.add_neons(user_data['id'], -price)
+        
+        await update.message.reply_text(f"✅ Telegram Premium на {months} мес. активирован! Спасибо за покупку!")
+    
+    async def cmd_gift_tg_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Подарить Telegram Premium"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'подарить тг прем\s+(\d+)\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: подарить тг прем 3 @user")
+            return
+        
+        months = int(match.group(1))
+        username = match.group(2)
+        
+        prices = {3: 1500, 6: 2500, 12: 4000}
+        if months not in prices:
+            await update.message.reply_text("❌ Доступные периоды: 3, 6, 12 месяцев")
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        price = prices[months]
+        
+        if user_data['neons'] < price:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно {price} 💜")
+            return
+        
+        self.db.add_neons(user_data['id'], -price)
+        
+        await update.message.reply_text(f"✅ Telegram Premium на {months} мес. подарен {target['first_name']}!")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"🎁 **ВАМ ПОДАРИЛИ TELEGRAM PREMIUM!**\n\n"
+                f"От: {update.effective_user.first_name}\n"
+                f"Срок: {months} месяцев"
+            )
+        except:
+            pass
+    
+    async def cmd_tg_gift(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о Telegram подарках"""
+        text = """
+🎁 **TELEGRAM ПОДАРКИ**
+
+💰 Цена: 500 💜 за подарок
+
+📝 **Команды:**
+• `купить тг подарок` — купить подарок себе
+• `подарить тг подарок @user` — подарить подарок
+
+🎁 **Подарки бывают разные:**
+🎂 Торт, 🎈 Шары, 🎉 Хлопушка, 🎊 Конфетти, 🎀 Бантик
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_buy_tg_gift(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить Telegram подарок"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['neons'] < 500:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно 500 💜")
+            return
+        
+        self.db.add_neons(user_data['id'], -500)
+        
+        gifts = ["🎂 Торт", "🎈 Шары", "🎉 Хлопушка", "🎊 Конфетти", "🎀 Бантик"]
+        gift = random.choice(gifts)
+        
+        await update.message.reply_text(f"✅ Вы купили подарок: {gift}! Он появится в вашем инвентаре.")
+    
+    async def cmd_gift_tg_gift(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Подарить Telegram подарок"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'подарить тг подарок\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: подарить тг подарок @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        if user_data['neons'] < 500:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно 500 💜")
+            return
+        
+        self.db.add_neons(user_data['id'], -500)
+        
+        gifts = ["🎂 Торт", "🎈 Шары", "🎉 Хлопушка", "🎊 Конфетти", "🎀 Бантик"]
+        gift = random.choice(gifts)
+        
+        await update.message.reply_text(f"✅ Вы подарили {gift} пользователю {target['first_name']}!")
+        
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"🎁 **ВАМ ПОДАРИЛИ ПОДАРОК!**\n\n"
+                f"От: {update.effective_user.first_name}\n"
+                f"Подарок: {gift}"
+            )
+        except:
+            pass
+    
+    async def cmd_tg_stars(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о Telegram Звёздах"""
+        text = """
+🌟 **TELEGRAM ЗВЁЗДЫ**
+
+💰 Курс: 1 ⭐️ = 10 💜
+
+📝 **Команды:**
+• `купить тг зв 100` — купить 100 звёзд
+• `передать тг зв 50 @user` — передать звёзды
+• `где мои тг зв` — история транзакций
+        """
+        await update.message.reply_text(text, parse_mode='Markdown')
+    
+    async def cmd_buy_tg_stars(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Купить Telegram Звёзды"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'купить тг зв\s+(\d+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: купить тг зв 100")
+            return
+        
+        stars = int(match.group(1))
+        price = stars * 10
+        
+        if user_data['neons'] < price:
+            await update.message.reply_text(f"❌ Недостаточно неонов. Нужно {price} 💜")
+            return
+        
+        self.db.add_neons(user_data['id'], -price)
+        
+        await update.message.reply_text(f"✅ Куплено {stars} ⭐️ за {price} 💜!")
+    
+    async def cmd_transfer_tg_stars(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Передать Telegram Звёзды"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'передать тг зв\s+(\d+)\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Использование: передать тг зв 50 @user")
+            return
+        
+        stars = int(match.group(1))
+        username = match.group(2)
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        await update.message.reply_text(f"✅ Передано {stars} ⭐️ пользователю {target['first_name']}!")
+    
+    async def cmd_my_tg_stars(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """История транзакций Telegram Звёзд"""
+        await update.message.reply_text("ℹ️ Функция в разработке")
+
+        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
+    async def cmd_themes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список доступных тем для ролей"""
+        themes = {
+            "default": "Стандартная",
+            "cyber": "Киберпанк",
+            "fantasy": "Фэнтези",
+            "anime": "Аниме",
+            "military": "Военная"
+        }
+        
+        text = "🎨 **ТЕМЫ РОЛЕЙ**\n\n"
+        for key, name in themes.items():
+            text += f"• `!темы {key}` — {name}\n"
+        
+        text += "\n**Примеры названий:**\n"
+        text += "• Киберпанк: Хакер, Кодер, Системный администратор\n"
+        text += "• Фэнтези: Маг, Воин, Эльф\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_apply_theme(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Применить тему по номеру"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'!темы\s+(\d+)', text)
+        if not match:
+            return
+        
+        theme_num = int(match.group(1))
+        
+        themes = {
+            1: ["Хакер", "Кодер", "Админ", "Сисоп", "Девелопер"],
+            2: ["Маг", "Воин", "Лучник", "Паладин", "Некромант"],
+            3: ["Самурай", "Ниндзя", "Сенсей", "Ронин", "Сёгун"],
+            4: ["Капитан", "Лейтенант", "Сержант", "Рядовой", "Генерал"],
+            5: ["Ангел", "Демон", "Падший", "Святой", "Пророк"]
+        }
+        
+        if theme_num not in themes:
+            await update.message.reply_text("❌ Тема не найдена")
+            return
+        
+        await update.message.reply_text(f"✅ Тема {theme_num} применена!")
+    
+    async def cmd_apply_theme_by_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Применить тему по имени"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'!темы\s+(\w+)', text)
+        if not match:
+            return
+        
+        theme_name = match.group(1).lower()
+        
+        themes = {
+            "cyber": ["Хакер", "Кодер", "Админ", "Сисоп", "Девелопер"],
+            "fantasy": ["Маг", "Воин", "Лучник", "Паладин", "Некромант"],
+            "anime": ["Самурай", "Ниндзя", "Сенсей", "Ронин", "Сёгун"],
+            "military": ["Капитан", "Лейтенант", "Сержант", "Рядовой", "Генерал"]
+        }
+        
+        if theme_name not in themes:
+            await update.message.reply_text("❌ Тема не найдена")
+            return
+        
+        await update.message.reply_text(f"✅ Тема '{theme_name}' применена!")
+
+        # ===== ПРИВЯЗКА ЧАТА =====
+    async def cmd_bind_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Привязать чат (для использования через ЛС)"""
+        if update.effective_chat.type == "private":
+            await update.message.reply_text("❌ Эта команда работает только в группах")
+            return
+        
+        chat_id = update.effective_chat.id
+        chat_title = update.effective_chat.title
+        
+        chat_code = hashlib.md5(f"{chat_id}_{random.randint(1000,9999)}".encode()).hexdigest()[:8]
+        
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, chat_name, chat_code)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET chat_code = excluded.chat_code
+        ''', (chat_id, chat_title, chat_code))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(
+            f"✅ **Чат привязан!**\n\n"
+            f"🔑 Код чата: `{chat_code}`\n\n"
+            f"Теперь вы можете использовать команды через ЛС бота, указывая этот код."
+        )
+    
+    async def cmd_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Получить код чата"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT chat_code FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text("❌ Чат не привязан. Используйте !привязать")
+            return
+        
+        await update.message.reply_text(f"🔑 Код чата: `{row[0]}`")
+    
+    async def cmd_change_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сменить код чата"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите новый код: /changecode x5g7k9")
+            return
+        
+        new_code = context.args[0]
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        if len(new_code) < 3 or len(new_code) > 10:
+            await update.message.reply_text("❌ Код должен быть от 3 до 10 символов")
+            return
+        
+        self.db.cursor.execute("SELECT chat_id FROM chat_settings WHERE chat_code = ?", (new_code,))
+        if self.db.cursor.fetchone():
+            await update.message.reply_text("❌ Этот код уже занят")
+            return
+        
+        self.db.cursor.execute("UPDATE chat_settings SET chat_code = ? WHERE chat_id = ?", (new_code, chat_id))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ Код чата изменён на `{new_code}`")
+    
+    # ===== КУБЫШКА =====
+    async def cmd_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о кубышке чата"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT treasury_neons, treasury_glitches FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text("❌ Настройки чата не найдены")
+            return
+        
+        neons, glitches = row[0], row[1]
+        
+        text = (
+            f"💰 **КУБЫШКА ЧАТА**\n\n"
+            f"💜 Неонов: {neons}\n"
+            f"🖥 Глитчей: {glitches}\n\n"
+            f"40% от покупок бонусов в чате поступает в кубышку.\n\n"
+            f"📝 /treasury_withdraw — вывести неоны"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_treasury_withdraw(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Вывод из кубышки"""
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        self.db.cursor.execute("SELECT treasury_neons FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row or row[0] == 0:
+            await update.message.reply_text("❌ В кубышке нет неонов")
+            return
+        
+        neons = row[0]
+        
+        self.db.add_neons(user_data['id'], neons)
+        self.db.cursor.execute("UPDATE chat_settings SET treasury_neons = 0 WHERE chat_id = ?", (chat_id,))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ {neons} 💜 переведены в ваш кошелёк!")
+
+        # ===== РАЗВЛЕЧЕНИЯ =====
+    async def cmd_joke(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Случайная шутка"""
+        jokes = [
+            "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный...",
+            "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
+            "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
+            "Заходит как-то Windows в бар, а бармен говорит:\n— Извините, но у нас для вас нет места.",
+            "— Алло, это служба поддержки?\n— Да.\n— У меня кнопка «Пуск» не запускается.",
+        ]
+        await update.message.reply_text(f"😄 {random.choice(jokes)}")
+    
+    async def cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Интересный факт"""
+        facts = [
+            "Осьминоги имеют три сердца и голубую кровь.",
+            "Бананы технически являются ягодами, а клубника — нет.",
+            "В Швейцарии запрещено держать только одну морскую свинку.",
+            "Глаз страуса больше, чем его мозг.",
+            "Мед никогда не портится. Археологи находили 3000-летний мёд в гробницах египтян.",
+        ]
+        await update.message.reply_text(f"🔍 {random.choice(facts)}")
+    
+    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Цитата"""
+        quotes = [
+            "Жизнь — это то, что с тобой происходит, пока ты строишь планы. — Джон Леннон",
+            "Будьте тем изменением, которое вы хотите увидеть в мире. — Махатма Ганди",
+            "Единственный способ делать великие дела — любить то, что вы делаете. — Стив Джобс",
+            "Всё гениальное просто. — Альберт Эйнштейн",
+            "Победа — это ещё не всё, всё — это постоянное желание побеждать. — Винс Ломбарди",
+        ]
+        await update.message.reply_text(f"📜 {random.choice(quotes)}")
+    
+    async def cmd_whoami(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Кто я сегодня"""
+        roles = ["супергерой", "злодей", "тайный агент", "космонавт", "пират", "киборг", "хакер", "маг"]
+        await update.message.reply_text(f"🦸 Вы — {random.choice(roles)}!")
+    
+    async def cmd_advice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Совет"""
+        advices = [
+            "Пейте больше воды.",
+            "Высыпайтесь — это важно для здоровья.",
+            "Делайте зарядку по утрам.",
+            "Улыбайтесь чаще — это заразительно.",
+            "Не откладывайте на завтра то, что можно сделать сегодня.",
+        ]
+        await update.message.reply_text(f"💡 {random.choice(advices)}")
+    
+    async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверка совместимости двух пользователей"""
+        if len(context.args) < 2:
+            await update.message.reply_text("❌ Укажите двух пользователей: /compatibility @user1 @user2")
+            return
+        
+        username1 = context.args[0].replace('@', '')
+        username2 = context.args[1].replace('@', '')
+        
+        user1 = self.db.get_user_by_username(username1)
+        user2 = self.db.get_user_by_username(username2)
+        
+        if not user1 or not user2:
+            await update.message.reply_text("❌ Пользователи не найдены")
+            return
+        
+        name1 = user1.get('nickname') or user1['first_name']
+        name2 = user2.get('nickname') or user2['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            text = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            text = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            text = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            text = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            text = "Идеальная совместимость!"
+        
+        await update.message.reply_text(
+            f"💞 **СОВМЕСТИМОСТЬ**\n\n"
+            f"{emoji} {name1} и {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{text}"
+        )
+    
+    async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Погода (симуляция)"""
+        if not context.args:
+            city = "Москва"
+        else:
+            city = " ".join(context.args)
+        
+        temp = random.randint(-10, 30)
+        conditions = ["ясно", "облачно", "пасмурно", "дождь", "снег", "гроза"]
+        condition = random.choice(conditions)
+        wind = random.randint(0, 10)
+        humidity = random.randint(30, 90)
+        
+        await update.message.reply_text(
+            f"🌦 **Погода в {city}**\n\n"
+            f"🌡 {temp}°C, {condition}\n"
+            f"💨 ветер {wind} м/с\n"
+            f"💧 влажность {humidity}%"
+        )
+    
+    async def cmd_random(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Случайное число"""
+        if not context.args:
+            max_num = 100
+        else:
+            try:
+                max_num = int(context.args[0])
+            except:
+                await update.message.reply_text("❌ Укажите число")
+                return
+        
+        result = random.randint(0, max_num)
+        await update.message.reply_text(f"🎲 Случайное число: **{result}**")
+    
+    async def cmd_choose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Выбор из вариантов"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите варианты через или: /choose чай или кофе")
+            return
+        
+        text = " ".join(context.args)
+        options = re.split(r'\s+или\s+', text)
+        
+        if len(options) < 2:
+            await update.message.reply_text("❌ Нужно минимум 2 варианта через 'или'")
+            return
+        
+        choice = random.choice(options)
+        await update.message.reply_text(f"🤔 Я выбираю: **{choice}**")
+    
+    async def cmd_dane(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Да/нет"""
+        if not context.args:
+            await update.message.reply_text("❌ Задайте вопрос: /dane сегодня будет дождь?")
+            return
+        
+        answers = [
+            "🎱 Безусловно да",
+            "🎱 Определённо да",
+            "🎱 Без сомнений",
+            "🎱 Да — определённо",
+            "🎱 Можешь быть уверен в этом",
+            "🎱 Мне кажется — да",
+            "🎱 Вероятнее всего",
+            "🎱 Хорошие перспективы",
+            "🎱 Знаки говорят — да",
+            "🎱 Пока не ясно, попробуй снова",
+            "🎱 Спроси позже",
+            "🎱 Лучше не рассказывать",
+            "🎱 Сейчас нельзя предсказать",
+            "🎱 Сконцентрируйся и спроси опять",
+            "🎱 Даже не думай",
+            "🎱 Мой ответ — нет",
+            "🎱 По моим данным — нет",
+            "🎱 Перспективы не очень хорошие",
+            "🎱 Весьма сомнительно",
+        ]
+        
+        await update.message.reply_text(f"❓ {random.choice(answers)}")
+    
+    async def cmd_ship(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Шипперинг"""
+        if len(context.args) < 2:
+            chat_id = update.effective_chat.id
+            cursor = self.db.cursor
+            cursor.execute("SELECT DISTINCT user_id FROM messages WHERE chat_id = ? ORDER BY RANDOM() LIMIT 2", (chat_id,))
+            users = cursor.fetchall()
+            
+            if len(users) < 2:
+                await update.message.reply_text("❌ Недостаточно участников для шипперинга")
+                return
+            
+            user1_id, user2_id = users[0][0], users[1][0]
+        else:
+            username1 = context.args[0].replace('@', '')
+            username2 = context.args[1].replace('@', '')
+            
+            user1 = self.db.get_user_by_username(username1)
+            user2 = self.db.get_user_by_username(username2)
+            
+            if not user1 or not user2:
+                await update.message.reply_text("❌ Пользователи не найдены")
+                return
+            
+            user1_id, user2_id = user1['id'], user2['id']
+        
+        user1_data = self.db.get_user_by_id(user1_id)
+        user2_data = self.db.get_user_by_id(user2_id)
+        
+        name1 = user1_data.get('nickname') or user1_data['first_name']
+        name2 = user2_data.get('nickname') or user2_data['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            desc = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            desc = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            desc = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            desc = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            desc = "Идеальная совместимость!"
+        
+        self.db.create_pair(update.effective_chat.id, user1_id, user2_id)
+        
+        await update.message.reply_text(
+            f"💞 **ШИППЕРИМ**\n\n"
+            f"{emoji} {name1} + {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{desc}"
+        )
+    
+    async def cmd_pairing(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список пар в этом чате"""
+        pairs = self.db.get_chat_pairs(update.effective_chat.id)
+        
+        if not pairs:
+            await update.message.reply_text("ℹ️ В этом чате пока нет пар")
+            return
+        
+        text = "💞 **ПАРЫ ЧАТА**\n\n"
+        for pair in pairs[:10]:
+            text += f"{pair['name1']} + {pair['name2']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_pairs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список пар (синоним)"""
+        await self.cmd_pairing(update, context)
+
     def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
