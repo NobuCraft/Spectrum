@@ -4300,7 +4300,416 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         self.db.log_action(user_data['id'], 'buy_premium')
+
+        # ===== НОВАЯ ЭКОНОМИКА =====
+    async def cmd_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        text = (
+            s.header("💜 МОИ НЕОНЫ") + "\n\n"
+            f"{s.stat('Баланс', f'{user_data["neons"]} 💜')}\n"
+            f"{s.stat('В глитчах', f'{user_data["glitches"]} 🖥')}\n\n"
+            f"{s.section('КОМАНДЫ')}"
+            f"{s.cmd('transfer @user 100', 'передать неоны')}\n"
+            f"{s.cmd('exchange 100', 'обменять глитчи на неоны')}\n"
+            f"{s.cmd('farm', 'ферма глитчей')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
+    async def cmd_glitches(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        neons_from_glitches = user_data['glitches'] // NEON_PRICE
+        
+        text = (
+            s.header("🖥 МОИ ГЛИТЧИ") + "\n\n"
+            f"{s.stat('Баланс', f'{user_data["glitches"]} 🖥')}\n"
+            f"{s.stat('Можно обменять', f'{neons_from_glitches} 💜')}\n\n"
+            f"{s.section('КОМАНДЫ')}"
+            f"{s.cmd('exchange 100', 'обменять глитчи на неоны')}\n"
+            f"{s.cmd('farm', 'ферма глитчей')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_farm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        last_farm = user_data.get('last_farm')
+        if last_farm:
+            last = datetime.fromisoformat(last_farm)
+            if (datetime.now() - last).seconds < GLITCH_FARM_COOLDOWN:
+                remain = GLITCH_FARM_COOLDOWN - (datetime.now() - last).seconds
+                hours = remain // 3600
+                minutes = (remain % 3600) // 60
+                await update.message.reply_text(s.warning(f"⏳ Ферма будет доступна через {hours}ч {minutes}м"))
+                return
+        
+        glitches_earned = random.randint(10, 50)
+        
+        if self.db.is_vip(user_data['id']):
+            glitches_earned = int(glitches_earned * 1.2)
+        if self.db.is_premium(user_data['id']):
+            glitches_earned = int(glitches_earned * 1.3)
+        
+        self.db.add_glitches(user_data['id'], glitches_earned)
+        self.db.update_user(user_data['id'], last_farm=datetime.now().isoformat())
+        
+        text = (
+            s.header("🖥 ФЕРМА ГЛИТЧЕЙ") + "\n\n"
+            f"{s.success('✅ Вы успешно нафармили!')}\n"
+            f"{s.item(f'Добыто: {glitches_earned} 🖥')}\n\n"
+            f"{s.item(f'Теперь у вас: {user_data["glitches"] + glitches_earned} 🖥')}\n\n"
+            f"{s.info('Следующая ферма через 4 часа')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_transfer_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Использование: /transfer @user 100"))
+            return
+        
+        username = context.args[0].replace('@', '')
+        try:
+            amount = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("❌ Сумма должна быть числом"))
+            return
+        
+        if amount <= 0:
+            await update.message.reply_text(s.error("❌ Сумма должна быть больше 0"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['neons'] < amount:
+            await update.message.reply_text(s.error(f"❌ Недостаточно неонов. Баланс: {user_data['neons']} 💜"))
+            return
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target['id'] == user_data['id']:
+            await update.message.reply_text(s.error("❌ Нельзя перевести самому себе"))
+            return
+        
+        commission = 0
+        if not self.db.is_vip(user_data['id']) and not self.db.is_premium(user_data['id']):
+            commission = int(amount * 0.05)
+        
+        self.db.transfer_neons(user_data['id'], target['id'], amount, commission)
+        
+        target_name = target.get('nickname') or target['first_name']
+        
+        text = (
+            s.header("💜 ПЕРЕВОД НЕОНОВ") + "\n"
+            f"{s.item(f'Получатель: {target_name}')}\n"
+            f"{s.item(f'Сумма: {amount} 💜')}\n"
+        )
+        
+        if commission > 0:
+            text += f"{s.item(f'Комиссия: {commission} 💜 (5%)')}\n"
+        
+        text += f"\n{s.success('✅ Перевод выполнен!')}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'transfer_neons', f"{amount}💜 -> {target['id']}")
+    
+    async def cmd_exchange(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите количество глитчей для обмена"))
+            return
+        
+        try:
+            glitches = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Количество должно быть числом"))
+            return
+        
+        if glitches < NEON_PRICE:
+            await update.message.reply_text(s.error(f"❌ Минимум для обмена: {NEON_PRICE} глитчей"))
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['glitches'] < glitches:
+            await update.message.reply_text(s.error(f"❌ Недостаточно глитчей. Баланс: {user_data['glitches']} 🖥"))
+            return
+        
+        neons = glitches // NEON_PRICE
+        used_glitches = neons * NEON_PRICE
+        remainder = glitches - used_glitches
+        
+        self.db.add_glitches(user_data['id'], -used_glitches)
+        self.db.add_neons(user_data['id'], neons)
+        
+        text = (
+            s.header("💱 ОБМЕН ВАЛЮТ") + "\n\n"
+            f"{s.item(f'Обменено: {used_glitches} 🖥 → {neons} 💜')}\n"
+            f"{s.item(f'Остаток глитчей: {user_data["glitches"] - used_glitches + remainder} 🖥')}\n"
+            f"{s.item(f'Новый баланс неонов: {user_data["neons"] + neons} 💜')}\n\n"
+            f"{s.success('✅ Обмен выполнен!')}"
+        )
+        
+        if remainder > 0:
+            text += f"\n{s.info(f'Остаток {remainder} глитчей не обменян (нужно {NEON_PRICE} для 1 неона)')}"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        # ===== РАЗВЛЕЧЕНИЯ =====
+    async def cmd_joke(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        jokes = [
+            "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный...",
+            "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
+            "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
+        ]
+        await update.message.reply_text(f"😄 {random.choice(jokes)}")
+    
+    async def cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        facts = [
+            "Осьминоги имеют три сердца и голубую кровь.",
+            "Бананы технически являются ягодами, а клубника — нет.",
+            "В Швейцарии запрещено держать только одну морскую свинку.",
+        ]
+        await update.message.reply_text(f"🔍 {random.choice(facts)}")
+    
+    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        quotes = [
+            "Жизнь — это то, что с тобой происходит, пока ты строишь планы. — Джон Леннон",
+            "Будьте тем изменением, которое вы хотите увидеть в мире. — Махатма Ганди",
+            "Единственный способ делать великие дела — любить то, что вы делаете. — Стив Джобс",
+        ]
+        await update.message.reply_text(f"📜 {random.choice(quotes)}")
+    
+    async def cmd_whoami(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        roles = ["супергерой", "злодей", "тайный агент", "космонавт", "пират"]
+        await update.message.reply_text(f"🦸 Вы — {random.choice(roles)}!")
+    
+    async def cmd_advice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        advices = [
+            "Пейте больше воды.",
+            "Высыпайтесь — это важно для здоровья.",
+            "Делайте зарядку по утрам.",
+        ]
+        await update.message.reply_text(f"💡 {random.choice(advices)}")
+    
+    async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("❌ Укажите двух пользователей: /compatibility @user1 @user2"))
+            return
+        
+        username1 = context.args[0].replace('@', '')
+        username2 = context.args[1].replace('@', '')
+        
+        user1 = self.db.get_user_by_username(username1)
+        user2 = self.db.get_user_by_username(username2)
+        
+        if not user1 or not user2:
+            await update.message.reply_text(s.error("❌ Пользователи не найдены"))
+            return
+        
+        name1 = user1.get('nickname') or user1['first_name']
+        name2 = user2.get('nickname') or user2['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            text = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            text = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            text = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            text = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            text = "Идеальная совместимость!"
+        
+        await update.message.reply_text(
+            f"{s.header('💞 СОВМЕСТИМОСТЬ')}\n\n"
+            f"{emoji} {name1} и {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            city = "Москва"
+        else:
+            city = " ".join(context.args)
+        
+        temp = random.randint(-10, 30)
+        conditions = ["ясно", "облачно", "пасмурно", "дождь", "снег", "гроза"]
+        condition = random.choice(conditions)
+        wind = random.randint(0, 10)
+        humidity = random.randint(30, 90)
+        
+        text = (
+            f"🌦 Погода в {city}:\n"
+            f"🌡 {temp}°C, {condition}\n"
+            f"💨 ветер {wind} м/с\n"
+            f"💧 влажность {humidity}%"
+        )
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_random(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            max_num = 100
+        else:
+            try:
+                max_num = int(context.args[0])
+            except:
+                await update.message.reply_text(s.error("❌ Укажите число"))
+                return
+        
+        result = random.randint(0, max_num)
+        await update.message.reply_text(f"🎲 Случайное число: **{result}**", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_choose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите варианты через или: /choose чай или кофе"))
+            return
+        
+        text = " ".join(context.args)
+        options = re.split(r'\s+или\s+', text)
+        
+        if len(options) < 2:
+            await update.message.reply_text(s.error("❌ Нужно минимум 2 варианта через 'или'"))
+            return
+        
+        choice = random.choice(options)
+        await update.message.reply_text(f"🤔 Я выбираю: **{choice}**", parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_dane(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Задайте вопрос: /dane сегодня будет дождь?"))
+            return
+        
+        answers = [
+            "🎱 Безусловно да",
+            "🎱 Определённо да",
+            "🎱 Без сомнений",
+            "🎱 Да — определённо",
+            "🎱 Мне кажется — да",
+            "🎱 Вероятнее всего",
+            "🎱 Хорошие перспективы",
+            "🎱 Знаки говорят — да",
+            "🎱 Пока не ясно, попробуй снова",
+            "🎱 Спроси позже",
+            "🎱 Лучше не рассказывать",
+            "🎱 Сейчас нельзя предсказать",
+            "🎱 Сконцентрируйся и спроси опять",
+            "🎱 Даже не думай",
+            "🎱 Мой ответ — нет",
+            "🎱 По моим данным — нет",
+            "🎱 Перспективы не очень хорошие",
+            "🎱 Весьма сомнительно",
+        ]
+        
+        await update.message.reply_text(f"❓ {random.choice(answers)}")
+    
+    async def cmd_ship(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            chat_id = update.effective_chat.id
+            cursor = self.db.cursor
+            cursor.execute("SELECT DISTINCT user_id FROM messages WHERE chat_id = ? ORDER BY RANDOM() LIMIT 2", (chat_id,))
+            users = cursor.fetchall()
+            
+            if len(users) < 2:
+                await update.message.reply_text(s.error("❌ Недостаточно участников для шипперинга"))
+                return
+            
+            user1_id, user2_id = users[0][0], users[1][0]
+        else:
+            username1 = context.args[0].replace('@', '')
+            username2 = context.args[1].replace('@', '')
+            
+            user1 = self.db.get_user_by_username(username1)
+            user2 = self.db.get_user_by_username(username2)
+            
+            if not user1 or not user2:
+                await update.message.reply_text(s.error("❌ Пользователи не найдены"))
+                return
+            
+            user1_id, user2_id = user1['id'], user2['id']
+        
+        user1_data = self.db.get_user_by_id(user1_id)
+        user2_data = self.db.get_user_by_id(user2_id)
+        
+        name1 = user1_data.get('nickname') or user1_data['first_name']
+        name2 = user2_data.get('nickname') or user2_data['first_name']
+        
+        compatibility = random.randint(0, 100)
+        
+        if compatibility < 30:
+            emoji = "💔"
+            desc = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            desc = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            desc = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            desc = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            desc = "Идеальная совместимость!"
+        
+        self.db.create_pair(update.effective_chat.id, user1_id, user2_id)
+        
+        await update.message.reply_text(
+            f"{s.header('💞 ШИППЕРИМ')}\n\n"
+            f"{emoji} {name1} + {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{desc}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_pairing(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        pairs = self.db.get_chat_pairs(update.effective_chat.id)
+        
+        if not pairs:
+            await update.message.reply_text(s.info("В этом чате пока нет пар"))
+            return
+        
+        text = s.header("💞 ПАРЫ ЧАТА") + "\n\n"
+        for pair in pairs[:10]:
+            text += f"{pair['name1']} + {pair['name2']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_pairs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_pairing(update, context)
+
+        # ===== АЧИВКИ =====
+    async def cmd_achievements(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = """
+# Спектр | Ачивки
+
+🏅 **Команды:**
+
+/achievements — эта информация
+/myachievements — мои ачивки
+/achievement [ID] — информация об ачивке
+/topachievements — топ коллекционеров
+
+📋 **Категории ачивок:**
+💜 По богатству
+🖥 По глитчам
+🎲 По играм
+⚔️ По дуэлям
+
     async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка цифр меню"""
         text = update.message.text.strip()
@@ -5785,6 +6194,336 @@ async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         await update.message.reply_text(text, parse_mode='Markdown')
         context.user_data['awaiting_rps'] = True
+
+        # ===== ИГРЫ =====
+    async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.choice(["Орёл", "Решка"])
+        await update.message.reply_text(
+            f"{s.header('🪙 МОНЕТКА')}\n\n{s.item(f'Выпало: {result}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.randint(1, 6)
+        await update.message.reply_text(
+            f"{s.header('🎲 КУБИК')}\n\n{s.item(f'Выпало: {result}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_dice_bet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if not context.args:
+            await update.message.reply_text(s.error("❌ Укажите ставку: /dicebet 100"))
+            return
+        
+        try:
+            bet = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("❌ Ставка должна быть числом"))
+            return
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
+        
+        dice1 = random.randint(1, 6)
+        dice2 = random.randint(1, 6)
+        total = dice1 + dice2
+        
+        win_multiplier = 1
+        if total in [7, 11]:
+            win_multiplier = 2
+            self.db.update_user(user_data['id'], dice_wins=user_data.get('dice_wins', 0) + 1)
+            result_text = s.success(f"🎉 ВЫИГРЫШ!")
+        elif total in [2, 3, 12]:
+            win_multiplier = 0
+            self.db.update_user(user_data['id'], dice_losses=user_data.get('dice_losses', 0) + 1)
+            result_text = s.error(f"💀 ПРОИГРЫШ!")
+        else:
+            win_multiplier = 1
+            result_text = s.info(f"🔄 НИЧЬЯ!")
+        
+        win_amount = bet * win_multiplier if win_multiplier > 0 else -bet
+        
+        if win_multiplier > 0:
+            self.db.add_coins(user_data['id'], win_amount - bet if win_multiplier > 1 else 0)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+        
+        text = (
+            f"# Спектр | Кости\n\n"
+            f"Игрок: {user.first_name}\n"
+            f"Ставка: {bet} 💰\n\n"
+            f"🎲 {dice1} + {dice2} = {total}\n\n"
+            f"{result_text}\n"
+        )
+        
+        if win_multiplier > 1:
+            text += f"+{win_amount - bet} 💰\n"
+        elif win_multiplier == 0:
+            text += f"-{bet} 💰\n"
+        else:
+            text += f"Ставка возвращена\n"
+        
+        text += f"\n💰 Новый баланс: {user_data['coins'] + (win_amount - bet if win_multiplier > 1 else -bet if win_multiplier == 0 else 0)} 💰"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        choice = "red"
+        
+        if context.args:
+            try:
+                bet = int(context.args[0])
+                if len(context.args) > 1:
+                    choice = context.args[1].lower()
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
+        
+        num = random.randint(0, 36)
+        red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
+        
+        if num == 0:
+            color = "green"
+        elif num in red_numbers:
+            color = "red"
+        else:
+            color = "black"
+        
+        win = False
+        multiplier = 0
+        
+        if choice.isdigit() and int(choice) == num:
+            win = True
+            multiplier = 36
+        elif choice in ["red", "black", "green"] and choice == color:
+            win = True
+            multiplier = 2 if choice in ["red", "black"] else 36
+        
+        if win:
+            win_amount = bet * multiplier
+            self.db.add_coins(user_data['id'], win_amount)
+            self.db.update_user(user_data['id'], casino_wins=user_data.get('casino_wins', 0) + 1)
+            result = s.success(f"🎉 ВЫИГРЫШ! +{win_amount} 💰")
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], casino_losses=user_data.get('casino_losses', 0) + 1)
+            result = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
+        
+        text = (
+            f"# Спектр | Рулетка\n\n"
+            f"Игрок: {user.first_name}\n"
+            f"Ставка: {bet} 💰\n"
+            f"Выбрано: {choice}\n\n"
+            f"🎰 Выпало: {num} {color}\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win_amount if win else -bet)} 💰"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        self.db.log_action(user_data['id'], 'roulette', f"{'win' if win else 'lose'} {bet}")
+    
+    async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        if bet <= 0:
+            await update.message.reply_text(s.error("❌ Ставка должна быть больше 0"))
+            return
+        
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "⭐️"]
+        spin = [random.choice(symbols) for _ in range(3)]
+        
+        if len(set(spin)) == 1:
+            if spin[0] == "7️⃣":
+                win = bet * 50
+            elif spin[0] == "💎":
+                win = bet * 30
+            elif spin[0] == "⭐️":
+                win = bet * 20
+            else:
+                win = bet * 10
+            result = s.success(f"🎉 ДЖЕКПОТ! +{win} 💰")
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        elif len(set(spin)) == 2:
+            win = bet * 2
+            result = s.success(f"🎉 ВЫИГРЫШ! +{win} 💰")
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        else:
+            win = 0
+            result = s.error(f"💀 ПРОИГРЫШ! -{bet} 💰")
+            self.db.update_user(user_data['id'], slots_losses=user_data.get('slots_losses', 0) + 1)
+        
+        if win > 0:
+            self.db.add_coins(user_data['id'], win)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+        
+        text = (
+            f"# Спектр | Слоты\n\n"
+            f"Игрок: {user.first_name}\n"
+            f"Ставка: {bet} 💰\n\n"
+            f"[ {' | '.join(spin)} ]\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win if win > 0 else -bet)} 💰"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_saper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        field = [['⬜️' for _ in range(3)] for _ in range(3)]
+        mine_x, mine_y = random.randint(0, 2), random.randint(0, 2)
+        
+        game_id = f"saper_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'field': field,
+            'mine_x': mine_x,
+            'mine_y': mine_y,
+            'bet': bet,
+            'opened': 0
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        # Создаем кнопки для сапёра
+        keyboard = []
+        for i in range(3):
+            row = []
+            for j in range(3):
+                cell_num = i * 3 + j + 1
+                row.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+            keyboard.append(row)
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        text = (
+            s.header("💣 САПЁР") + "\n\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Выберите клетку:')}\n\n"
+            f"{s.info('Нажимайте на кнопки, чтобы открыть клетки')}"
+        )
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=reply_markup)
+    
+    async def cmd_guess(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        number = random.randint(1, 100)
+        game_id = f"guess_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': 0,
+            'max_attempts': 7,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"{s.header('🔢 УГАДАЙ ЧИСЛО')}\n\n"
+            f"{s.item('Я загадал число от 1 до 100')}\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Попыток: 7')}\n\n"
+            f"{s.info('Напиши свой вариант...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    async def cmd_bulls(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+        
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"❌ Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+        
+        digits = random.sample(range(10), 4)
+        number = ''.join(map(str, digits))
+        
+        game_id = f"bulls_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': [],
+            'max_attempts': 10,
+            'bet': bet
+        }
+        
+        self.db.add_coins(user_data['id'], -bet)
+        
+        await update.message.reply_text(
+            f"{s.header('🐂 БЫКИ И КОРОВЫ')}\n\n"
+            f"{s.item('Я загадал 4-значное число без повторов')}\n"
+            f"{s.item(f'Ставка: {bet} 💰')}\n"
+            f"{s.item('Попыток: 10')}\n"
+            f"{s.item('Бык — цифра на своём месте')}\n"
+            f"{s.item('Корова — цифра есть, но не на своём месте')}\n\n"
+            f"{s.info('Напиши свой вариант (4 цифры)...')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_russian_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
