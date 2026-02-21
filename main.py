@@ -693,16 +693,16 @@ class Database:
     ''')
         
         # Таблица логов
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS logs (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                action TEXT,
-                details TEXT,
-                chat_id INTEGER,
-                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            action TEXT,
+            details TEXT,
+            chat_id INTEGER,
+            timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
         
         # Таблица чёрного списка
         self.cursor.execute('''
