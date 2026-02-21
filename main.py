@@ -652,44 +652,44 @@ class Database:
                 profile_visible INTEGER DEFAULT 1,
                 achievements_visible INTEGER DEFAULT 1,
                 stats_visible INTEGER DEFAULT 1,
-                last_farm TEXT
-            )
-        ''')
+                            last_farm TEXT
+        )
+    ''')
+    
+    # Добавьте это после создания таблицы users
+    try:
+        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT")
+        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_date TEXT")
+        self.cursor.execute("ALTER TABLE users ADD COLUMN ban_admin INTEGER")
+        self.conn.commit()
+    except sqlite3.OperationalError:
+        # Колонки уже существуют - игнорируем ошибку
+        pass
 
-        # Добавьте это после создания таблицы users
-try:
-    self.cursor.execute("ALTER TABLE users ADD COLUMN ban_reason TEXT")
-    self.cursor.execute("ALTER TABLE users ADD COLUMN ban_date TEXT")
-    self.cursor.execute("ALTER TABLE users ADD COLUMN ban_admin INTEGER")
-    self.conn.commit()
-except sqlite3.OperationalError:
-    # Колонки уже существуют - игнорируем ошибку
-    pass
-        
-        # Таблица сообщений
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS messages (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                username TEXT,
-                first_name TEXT,
-                message_text TEXT,
-                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-                chat_id INTEGER,
-                chat_title TEXT
-            )
-        ''')
-        
-        # Таблица дневной статистики
-        self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS daily_stats (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER,
-                date DATE,
-                count INTEGER DEFAULT 0,
-                UNIQUE(user_id, date)
-            )
-        ''')
+    # Таблица сообщений
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            username TEXT,
+            first_name TEXT,
+            message_text TEXT,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            chat_id INTEGER,
+            chat_title TEXT
+        )
+    ''')
+
+    # Таблица дневной статистики
+    self.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS daily_stats (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            date DATE,
+            count INTEGER DEFAULT 0,
+            UNIQUE(user_id, date)
+        )
+    ''')
         
         # Таблица логов
         self.cursor.execute('''
