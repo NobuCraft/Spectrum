@@ -652,9 +652,10 @@ class Database:
                 profile_visible INTEGER DEFAULT 1,
                 achievements_visible INTEGER DEFAULT 1,
                 stats_visible INTEGER DEFAULT 1,
-                            last_farm TEXT
-        )
-    ''')
+                last_farm TEXT
+            )
+        ''')
+             
     
     # Добавьте это после создания таблицы users
     try:
