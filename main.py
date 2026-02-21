@@ -590,47 +590,6 @@ class MafiaGame:
         
         await self._update_mafia_game_message(game, context)
     
-    async def _update_mafia_game_message(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        """Обновить сообщение с игрой"""
-        if not game.message_id:
-            return
-        
-        if game.players:
-            players_list = []
-            for pid in game.players:
-                p = game.players_data[pid]
-                username = f" (@{p['username']})" if p['username'] else ""
-                players_list.append(f"• {p['name']}{username}")
-            
-            players_text = "\n".join(players_list)
-            confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
-            
-            text = (
-                "🔫 **МАФИЯ**\n\n"
-                f"👥 **Участники ({len(game.players)}):**\n"
-                f"{players_text}\n\n"
-                f"✅ **Подтвердили:** {confirmed}/{len(game.players)}\n"
-                f"❌ **Нужно минимум:** {MAFIA_MIN_PLAYERS} игроков\n\n"
-                "📌 /mafiajoin — присоединиться\n"
-                "📌 /mafialeave — выйти"
-            )
-        else:
-            text = (
-                "🔫 **МАФИЯ**\n\n"
-                "👥 **Участников нет**\n"
-                "📌 /mafiajoin — присоединиться"
-            )
-        
-        try:
-            await context.bot.edit_message_text(
-                text,
-                chat_id=game.chat_id,
-                message_id=game.message_id,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        except:
-            pass
-    
     async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
         """Начать игру после подтверждения"""
         if len(game.players) < MAFIA_MIN_PLAYERS:
@@ -9626,6 +9585,47 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             await context.bot.edit_message_text(
                 text,
                 chat_id=chat_id,
+                message_id=game.message_id,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+
+    async def _update_mafia_game_message(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Обновить сообщение с игрой"""
+        if not game.message_id:
+            return
+        
+        if game.players:
+            players_list = []
+            for pid in game.players:
+                p = game.players_data[pid]
+                username = f" (@{p['username']})" if p['username'] else ""
+                players_list.append(f"• {p['name']}{username}")
+            
+            players_text = "\n".join(players_list)
+            confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
+            
+            text = (
+                "🔫 **МАФИЯ**\n\n"
+                f"👥 **Участники ({len(game.players)}):**\n"
+                f"{players_text}\n\n"
+                f"✅ **Подтвердили:** {confirmed}/{len(game.players)}\n"
+                f"❌ **Нужно минимум:** {MAFIA_MIN_PLAYERS} игроков\n\n"
+                "📌 /mafiajoin — присоединиться\n"
+                "📌 /mafialeave — выйти"
+            )
+        else:
+            text = (
+                "🔫 **МАФИЯ**\n\n"
+                "👥 **Участников нет**\n"
+                "📌 /mafiajoin — присоединиться"
+            )
+        
+        try:
+            await context.bot.edit_message_text(
+                text,
+                chat_id=game.chat_id,
                 message_id=game.message_id,
                 parse_mode=ParseMode.MARKDOWN
             )
