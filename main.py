@@ -8187,6 +8187,438 @@ class SpectrumBot:
         except Exception as e:
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
+        # ===== ГОЛОСОВАНИЕ ЗА БАН =====
+    async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать голосование за бан"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /banvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        required_votes = 5
+        min_rank = 0
+        
+        if len(context.args) >= 3:
+            try:
+                required_votes = int(context.args[1])
+                min_rank = int(context.args[2])
+            except:
+                pass
+        
+        vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
+                InlineKeyboardButton("❌ ПРОТИВ", callback_data=f"vote_against_{vote_id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            f"🗳 **ГОЛОСОВАНИЕ ЗА БАН**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {update.effective_user.first_name}\n"
+            f"📊 **Требуется голосов:** {required_votes}\n"
+            f"🎚 **Мин. ранг:** {min_rank}\n\n"
+            f"Голосуйте!",
+            reply_markup=keyboard
+        )
+
+    async def cmd_stop_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Остановить голосование"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /stopvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        
+        if vote['created_by'] != user_data['id'] and user_data['rank'] < 3:
+            await update.message.reply_text("❌ У вас нет прав на остановку этого голосования")
+            return
+        
+        self.db.cursor.execute("UPDATE ban_votes SET status = 'stopped' WHERE id = ?", (vote['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Голосование остановлено")
+
+    async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о голосовании"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        creator = self.db.get_user_by_id(vote['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        
+        text = (
+            f"🗳 **ИНФОРМАЦИЯ О ГОЛОСОВАНИИ**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {creator_name}\n"
+            f"📊 **Требуется голосов:** {vote['required_votes']}\n"
+            f"🎚 **Мин. ранг:** {vote['min_rank']}\n"
+            f"✅ **Голосов ЗА:** {vote['votes_for']}\n"
+            f"❌ **Голосов ПРОТИВ:** {vote['votes_against']}"
+        )
+        
+        await update.message.reply_text(text)
+
+    async def cmd_vote_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список активных голосований"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND status = 'active'", (chat_id,))
+        votes = self.db.cursor.fetchall()
+        
+        if not votes:
+            await update.message.reply_text("ℹ️ Нет активных голосований")
+            return
+        
+        text = "🗳 **АКТИВНЫЕ ГОЛОСОВАНИЯ**\n\n"
+        for vote in votes:
+            vote = dict(vote)
+            target = self.db.get_user_by_id(vote['target_id'])
+            target_name = target.get('nickname') or target['first_name'] if target else "Неизвестно"
+            text += f"• {target_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+        
+        await update.message.reply_text(text)
+
+        # ===== СЕТКИ ЧАТОВ =====
+    async def cmd_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о сетке"""
+        await update.message.reply_text("ℹ️ Используйте /grids для списка сеток")
+
+    async def cmd_grids(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список сеток пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        grids = self.db.get_user_grids(user_data['id'])
+        
+        if not grids:
+            await update.message.reply_text("ℹ️ У вас нет созданных сеток")
+            return
+        
+        text = "🔗 **МОИ СЕТКИ**\n\n"
+        for grid in grids:
+            text += f"ID: {grid['id']} | {grid['name']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_create_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать сетку чатов"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите название сетки: /creategrid main")
+            return
+        
+        name = context.args[0]
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['id'] != OWNER_ID and user_data['rank'] < 5:
+            await update.message.reply_text("❌ Только создатель может создавать сетки")
+            return
+        
+        grid_id = self.db.create_grid(user_data['id'], name)
+        
+        await update.message.reply_text(f"✅ Сетка '{name}' (ID: {grid_id}) создана!")
+
+    async def cmd_add_chat_to_grid(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить чат в сетку"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ID сетки: /addchat 1")
+            return
+        
+        try:
+            grid_id = int(context.args[0])
+        except:
+            await update.message.reply_text("❌ ID сетки должен быть числом")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text("❌ Сетка не найдена")
+            return
+        
+        if row[0] != user_data['id'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text("❌ Вы не владелец этой сетки")
+            return
+        
+        if self.db.add_chat_to_grid(grid_id, chat_id):
+            await update.message.reply_text("✅ Чат добавлен в сетку!")
+        else:
+            await update.message.reply_text("❌ Чат уже в сетке")
+
+    async def cmd_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Назначить глобального модератора"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'\+глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            username = match.group(1)
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text("❌ Пользователь не найден")
+                return
+            
+            await update.message.reply_text(f"✅ {target['first_name']} назначен глобальным модератором")
+            return
+        
+        match = re.search(r'сетка (\d+)\s+(!+)модер\s+@?(\S+)', text, re.IGNORECASE)
+        if match:
+            grid_id = int(match.group(1))
+            rank = len(match.group(2))
+            username = match.group(3)
+            
+            target = self.db.get_user_by_username(username)
+            if not target:
+                await update.message.reply_text("❌ Пользователь не найден")
+                return
+            
+            self.db.cursor.execute("SELECT owner_id FROM chat_grids WHERE id = ?", (grid_id,))
+            row = self.db.cursor.fetchone()
+            
+            if not row:
+                await update.message.reply_text("❌ Сетка не найдена")
+                return
+            
+            if row[0] != user_data['id'] and user_data['id'] != OWNER_ID:
+                await update.message.reply_text("❌ Вы не владелец этой сетки")
+                return
+            
+            self.db.cursor.execute("INSERT OR REPLACE INTO global_moderators (grid_id, user_id, rank) VALUES (?, ?, ?)",
+                                 (grid_id, target['id'], rank))
+            self.db.conn.commit()
+            
+            await update.message.reply_text(f"✅ {target['first_name']} получил ранг {rank} во всех чатах сетки")
+            return
+        
+        await update.message.reply_text("❌ Неверный формат команды")
+
+    async def cmd_global_mods_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список глобальных модераторов"""
+        self.db.cursor.execute("""
+            SELECT gm.*, u.first_name, u.username 
+            FROM global_moderators gm
+            JOIN users u ON gm.user_id = u.id
+        """)
+        mods = self.db.cursor.fetchall()
+        
+        if not mods:
+            await update.message.reply_text("ℹ️ Нет глобальных модераторов")
+            return
+        
+        text = "🌐 **ГЛОБАЛЬНЫЕ МОДЕРАТОРЫ**\n\n"
+        for mod in mods:
+            text += f"• {mod['first_name']} (@{mod['username']}) — ранг {mod['rank']}\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_add_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить глобального модератора"""
+        await self.cmd_global_mod(update, context)
+
+    async def cmd_remove_global_mod(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить глобального модератора"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        match = re.search(r'-глмодер\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя: -глмодер @user")
+            return
+        
+        username = match.group(1)
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("DELETE FROM global_moderators WHERE user_id = ?", (target['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text(f"✅ {target['first_name']} снят с глобальной модерации")
+
+        # ===== СТАТИСТИКА ЧАТА (РУССКИЕ КОМАНДЫ) =====
+    async def cmd_chat_stats_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за сегодня"""
+        await self._chat_stats_period(update, "day")
+
+    async def cmd_chat_stats_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за неделю"""
+        await self._chat_stats_period(update, "week")
+
+    async def cmd_chat_stats_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за месяц"""
+        await self._chat_stats_period(update, "month")
+
+    async def cmd_chat_stats_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за всё время"""
+        await self._chat_stats_period(update, "all")
+
+    async def cmd_top_chat_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за сегодня"""
+        await self._chat_stats_period(update, "day")
+
+    async def cmd_top_chat_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за неделю"""
+        await self._chat_stats_period(update, "week")
+
+    async def cmd_top_chat_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за месяц"""
+        await self._chat_stats_period(update, "month")
+
+    async def cmd_top_chat_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за всё время"""
+        await self._chat_stats_period(update, "all")
+
+    async def _chat_stats_period(self, update: Update, period: str, limit: int = 10):
+        """Общая логика для статистики за период"""
+        chat_id = update.effective_chat.id
+        cursor = self.db.cursor
+        
+        now = datetime.now()
+        
+        if period == "day":
+            time_ago = now - timedelta(days=1)
+            period_name = "день"
+        elif period == "week":
+            time_ago = now - timedelta(days=7)
+            period_name = "неделю"
+        elif period == "month":
+            time_ago = now - timedelta(days=30)
+            period_name = "месяц"
+        else:
+            time_ago = datetime(2000, 1, 1)
+            period_name = "всё время"
+        
+        cursor.execute('''
+            SELECT username, first_name, COUNT(*) as msg_count
+            FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+            GROUP BY user_id 
+            ORDER BY msg_count DESC 
+            LIMIT ?
+        ''', (chat_id, time_ago.isoformat(), limit))
+        
+        top_users = cursor.fetchall()
+        
+        if not top_users:
+            await update.message.reply_text(f"📊 Нет данных за {period_name}")
+            return
+        
+        text = f"🏆 **ТОП ЗА {period_name.upper()}**\n\n"
+        for i, (username, first_name, count) in enumerate(top_users, 1):
+            name = username or first_name or "Пользователь"
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {count} 💬\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
+    async def cmd_apply_theme(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Применить тему по номеру"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'!темы\s+(\d+)', text)
+        if not match:
+            return
+        
+        theme_num = int(match.group(1))
+        
+        themes = {
+            1: ["Хакер", "Кодер", "Админ", "Сисоп", "Девелопер"],
+            2: ["Маг", "Воин", "Лучник", "Паладин", "Некромант"],
+            3: ["Самурай", "Ниндзя", "Сенсей", "Ронин", "Сёгун"],
+            4: ["Капитан", "Лейтенант", "Сержант", "Рядовой", "Генерал"],
+            5: ["Ангел", "Демон", "Падший", "Святой", "Пророк"]
+        }
+        
+        if theme_num not in themes:
+            await update.message.reply_text("❌ Тема не найдена")
+            return
+        
+        await update.message.reply_text(f"✅ Тема {theme_num} применена!")
+
+    async def cmd_apply_theme_by_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Применить тему по имени"""
+        text = update.message.text
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        if user_data['rank'] < 3:
+            await update.message.reply_text("❌ Недостаточно прав")
+            return
+        
+        match = re.search(r'!темы\s+(\w+)', text)
+        if not match:
+            return
+        
+        theme_name = match.group(1).lower()
+        
+        themes = {
+            "cyber": ["Хакер", "Кодер", "Админ", "Сисоп", "Девелопер"],
+            "fantasy": ["Маг", "Воин", "Лучник", "Паладин", "Некромант"],
+            "anime": ["Самурай", "Ниндзя", "Сенсей", "Ронин", "Сёгун"],
+            "military": ["Капитан", "Лейтенант", "Сержант", "Рядовой", "Генерал"]
+        }
+        
+        if theme_name not in themes:
+            await update.message.reply_text("❌ Тема не найдена")
+            return
+        
+        await update.message.reply_text(f"✅ Тема '{theme_name}' применена!")
+
     # ===== КЛАНЫ =====  
     async def cmd_clan(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о своем клане"""
