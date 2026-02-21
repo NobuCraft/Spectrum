@@ -2228,6 +2228,119 @@ class SpectrumBot:
         self.db.update_user(user_data['id'], bio=bio)
         await update.message.reply_text("✅ Информация сохранена")
 
+    async def cmd_set_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка пола"""
+        text = update.message.text
+        if text.startswith('мой пол '):
+            gender = text.replace('мой пол ', '').strip().lower()
+        elif context.args:
+            gender = context.args[0].lower()
+        else:
+            await update.message.reply_text("❌ Укажите пол (м/ж/др): мой пол м")
+            return
+        
+        if gender not in ["м", "ж", "др"]:
+            await update.message.reply_text("❌ Пол должен быть 'м', 'ж' или 'др'")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], gender=gender)
+        
+        gender_text = {"м": "Мужской", "ж": "Женский", "др": "Другой"}[gender]
+        await update.message.reply_text(f"✅ Пол установлен: {gender_text}")
+
+        async def cmd_remove_gender(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить пол из анкеты"""
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], gender='не указан')
+        await update.message.reply_text("✅ Пол удалён из анкеты")
+
+    async def cmd_set_city(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка города"""
+        text = update.message.text
+        if text.startswith('мой город '):
+            city = text.replace('мой город ', '').strip()
+        elif context.args:
+            city = " ".join(context.args)
+        else:
+            await update.message.reply_text("❌ Укажите город: мой город Москва")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], city=city)
+        await update.message.reply_text(f"✅ Город установлен: {city}")
+
+    async def cmd_set_country(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка страны"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите страну: /country [страна]")
+            return
+        country = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], country=country)
+        await update.message.reply_text(f"✅ Страна установлена: {country}")
+
+    async def cmd_set_birth(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка даты рождения"""
+        text = update.message.text
+        if text.startswith('мой др '):
+            birth = text.replace('мой др ', '').strip().split()[0]
+        elif context.args:
+            birth = context.args[0]
+        else:
+            await update.message.reply_text("❌ Укажите дату (ДД.ММ.ГГГГ): мой др 01.01.2000")
+            return
+        
+        if not re.match(r'\d{2}\.\d{2}\.\d{4}', birth):
+            await update.message.reply_text("❌ Неверный формат. Используйте ДД.ММ.ГГГГ")
+            return
+        
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], birth_date=birth)
+        
+        try:
+            day, month, year = map(int, birth.split('.'))
+            today = datetime.now()
+            age = today.year - year - ((today.month, today.day) < (month, day))
+            self.db.update_user(user_data['id'], age=age)
+        except:
+            pass
+        
+        await update.message.reply_text(f"✅ Дата рождения установлена: {birth}")
+
+    async def cmd_set_age(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установка возраста"""
+        if not context.args:
+            await update.message.reply_text("❌ Укажите возраст: /age [число]")
+            return
+        try:
+            age = int(context.args[0])
+            if age < 1 or age > 150:
+                await update.message.reply_text("❌ Возраст должен быть от 1 до 150")
+                return
+        except:
+            await update.message.reply_text("❌ Возраст должен быть числом")
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], age=age)
+        await update.message.reply_text(f"✅ Возраст установлен: {age}")
+
+    async def cmd_profile_public(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сделать профиль публичным"""
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], profile_visible=1)
+        await update.message.reply_text("✅ Ваш профиль теперь виден всем")
+
+    async def cmd_profile_private(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Сделать профиль приватным"""
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], profile_visible=0)
+        await update.message.reply_text("✅ Ваш профиль теперь скрыт от других")
+
+    async def cmd_my_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Моя анкета"""
+        await self.cmd_profile(update, context)
+
     async def cmd_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         await update.message.reply_text(f"🆔 Ваш ID: `{user.id}`", parse_mode=ParseMode.MARKDOWN)
@@ -2252,6 +2365,13 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
         self.app.add_handler(CommandHandler("age", self.cmd_set_age))
         self.app.add_handler(CommandHandler("id", self.cmd_id))
+        self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))  # добавьте
+        self.app.add_handler(CommandHandler("city", self.cmd_set_city))      # добавьте
+        self.app.add_handler(CommandHandler("country", self.cmd_set_country)) # добавьте
+        self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))    # добавьте
+        self.app.add_handler(CommandHandler("age", self.cmd_set_age))        # добавьте
+        self.app.add_handler(CommandHandler("id", self.cmd_id))
+        self.app.add_handler(CommandHandler("myprofile", self.cmd_my_profile)) 
         
         # ===== СТАТИСТИКА =====
         self.app.add_handler(CommandHandler("stats", self.cmd_stats))
