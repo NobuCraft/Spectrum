@@ -8481,7 +8481,83 @@ class SpectrumBot:
             """
             await query.edit_message_text(text)
 
+        # ===== ОБРАБОТЧИК ОШИБОК =====
+    async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик ошибок"""
+        logger.error(f"Ошибка: {context.error}")
+        
+        try:
+            if update and update.effective_message:
+                await update.effective_message.reply_text(
+                    "❌ **Произошла внутренняя ошибка**\n\n"
+                    "Администрация уже уведомлена. Приносим извинения за неудобства."
+                )
+        except:
+            pass
+        
+        # Отправляем ошибку владельцу
+        try:
+            error_text = str(context.error)[:500]
+            await context.bot.send_message(
+                OWNER_ID,
+                f"⚠️ **Ошибка в боте**\n\n"
+                f"```\n{error_text}\n```"
+            )
+        except:
+            pass
+
+        # ===== ТАЙМЕРЫ =====
+    async def check_timers(self):
+        """Проверка и выполнение таймеров"""
+        while True:
+            try:
+                timers = self.db.get_pending_timers()
+                
+                for timer in timers:
+                    try:
+                        await self.app.bot.send_message(
+                            chat_id=timer['chat_id'],
+                            text=f"⏰ **Сработал таймер #{timer['id']}**\n\nВыполняю команду: `{timer['command']}`"
+                        )
+                        
+                        self.db.complete_timer(timer['id'])
+                    except Exception as e:
+                        logger.error(f"Ошибка выполнения таймера {timer['id']}: {e}")
+                
+                await asyncio.sleep(60)
+            except Exception as e:
+                logger.error(f"Ошибка в check_timers: {e}")
+                await asyncio.sleep(60)
+
+        # ===== ЗАПУСК =====
+    async def run(self):
+        """Запуск бота"""
+        try:
+            await self.app.initialize()
+            await self.app.start()
+            await self.app.updater.start_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True
+            )
+            
+            logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
+            logger.info(f"👑 Владелец: {OWNER_USERNAME}")
+            logger.info(f"🤖 AI: {'Подключен' if self.ai and self.ai.is_available else 'Не подключен'}")
+            
+            while True:
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.error(f"❌ Критическая ошибка: {e}")
+            await asyncio.sleep(5)
+            await self.run()
     
+    async def close(self):
+        """Закрытие бота"""
+        logger.info("👋 Завершение работы бота...")
+        if self.ai:
+            await self.ai.close()
+        self.db.close()
+        logger.info("✅ Бот остановлен")
     
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
