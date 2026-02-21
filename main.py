@@ -2688,6 +2688,102 @@ class SpectrumBot:
             text += f"{medal} {name} — {row[2]} 🖥\n"
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+        # ===== СТАТИСТИКА ЧАТА (РУССКИЕ КОМАНДЫ) =====
+    async def cmd_chat_stats_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за сегодня"""
+        await self._chat_stats_period(update, "day")
+    
+    async def cmd_chat_stats_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за неделю"""
+        await self._chat_stats_period(update, "week")
+    
+    async def cmd_chat_stats_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за месяц"""
+        await self._chat_stats_period(update, "month")
+    
+    async def cmd_chat_stats_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика чата за всё время"""
+        await self._chat_stats_period(update, "all")
+    
+    async def cmd_stats_custom(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Пользовательская статистика"""
+        text = update.message.text
+        parts = text.split()
+        
+        if len(parts) < 2:
+            return
+        
+        try:
+            limit = int(parts[1])
+        except:
+            return
+        
+        period = "day"
+        if len(parts) > 2:
+            period_map = {"неделя": "week", "месяц": "month", "вся": "all"}
+            period = period_map.get(parts[2].lower(), "day")
+        
+        await self._chat_stats_period(update, period, limit)
+    
+    async def _chat_stats_period(self, update: Update, period: str, limit: int = 10):
+        """Общая логика для статистики за период"""
+        chat_id = update.effective_chat.id
+        cursor = self.db.cursor
+        
+        now = datetime.now()
+        
+        if period == "day":
+            time_ago = now - timedelta(days=1)
+            period_name = "день"
+        elif period == "week":
+            time_ago = now - timedelta(days=7)
+            period_name = "неделю"
+        elif period == "month":
+            time_ago = now - timedelta(days=30)
+            period_name = "месяц"
+        else:
+            time_ago = datetime(2000, 1, 1)
+            period_name = "всё время"
+        
+        cursor.execute('''
+            SELECT username, first_name, COUNT(*) as msg_count
+            FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+            GROUP BY user_id 
+            ORDER BY msg_count DESC 
+            LIMIT ?
+        ''', (chat_id, time_ago.isoformat(), limit))
+        
+        top_users = cursor.fetchall()
+        
+        if not top_users:
+            await update.message.reply_text(f"📊 Нет данных за {period_name}")
+            return
+        
+        text = f"🏆 **ТОП ЗА {period_name.upper()}**\n\n"
+        for i, (username, first_name, count) in enumerate(top_users, 1):
+            name = username or first_name or "Пользователь"
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {count} 💬\n"
+        
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_top_chat_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за сегодня"""
+        await self._chat_stats_period(update, "day")
+    
+    async def cmd_top_chat_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за неделю"""
+        await self._chat_stats_period(update, "week")
+    
+    async def cmd_top_chat_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за месяц"""
+        await self._chat_stats_period(update, "month")
+    
+    async def cmd_top_chat_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ чата за всё время"""
+        await self._chat_stats_period(update, "all")
+
         # ===== МОДЕРАЦИЯ =====
     async def _set_rank(self, update: Update, target_rank: int):
         """Общая логика установки ранга"""
