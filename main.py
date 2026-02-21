@@ -317,8 +317,8 @@ if GROQ_API_KEY and GROQ_AVAILABLE:
 else:
     logger.warning("⚠️ Groq AI не подключен (нет API ключа)")
         
-# ========== КЛАССЫ МАФИИ ==========
-class MafiaRole(str, Enum):
+# ========== КЛАСС МАФИИ ==========
+class MafiaRole:
     MAFIA = "😈 Мафия"
     COMMISSIONER = "👮 Комиссар"
     DOCTOR = "👨‍⚕️ Доктор"
@@ -332,22 +332,22 @@ class MafiaGame:
         self.game_id = game_id
         self.creator_id = creator_id
         self.status = "waiting"  # waiting, night, day, voting, ended
-        self.players: List[int] = []
-        self.players_data: Dict[int, Dict[str, Any]] = {}
-        self.roles: Dict[int, str] = {}
-        self.alive: Dict[int, bool] = {}
+        self.players = []
+        self.players_data = {}
+        self.roles = {}
+        self.alive = {}
         self.day = 1
         self.phase = "night"
-        self.votes: Dict[int, int] = {}
-        self.night_actions: Dict[str, Optional[int]] = {
+        self.votes = {}
+        self.night_actions = {
             "mafia_kill": None,
             "doctor_save": None,
             "commissioner_check": None,
             "maniac_kill": None
         }
-        self.message_id: Optional[int] = None
-        self.start_time: Optional[datetime] = None
-        self.confirmed_players: List[int] = []
+        self.message_id = None
+        self.start_time = None
+        self.confirmed_players = []
     
     def add_player(self, user_id: int, name: str, username: str = "") -> bool:
         if user_id in self.players:
@@ -376,7 +376,9 @@ class MafiaGame:
         return True
     
     def all_confirmed(self) -> bool:
-        return all(p["confirmed"] for p in self.players_data.values()) and len(self.players) >= MAFIA_MIN_PLAYERS
+        if len(self.players) < MAFIA_MIN_PLAYERS:
+            return False
+        return all(p["confirmed"] for p in self.players_data.values())
     
     def assign_roles(self):
         num_players = len(self.players)
@@ -392,6 +394,10 @@ class MafiaGame:
         roles.append(MafiaRole.COMMISSIONER)
         roles.append(MafiaRole.DOCTOR)
         
+        # Добавляем маньяка если игроков достаточно
+        if num_players >= 10:
+            roles.append(MafiaRole.MANIAC)
+        
         remaining = num_players - len(roles)
         roles.extend([MafiaRole.CITIZEN] * remaining)
         
@@ -403,23 +409,17 @@ class MafiaGame:
     
     def get_role_description(self, role: str) -> str:
         descriptions = {
-            MafiaRole.MAFIA: "Ночью вы можете убивать мирных жителей. Общайтесь с другими мафиози в ЛС.",
-            MafiaRole.COMMISSIONER: "Ночью вы можете проверять игроков, узнавая их роль.",
-            MafiaRole.DOCTOR: "Ночью вы можете спасать одного игрока от смерти.",
-            MafiaRole.MANIAC: "Ночью вы можете убивать. Вы ни с кем не связаны.",
-            MafiaRole.BOSS: "Вы - глава мафии. Вас нельзя убить ночью.",
-            MafiaRole.CITIZEN: "У вас нет особых способностей. Ищите мафию днём."
+            MafiaRole.MAFIA: "Ночью убиваете мирных. Общайтесь с другими мафиози в ЛС",
+            MafiaRole.COMMISSIONER: "Ночью проверяете игроков, узнаёте их роль",
+            MafiaRole.DOCTOR: "Ночью можете спасти одного игрока от смерти",
+            MafiaRole.MANIAC: "Ночью убиваете в одиночку. Вы ни с кем не связаны",
+            MafiaRole.BOSS: "Глава мафии. Вас нельзя убить ночью",
+            MafiaRole.CITIZEN: "У вас нет способностей. Ищите мафию днём"
         }
         return descriptions.get(role, "Ошибка")
     
-    def get_alive_players(self) -> List[int]:
+    def get_alive_players(self) -> list:
         return [pid for pid in self.players if self.alive.get(pid, False)]
-    
-    def get_alive_count(self) -> Dict[str, int]:
-        alive = self.get_alive_players()
-        mafia = sum(1 for pid in alive if self.roles[pid] in [MafiaRole.MAFIA, MafiaRole.BOSS])
-        citizens = len(alive) - mafia
-        return {"mafia": mafia, "citizens": citizens, "total": len(alive)}
     
     def check_win(self) -> Optional[str]:
         alive = self.get_alive_players()
@@ -427,31 +427,24 @@ class MafiaGame:
             return None
         
         mafia_count = 0
-        citizen_count = 0
+        mafia_roles = [MafiaRole.MAFIA, MafiaRole.BOSS]
         
         for pid in alive:
-            role = self.roles[pid]
-            if role in [MafiaRole.MAFIA, MafiaRole.BOSS]:
+            if self.roles[pid] in mafia_roles:
                 mafia_count += 1
-            else:
-                citizen_count += 1
         
         if mafia_count == 0:
             return "citizens"
-        if mafia_count >= citizen_count:
+        if mafia_count >= len(alive) - mafia_count:
             return "mafia"
         return None
     
-    def process_night(self) -> Dict[str, Any]:
+    def process_night(self) -> dict:
         killed = self.night_actions.get("mafia_kill")
         saved = self.night_actions.get("doctor_save")
         
         if saved and saved == killed:
             killed = None
-        
-        result = {
-            "killed": killed,
-        }
         
         self.night_actions = {
             "mafia_kill": None,
@@ -460,7 +453,7 @@ class MafiaGame:
             "maniac_kill": None
         }
         
-        return result
+        return {"killed": killed}
     
     def process_voting(self) -> Optional[int]:
         if not self.votes:
@@ -469,6 +462,9 @@ class MafiaGame:
         vote_count = {}
         for target in self.votes.values():
             vote_count[target] = vote_count.get(target, 0) + 1
+        
+        if not vote_count:
+            return None
         
         max_votes = max(vote_count.values())
         candidates = [pid for pid, votes in vote_count.items() if votes == max_votes]
@@ -481,6 +477,361 @@ class MafiaGame:
         
         self.votes = {}
         return None
+
+
+# ========== МЕТОДЫ МАФИИ В КЛАССЕ SPECTRUMBOT ==========
+
+    async def cmd_mafia(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Меню мафии"""
+        text = (
+            "🔫 **МАФИЯ**\n\n"
+            "📋 **Команды:**\n"
+            "• `/mafiastart` — начать игру\n"
+            "• `/mafiajoin` — присоединиться\n"
+            "• `/mafialeave` — выйти\n"
+            "• `/mafiaroles` — список ролей\n"
+            "• `/mafiarules` — правила\n"
+            "• `/mafiastats` — статистика\n\n"
+            "⚠️ Игра проходит в ЛС с подтверждением"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mafia_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Начать игру мафии"""
+        chat_id = update.effective_chat.id
+        
+        if chat_id in self.mafia_games:
+            await update.message.reply_text("❌ Игра уже идёт! Присоединяйтесь: /mafiajoin")
+            return
+        
+        game_id = f"mafia_{chat_id}_{int(time.time())}"
+        game = MafiaGame(chat_id, game_id, update.effective_user.id)
+        self.mafia_games[chat_id] = game
+        
+        text = (
+            "🔫 **МАФИЯ**\n\n"
+            "✅ Игра создана!\n\n"
+            "👥 **Участники (0):**\n"
+            "• /mafiajoin — присоединиться\n"
+            "• /mafialeave — выйти\n\n"
+            "⚠️ Игра в ЛС. Нужно подтверждение!"
+        )
+        
+        msg = await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        game.message_id = msg.message_id
+    
+    async def cmd_mafia_join(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Присоединиться к мафии"""
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        if chat_id not in self.mafia_games:
+            await update.message.reply_text("❌ Игра не создана. Начните: /mafiastart")
+            return
+        
+        game = self.mafia_games[chat_id]
+        
+        if game.status != "waiting":
+            await update.message.reply_text("❌ Игра уже началась")
+            return
+        
+        if not game.add_player(user.id, user.first_name, user.username or ""):
+            await update.message.reply_text("❌ Вы уже в игре")
+            return
+        
+        # Отправляем подтверждение в ЛС
+        try:
+            keyboard = InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"mafia_confirm_{chat_id}")
+            ]])
+            
+            await context.bot.send_message(
+                user.id,
+                "🔫 **МАФИЯ**\n\n"
+                "✅ Вы присоединились к игре!\n"
+                "👇 Нажмите кнопку для подтверждения\n\n"
+                "⚠️ После подтверждения вы получите роль в ЛС",
+                reply_markup=keyboard,
+                parse_mode=ParseMode.MARKDOWN
+            )
+            
+            username_display = f"(@{user.username})" if user.username else ""
+            await update.message.reply_text(f"✅ {user.first_name} {username_display}, проверьте ЛС для подтверждения!")
+        except Exception as e:
+            await update.message.reply_text(f"❌ {user.first_name}, не удалось отправить сообщение в ЛС. Напишите боту в личку сначала.")
+            game.remove_player(user.id)
+            return
+        
+        # Обновляем сообщение в чате
+        await self._update_mafia_game_message(game, context)
+    
+    async def cmd_mafia_leave(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Выйти из мафии"""
+        chat_id = update.effective_chat.id
+        user = update.effective_user
+        
+        if chat_id not in self.mafia_games:
+            await update.message.reply_text("❌ Игра не создана")
+            return
+        
+        game = self.mafia_games[chat_id]
+        
+        if game.status != "waiting":
+            await update.message.reply_text("❌ Нельзя покинуть игру после начала")
+            return
+        
+        if not game.remove_player(user.id):
+            await update.message.reply_text("❌ Вас нет в игре")
+            return
+        
+        username_display = f"(@{user.username})" if user.username else ""
+        await update.message.reply_text(f"✅ {user.first_name} {username_display} покинул игру")
+        
+        await self._update_mafia_game_message(game, context)
+    
+    async def _update_mafia_game_message(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Обновить сообщение с игрой"""
+        if not game.message_id:
+            return
+        
+        if game.players:
+            players_list = []
+            for pid in game.players:
+                p = game.players_data[pid]
+                username = f" (@{p['username']})" if p['username'] else ""
+                players_list.append(f"• {p['name']}{username}")
+            
+            players_text = "\n".join(players_list)
+            confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
+            
+            text = (
+                "🔫 **МАФИЯ**\n\n"
+                f"👥 **Участники ({len(game.players)}):**\n"
+                f"{players_text}\n\n"
+                f"✅ **Подтвердили:** {confirmed}/{len(game.players)}\n"
+                f"❌ **Нужно минимум:** {MAFIA_MIN_PLAYERS} игроков\n\n"
+                "📌 /mafiajoin — присоединиться\n"
+                "📌 /mafialeave — выйти"
+            )
+        else:
+            text = (
+                "🔫 **МАФИЯ**\n\n"
+                "👥 **Участников нет**\n"
+                "📌 /mafiajoin — присоединиться"
+            )
+        
+        try:
+            await context.bot.edit_message_text(
+                text,
+                chat_id=game.chat_id,
+                message_id=game.message_id,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+    
+    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Начать игру после подтверждения"""
+        if len(game.players) < MAFIA_MIN_PLAYERS:
+            await context.bot.send_message(
+                game.chat_id,
+                f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.assign_roles()
+        game.status = "night"
+        game.phase = "night"
+        game.start_time = datetime.now()
+        
+        # Рассылаем роли в ЛС
+        for player_id in game.players:
+            role = game.roles[player_id]
+            role_desc = game.get_role_description(role)
+            
+            try:
+                await context.bot.send_message(
+                    player_id,
+                    f"🔫 **МАФИЯ**\n\n"
+                    f"🎭 **Ваша роль:** {role}\n"
+                    f"📖 {role_desc}\n\n"
+                    f"🌙 Наступает ночь. Ожидайте..."
+                )
+            except:
+                pass
+        
+        # Сообщение в чат
+        await context.bot.send_message(
+            game.chat_id,
+            "🔫 **МАФИЯ**\n\n"
+            "🌙 **НАСТУПИЛА НОЧЬ**\n"
+            "📨 Роли розданы в ЛС\n"
+            "🔪 Мафия выбирает жертву...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Таймер на ночь
+        asyncio.create_task(self._mafia_night_timer(game, context))
+    
+    async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Таймер ночи"""
+        await asyncio.sleep(MAFIA_NIGHT_TIME)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "night":
+            return
+        
+        killed = game.process_night()
+        
+        if killed["killed"]:
+            game.alive[killed["killed"]] = False
+            try:
+                await context.bot.send_message(
+                    killed["killed"],
+                    "💀 **ВАС УБИЛИ НОЧЬЮ**\n\nВы больше не участвуете"
+                )
+            except:
+                pass
+        
+        game.phase = "day"
+        game.day += 1
+        
+        alive_list = game.get_alive_players()
+        alive_names = []
+        for pid in alive_list:
+            name = game.players_data[pid]['name']
+            alive_names.append(f"• {name}")
+        
+        killed_name = "никого"
+        if killed["killed"]:
+            killed_name = game.players_data[killed["killed"]]['name']
+        
+        text = (
+            f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
+            f"☀️ Наступило утро\n"
+            f"💀 **Убит:** {killed_name}\n\n"
+            f"👥 **Живы ({len(alive_list)}):**\n"
+            f"{chr(10).join(alive_names)}\n\n"
+            f"🗳 Обсуждайте и голосуйте"
+        )
+        
+        await context.bot.send_message(game.chat_id, text, parse_mode=ParseMode.MARKDOWN)
+        
+        # Таймер на день
+        asyncio.create_task(self._mafia_day_timer(game, context))
+    
+    async def _mafia_day_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Таймер дня"""
+        await asyncio.sleep(MAFIA_DAY_TIME)
+        
+        if game.chat_id not in self.mafia_games or game.phase != "day":
+            return
+        
+        executed = game.process_voting()
+        
+        if executed:
+            game.alive[executed] = False
+            executed_name = game.players_data[executed]['name']
+            role = game.roles.get(executed, "неизвестно")
+            
+            await context.bot.send_message(
+                game.chat_id,
+                f"🔫 **МАФИЯ | ДЕНЬ {game.day}**\n\n"
+                f"🔨 **Исключён:** {executed_name}\n"
+                f"🎭 **Роль:** {role}\n\n"
+                f"🌙 Ночь скоро..."
+            )
+            
+            try:
+                await context.bot.send_message(
+                    executed,
+                    "🔨 **ВАС ИСКЛЮЧИЛИ ДНЁМ**\n\nВы больше не участвуете"
+                )
+            except:
+                pass
+        else:
+            await context.bot.send_message(
+                game.chat_id,
+                "📢 Никто не был исключён"
+            )
+        
+        winner = game.check_win()
+        
+        if winner == "citizens":
+            await context.bot.send_message(
+                game.chat_id,
+                "🏆 **ПОБЕДА ГОРОДА!**\n\nМафия уничтожена!"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        elif winner == "mafia":
+            await context.bot.send_message(
+                game.chat_id,
+                "🏆 **ПОБЕДА МАФИИ!**\n\nМафия захватила город!"
+            )
+            del self.mafia_games[game.chat_id]
+            return
+        
+        game.phase = "night"
+        await context.bot.send_message(
+            game.chat_id,
+            f"🔫 **МАФИЯ | НОЧЬ {game.day}**\n\n🌙 Наступает ночь..."
+        )
+        
+        asyncio.create_task(self._mafia_night_timer(game, context))
+    
+    async def cmd_mafia_roles(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список ролей"""
+        text = (
+            "🎭 **РОЛИ В МАФИИ**\n\n"
+            "😈 **Мафия** — ночью убивают\n"
+            "👑 **Босс** — глава мафии\n"
+            "👮 **Комиссар** — проверяет ночью\n"
+            "👨‍⚕️ **Доктор** — лечит ночью\n"
+            "🔪 **Маньяк** — убивает один\n"
+            "👤 **Мирный** — ищет мафию"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mafia_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Правила мафии"""
+        text = (
+            "📖 **ПРАВИЛА МАФИИ**\n\n"
+            "🌙 **Ночь:**\n"
+            "• Мафия убивает\n"
+            "• Доктор лечит\n"
+            "• Комиссар проверяет\n\n"
+            "☀️ **День:**\n"
+            "• Обсуждение\n"
+            "• Голосование\n\n"
+            "🏆 **Цель:**\n"
+            "• Мафия — убить всех\n"
+            "• Город — найти мафию"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+    
+    async def cmd_mafia_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Статистика мафии"""
+        user_data = self.db.get_user(update.effective_user.id)
+        
+        games = user_data.get('mafia_games', 0)
+        wins = user_data.get('mafia_wins', 0)
+        losses = user_data.get('mafia_losses', 0)
+        
+        if games > 0:
+            winrate = (wins / games) * 100
+        else:
+            winrate = 0
+        
+        text = (
+            "📊 **СТАТИСТИКА МАФИИ**\n\n"
+            f"🎮 Сыграно: {games}\n"
+            f"🏆 Побед: {wins}\n"
+            f"💔 Поражений: {losses}\n"
+            f"📈 Винрейт: {winrate:.1f}%"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
 # ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ ==========
 class Style:
@@ -1963,6 +2314,117 @@ class SpectrumBot:
         self.setup_handlers()
         logger.info(f"✅ Бот {BOT_NAME} инициализирован")
 
+        # ===== ПРОФИЛЬ =====
+    async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        
+        display_name = user_data.get('nickname') or user.first_name
+        title = user_data.get('title', '')
+        motto = user_data.get('motto', 'Нет девиза')
+        bio = user_data.get('bio', '')
+        
+        vip_status = "✅ VIP" if self.db.is_vip(user_data['id']) else "❌"
+        premium_status = "✅ PREMIUM" if self.db.is_premium(user_data['id']) else "❌"
+        
+        exp_needed = user_data['level'] * 100
+        exp_progress = s.progress(user_data['exp'], exp_needed)
+        
+        warns = "🔴" * user_data['warns'] + "⚪️" * (4 - user_data['warns'])
+        
+        friends_list = json.loads(user_data.get('friends', '[]'))
+        friends_count = len(friends_list)
+        
+        enemies_list = json.loads(user_data.get('enemies', '[]'))
+        enemies_count = len(enemies_list)
+        
+        registered = datetime.fromisoformat(user_data['registered']) if user_data.get('registered') else datetime.now()
+        days_in_chat = (datetime.now() - registered).days
+        
+        username_display = f"(@{user.username})" if user.username else ""
+        
+        profile_text = (
+            f"👤 **{display_name}** {title} {username_display}\n"
+            f"_{motto}_\n"
+            f"{bio}\n\n"
+            f"📊 **Характеристики**\n"
+            f"• Ранг: {get_rank_emoji(user_data['rank'])} {user_data['rank_name']}\n"
+            f"• Уровень: {user_data['level']} ({exp_progress})\n"
+            f"• Монеты: {user_data['coins']:,} 💰\n"
+            f"• Неоны: {user_data['neons']:,} 💜\n"
+            f"• Глитчи: {user_data['glitches']:,} 🖥\n"
+            f"• Энергия: {user_data['energy']}/100 ⚡️\n"
+            f"• Здоровье: {user_data['health']}/{user_data['max_health']} ❤️\n\n"
+            
+            f"📈 **Статистика**\n"
+            f"• Сообщений: {user_data['messages_count']} 💬\n"
+            f"• Репутация: {user_data['reputation']} ⭐️\n"
+            f"• Предупреждения: {warns}\n"
+            f"• Боссов убито: {user_data['boss_kills']} 👾\n"
+            f"• Друзей: {friends_count} / Врагов: {enemies_count}\n\n"
+            
+            f"💎 **Статусы**\n"
+            f"• VIP: {vip_status}\n"
+            f"• PREMIUM: {premium_status}\n\n"
+            
+            f"📅 **В чате:** {days_in_chat} дней\n"
+            f"🆔 ID: `{user.id}`"
+        )
+        
+        await update.message.reply_text(profile_text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_set_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("❌ Укажите ник: /nick [ник]")
+            return
+        nick = " ".join(context.args)
+        if len(nick) > MAX_NICK_LENGTH:
+            await update.message.reply_text(f"❌ Максимальная длина: {MAX_NICK_LENGTH} символов")
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], nickname=nick)
+        await update.message.reply_text(f"✅ Ник установлен: {nick}")
+
+    async def cmd_set_title(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("❌ Укажите титул: /title [титул]")
+            return
+        title = " ".join(context.args)
+        if len(title) > MAX_TITLE_LENGTH:
+            await update.message.reply_text(f"❌ Максимальная длина: {MAX_TITLE_LENGTH} символов")
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], title=title)
+        await update.message.reply_text(f"✅ Титул установлен: {title}")
+
+    async def cmd_set_motto(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("❌ Укажите девиз: /motto [девиз]")
+            return
+        motto = " ".join(context.args)
+        if len(motto) > MAX_MOTTO_LENGTH:
+            await update.message.reply_text(f"❌ Максимальная длина: {MAX_MOTTO_LENGTH} символов")
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], motto=motto)
+        await update.message.reply_text(f"✅ Девиз установлен: {motto}")
+
+    async def cmd_set_bio(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("❌ Напишите о себе: /bio [текст]")
+            return
+        bio = " ".join(context.args)
+        if len(bio) > MAX_BIO_LENGTH:
+            await update.message.reply_text(f"❌ Максимальная длина: {MAX_BIO_LENGTH} символов")
+            return
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], bio=bio)
+        await update.message.reply_text("✅ Информация сохранена")
+
+    async def cmd_id(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        await update.message.reply_text(f"🆔 Ваш ID: `{user.id}`", parse_mode=ParseMode.MARKDOWN)
+
     def setup_handlers(self):
         """Регистрация всех обработчиков"""
         
@@ -2062,6 +2524,19 @@ class SpectrumBot:
         self.app.add_handler(CommandHandler("duel", self.cmd_duel))
         self.app.add_handler(CommandHandler("duels", self.cmd_duels))
         self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
+
+        # ===== Мафия =====
+        self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
+        self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
+        self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
+        self.app.add_handler(CommandHandler("mafialeave", self.cmd_mafia_leave))
+        self.app.add_handler(CommandHandler("mafiaroles", self.cmd_mafia_roles))
+        self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
+        self.app.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
+
+        # ===== БЕСЕДЫ =====
+        self.app.add_handler(CommandHandler("randomchat", self.cmd_random_chat))
+        self.app.add_handler(CommandHandler("topchats", self.cmd_top_chats))
         
         # ===== КЛАНЫ =====
         self.app.add_handler(CommandHandler("clan", self.cmd_clan))
@@ -2264,6 +2739,12 @@ class SpectrumBot:
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
         self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
+
+        # ===== РУССКИЕ ТЕКСТОВЫЕ КОМАНДЫ =====
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Случайная беседа$'), self.cmd_random_chat))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Беседы топ дня$'), self.cmd_top_chats))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Команды$'), self.cmd_help))
+        self.app.add_handler(MessageHandler(filters.Regex(r'^Установка$'), self.cmd_setup_info))
         
         # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^!темы$'), self.cmd_themes))
@@ -2481,6 +2962,149 @@ class SpectrumBot:
             caption=f"📊 Активность {user.first_name} за последние 7 дней",
             parse_mode='Markdown'
         )
+
+        # ===== СЛУЧАЙНАЯ БЕСЕДА =====
+    async def cmd_random_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Поиск случайной беседы как в Ирисе"""
+        
+        # Получаем случайный чат из базы
+        self.db.cursor.execute("""
+            SELECT cs.chat_id, cs.chat_name, cs.chat_code, 
+                   COUNT(DISTINCT m.user_id) as members,
+                   MIN(m.timestamp) as created,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-1 day') THEN 1 ELSE 0 END) as day_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-7 day') THEN 1 ELSE 0 END) as week_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-30 day') THEN 1 ELSE 0 END) as month_active,
+                   COUNT(m.id) as total_messages
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+        
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(
+                "🍬 **В базе пока нет бесед**\n\n"
+                "Добавьте бота в чат и введите `!привязать`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        chat = dict(row)
+        
+        # Форматируем дату создания
+        created_date = datetime.fromisoformat(chat['created']).strftime("%d.%m.%Y") if chat['created'] else "неизвестно"
+        
+        # Определяем тип чата (заглушка, в реальности нужно получать из Telegram)
+        chat_type = "открытый" if random.choice([True, False]) else "закрытый"
+        entry_type = "свободный" if random.choice([True, False]) else "по заявкам"
+        
+        # Форматируем активность
+        day_active = chat['day_active'] or 0
+        week_active = chat['week_active'] or 0
+        month_active = chat['month_active'] or 0
+        total = chat['total_messages'] or 0
+        
+        # Создаем клавиатуру
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📩 Попроситься в чат", url=f"https://t.me/{chat['chat_name']}" if chat['chat_name'] else None)],
+            [InlineKeyboardButton("📇 Карточка в каталоге", callback_data=f"chat_card_{chat['chat_id']}")],
+            [InlineKeyboardButton("🔄 Другую беседу", callback_data="random_chat")]
+        ])
+        
+        text = (
+            f"🍬 **Случайная беседа**\n\n"
+            f"📢 **Чат «{chat['chat_name'] or 'Без названия'}»**\n"
+            f"👤 **Попроситься в чат:** [ссылка]\n"
+            f"📇 **Карточка в Ирис-каталоге**\n\n"
+            f"🏆 **Ирис-коин рейтинг:** {random.randint(100000, 999999):,}\n"
+            f"📅 **Создан:** {created_date}\n"
+            f"👥 **Участников:** {chat['members'] or 0} участника\n"
+            f"🔒 **Тип:** {chat_type}, вход {entry_type}\n"
+            f"📊 **Актив:** {day_active} | {week_active} | {month_active} | {total:,}"
+        )
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+    
+    # ===== ТОП БЕСЕД =====
+    async def cmd_top_chats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ бесед по активности"""
+        
+        period = "день"
+        if context.args:
+            if context.args[0] in ["день", "неделя", "месяц", "всё"]:
+                period = context.args[0]
+        
+        time_filter = {
+            "день": "datetime('now', '-1 day')",
+            "неделя": "datetime('now', '-7 day')",
+            "месяц": "datetime('now', '-30 day')",
+            "всё": "datetime('2000-01-01')"
+        }.get(period, "datetime('now', '-1 day')")
+        
+        self.db.cursor.execute(f"""
+            SELECT cs.chat_name, COUNT(m.id) as msg_count
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id AND m.timestamp > {time_filter}
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            HAVING msg_count > 0
+            ORDER BY msg_count DESC
+            LIMIT 10
+        """)
+        
+        chats = self.db.cursor.fetchall()
+        
+        if not chats:
+            await update.message.reply_text(
+                f"📊 **Нет данных за {period}**",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        text = f"🏆 **ТОП БЕСЕД ЗА {period.upper()}**\n\n"
+        
+        for i, chat in enumerate(chats, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            name = chat[0] or f"Чат {i}"
+            text += f"{medal} **{name}** — {chat[1]} 💬\n"
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📅 День", callback_data="top_chats_day"),
+                InlineKeyboardButton("📆 Неделя", callback_data="top_chats_week"),
+                InlineKeyboardButton("📆 Месяц", callback_data="top_chats_month")
+            ],
+            [InlineKeyboardButton("🔄 Случайная беседа", callback_data="random_chat")]
+        ])
+        
+        await update.message.reply_text(
+            text,
+            reply_markup=keyboard,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_setup_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация об установке"""
+        text = (
+            "🔧 **УСТАНОВКА БОТА**\n\n"
+            "1️⃣ Добавьте бота в группу\n"
+            "2️⃣ Сделайте бота администратором\n"
+            "3️⃣ Введите `!привязать` для привязки чата\n"
+            "4️⃣ Настройте приветствие: `+приветствие Текст`\n"
+            "5️⃣ Настройте правила: `+правила Текст`\n\n"
+            "📚 Подробнее: https://telegra.ph/Iris-bot-setup"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        
             # ===== КОМАНДЫ МОДЕРАЦИИ =====
     async def _set_rank(self, update: Update, target_rank: int):
         """Общая логика установки ранга"""
@@ -8508,6 +9132,29 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
         
         elif data == "bonuses_menu":
             await self.cmd_bonuses(update, context)
+
+        elif data == "random_chat":
+            await self.cmd_random_chat(update, context)
+        
+        elif data == "top_chats_day":
+            context.args = ["день"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_week":
+            context.args = ["неделя"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data == "top_chats_month":
+            context.args = ["месяц"]
+            await self.cmd_top_chats(update, context)
+        
+        elif data.startswith("chat_card_"):
+            chat_id = int(data.split('_')[2])
+            # Здесь можно добавить карточку чата
+            await query.edit_message_text(
+                "📇 **Карточка чата**\n\nФункция в разработке",
+                parse_mode=ParseMode.MARKDOWN
+            )
         
         # Кнопки боссов
         elif data.startswith("boss_attack_"):
