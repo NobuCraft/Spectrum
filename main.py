@@ -7000,6 +7000,125 @@ class SpectrumBot:
         
         await update.message.reply_text(f"✅ Тема '{theme_name}' применена!")
 
+        # ===== БЕСЕДЫ =====
+    async def cmd_random_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Поиск случайной беседы"""
+        self.db.cursor.execute("""
+            SELECT cs.chat_id, cs.chat_name, cs.chat_code, 
+                   COUNT(DISTINCT m.user_id) as members,
+                   MIN(m.timestamp) as created,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-1 day') THEN 1 ELSE 0 END) as day_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-7 day') THEN 1 ELSE 0 END) as week_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-30 day') THEN 1 ELSE 0 END) as month_active,
+                   COUNT(m.id) as total_messages
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+        
+        row = self.db.cursor.fetchone()
+        
+        if not row:
+            await update.message.reply_text(
+                "🍬 **В базе пока нет бесед**\n\n"
+                "Добавьте бота в чат и введите `!привязать`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        
+        chat = dict(row)
+        created_date = datetime.fromisoformat(chat['created']).strftime("%d.%m.%Y") if chat['created'] else "неизвестно"
+        chat_type = "открытый" if random.choice([True, False]) else "закрытый"
+        entry_type = "свободный" if random.choice([True, False]) else "по заявкам"
+        
+        day_active = chat['day_active'] or 0
+        week_active = chat['week_active'] or 0
+        month_active = chat['month_active'] or 0
+        total = chat['total_messages'] or 0
+        
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📩 Попроситься в чат", url=f"https://t.me/{chat['chat_name']}" if chat['chat_name'] else None)],
+            [InlineKeyboardButton("📇 Карточка в каталоге", callback_data=f"chat_card_{chat['chat_id']}")],
+            [InlineKeyboardButton("🔄 Другую беседу", callback_data="random_chat")]
+        ])
+        
+        text = (
+            f"🍬 **Случайная беседа**\n\n"
+            f"📢 **Чат «{chat['chat_name'] or 'Без названия'}»**\n"
+            f"👤 **Попроситься в чат:** [ссылка]\n"
+            f"📇 **Карточка в каталоге**\n\n"
+            f"🏆 **Рейтинг:** {random.randint(100000, 999999):,}\n"
+            f"📅 **Создан:** {created_date}\n"
+            f"👥 **Участников:** {chat['members'] or 0}\n"
+            f"🔒 **Тип:** {chat_type}, вход {entry_type}\n"
+            f"📊 **Актив:** {day_active} | {week_active} | {month_active} | {total:,}"
+        )
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_chats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Топ бесед по активности"""
+        period = "день"
+        if context.args and context.args[0] in ["день", "неделя", "месяц", "всё"]:
+            period = context.args[0]
+        
+        time_filter = {
+            "день": "datetime('now', '-1 day')",
+            "неделя": "datetime('now', '-7 day')",
+            "месяц": "datetime('now', '-30 day')",
+            "всё": "datetime('2000-01-01')"
+        }.get(period, "datetime('now', '-1 day')")
+        
+        self.db.cursor.execute(f"""
+            SELECT cs.chat_name, COUNT(m.id) as msg_count
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id AND m.timestamp > {time_filter}
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            HAVING msg_count > 0
+            ORDER BY msg_count DESC
+            LIMIT 10
+        """)
+        
+        chats = self.db.cursor.fetchall()
+        
+        if not chats:
+            await update.message.reply_text(f"📊 Нет данных за {period}")
+            return
+        
+        text = f"🏆 **ТОП БЕСЕД ЗА {period.upper()}**\n\n"
+        for i, chat in enumerate(chats, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            name = chat[0] or f"Чат {i}"
+            text += f"{medal} **{name}** — {chat[1]} 💬\n"
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("📅 День", callback_data="top_chats_day"),
+                InlineKeyboardButton("📆 Неделя", callback_data="top_chats_week"),
+                InlineKeyboardButton("📆 Месяц", callback_data="top_chats_month")
+            ],
+            [InlineKeyboardButton("🔄 Случайная беседа", callback_data="random_chat")]
+        ])
+        
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_setup_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация об установке"""
+        text = (
+            "🔧 **УСТАНОВКА БОТА**\n\n"
+            "1️⃣ Добавьте бота в группу\n"
+            "2️⃣ Сделайте бота администратором\n"
+            "3️⃣ Введите `!привязать` для привязки чата\n"
+            "4️⃣ Настройте приветствие: `+приветствие Текст`\n"
+            "5️⃣ Настройте правила: `+правила Текст`\n\n"
+            "📚 Подробнее: https://telegra.ph/Iris-bot-setup"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
     # ===== ПРИВЯЗКА ЧАТА =====
     
     async def cmd_bind_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
