@@ -2853,13 +2853,11 @@ class SpectrumBot:
     async def _resolve_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
                            text: str = None, platform: str = "telegram") -> Optional[Dict]:
         """Определяет пользователя из сообщения (reply или упоминание)"""
-        user = None
         
         # Проверяем reply
         if update.message.reply_to_message:
             target_id = update.message.reply_to_message.from_user.id
-            target_data = self.db.get_user(target_id, platform=platform)
-            return self.db.get_user_by_id(target_data['id'], platform)
+            return self.db.get_user(target_id, platform=platform)
         
         # Ищем упоминание в тексте
         if text:
@@ -7213,7 +7211,7 @@ class SpectrumBot:
     # МЕТОДЫ МОДЕРАЦИИ - УПРАВЛЕНИЕ РАНГАМИ
     # =========================================================================
     
-    async def _set_rank(self, update: Update, target_rank: int):
+    async def _set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE, target_rank: int):
         """Общая логика установки ранга"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
@@ -7242,7 +7240,7 @@ class SpectrumBot:
         # Отправляем уведомление в ЛС
         await self.send_private_message(
             target_user['telegram_id'],
-            f"👑 **ВАМ ВЫДАН РАНГ!**\n\n"
+            f"👑 ВАМ ВЫДАН РАНГ!\n\n"
             f"🦸 Модератор: {user.first_name}\n"
             f"🎖 Ранг: {rank_info['emoji']} {rank_info['name']}"
         )
@@ -7253,21 +7251,21 @@ class SpectrumBot:
             f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
             parse_mode=ParseMode.MARKDOWN
         )
-    
+        
     async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._set_rank(update, 1)
+        await self._set_rank(update, context, 1)
     
     async def cmd_set_rank2(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._set_rank(update, 2)
+        await self._set_rank(update, context, 2)
     
     async def cmd_set_rank3(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._set_rank(update, 3)
+        await self._set_rank(update, context, 3)
     
     async def cmd_set_rank4(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._set_rank(update, 4)
+        await self._set_rank(update, context, 4)
     
     async def cmd_set_rank5(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        await self._set_rank(update, 5)
+        await self._set_rank(update, context, 5)
     
     async def cmd_lower_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Понизить ранг пользователя"""
@@ -7279,15 +7277,7 @@ class SpectrumBot:
             await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        else:
-            match = re.search(r'@(\S+)', text)
-            if match:
-                username = match.group(1)
-                target_user = self.db.get_user_by_username(username)
+        target_user = await self._resolve_user(update, context, text)
         
         if not target_user:
             await update.message.reply_text("❌ Пользователь не найден")
@@ -7304,10 +7294,12 @@ class SpectrumBot:
         new_rank = target_user['rank'] - 1
         self.db.set_rank(target_user['id'], new_rank, user_data['id'])
         rank_info = RANKS[new_rank]
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+        
         await update.message.reply_text(
             f"✅ Ранг понижен!\n\n"
-            f"👤 Пользователь: {target_user['first_name']}\n"
-            f"🎖️ Новый ранг: {rank_info['emoji']} {rank_info['name']}"
+            f"👤 Пользователь: {display_name}\n"
+            f"🎖 Новый ранг: {rank_info['emoji']} {rank_info['name']}"
         )
     
     async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7320,14 +7312,7 @@ class SpectrumBot:
             await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        else:
-            username = text.replace('снять', '').replace('разжаловать', '').strip().replace('@', '')
-            if username:
-                target_user = self.db.get_user_by_username(username)
+        target_user = await self._resolve_user(update, context, text)
         
         if not target_user:
             await update.message.reply_text("❌ Пользователь не найден")
@@ -7338,10 +7323,12 @@ class SpectrumBot:
             return
         
         self.db.set_rank(target_user['id'], 0, user_data['id'])
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+        
         await update.message.reply_text(
             f"✅ Модератор снят!\n\n"
-            f"👤 Пользователь: {target_user['first_name']}\n"
-            f"🎖️ Теперь: 👤 Участник"
+            f"👤 Пользователь: {display_name}\n"
+            f"🎖 Теперь: 👤 Участник"
         )
     
     async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7391,7 +7378,7 @@ class SpectrumBot:
     # =========================================================================
     # МЕТОДЫ МОДЕРАЦИИ - ПРЕДУПРЕЖДЕНИЯ (ВАРНЫ)
     # =========================================================================
-    
+
     async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Выдать предупреждение"""
         user = update.effective_user
@@ -7403,22 +7390,8 @@ class SpectrumBot:
             await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 1+", parse_mode=ParseMode.MARKDOWN)
             return
         
-        target_user = None
+        target_user = await self._resolve_user(update, context, text)
         reason = "Нарушение правил"
-        
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-            parts = text.split('\n', 1)
-            if len(parts) > 1 and parts[1].strip():
-                reason = parts[1].strip()
-        else:
-            match = re.search(r'(?:варн|пред)\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-            if match:
-                username = match.group(1)
-                target_user = self.db.get_user_by_username(username)
-                if match.group(2):
-                    reason = match.group(2)
         
         if not target_user:
             await update.message.reply_text("❌ Пользователь не найден", parse_mode=ParseMode.MARKDOWN)
@@ -7447,7 +7420,7 @@ class SpectrumBot:
         
         await update.message.reply_text(
             f"⚠️ Предупреждение ({warns}/4)\n\n"
-            f"👤 Пользователь: {target_name}\n"
+            f"👤 Пользователь: {display_name}\n"
             f"💬 Причина: {reason}\n"
             f"🦸 Модератор: {admin_name}",
             parse_mode=ParseMode.MARKDOWN
@@ -7459,20 +7432,14 @@ class SpectrumBot:
             self.db.mute_user(target_user['id'], minutes, user_data['id'], "2 предупреждения")
             try:
                 until_date = int(time.time()) + (minutes * 60)
-                permissions = {
-                    'can_send_messages': False,
-                    'can_send_media_messages': False,
-                    'can_send_polls': False,
-                    'can_send_other_messages': False,
-                    'can_add_web_page_previews': False
-                }
+                permissions = ChatPermissions(can_send_messages=False)
                 await context.bot.restrict_chat_member(
                     chat_id=chat_id,
                     user_id=target_user['telegram_id'],
                     permissions=permissions,
                     until_date=until_date
                 )
-                await update.message.reply_text(f"🔇 Мут на 1 час\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
+                await update.message.reply_text(f"🔇 Мут на 1 час\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка мута: {e}")
         
@@ -7481,20 +7448,14 @@ class SpectrumBot:
             self.db.mute_user(target_user['id'], minutes, user_data['id'], "3 предупреждения")
             try:
                 until_date = int(time.time()) + (minutes * 60)
-                permissions = {
-                    'can_send_messages': False,
-                    'can_send_media_messages': False,
-                    'can_send_polls': False,
-                    'can_send_other_messages': False,
-                    'can_add_web_page_previews': False
-                }
+                permissions = ChatPermissions(can_send_messages=False)
                 await context.bot.restrict_chat_member(
                     chat_id=chat_id,
                     user_id=target_user['telegram_id'],
                     permissions=permissions,
                     until_date=until_date
                 )
-                await update.message.reply_text(f"🔇 Мут на 24 часа\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
+                await update.message.reply_text(f"🔇 Мут на 24 часа\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка мута: {e}")
         
@@ -7505,14 +7466,14 @@ class SpectrumBot:
                     chat_id=chat_id,
                     user_id=target_user['telegram_id']
                 )
-                await update.message.reply_text(f"🔴 Пользователь забанен (4/4)\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
+                await update.message.reply_text(f"🔴 Пользователь забанен (4/4)\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка бана: {e}")
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Список предупреждений пользователя"""
         if not context.args:
-            await update.message.reply_text("❌ Укажите пользователя: `/warns @user`")
+            await update.message.reply_text("❌ Укажите пользователя: /warns @user")
             return
         
         username = context.args[0].replace('@', '')
@@ -7526,10 +7487,10 @@ class SpectrumBot:
         display_name = await self.get_display_name(target, target['telegram_id'])
         
         if not warns_list:
-            await update.message.reply_text(f"📋 У {target_name} нет предупреждений")
+            await update.message.reply_text(f"📋 У {display_name} нет предупреждений")
             return
         
-        text = f"📋 ПРЕДУПРЕЖДЕНИЯ: {target_name}\n\n"
+        text = f"📋 ПРЕДУПРЕЖДЕНИЯ: {display_name}\n\n"
         for warn in warns_list:
             admin = self.db.get_user_by_id(warn['admin_id'])
             admin_name = f"@{admin['username']}" if admin and admin.get('username') else (admin['first_name'] if admin else 'Система')
@@ -7685,13 +7646,7 @@ class SpectrumBot:
         mute_success = False
         try:
             until_date = int(time.time()) + (minutes * 60)
-            permissions = {
-                'can_send_messages': False,
-                'can_send_media_messages': False,
-                'can_send_polls': False,
-                'can_send_other_messages': False,
-                'can_add_web_page_previews': False
-            }
+            permissions = ChatPermissions(can_send_messages=False)
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id'],
@@ -7702,25 +7657,25 @@ class SpectrumBot:
         except Exception as e:
             logger.error(f"Ошибка мута: {e}")
         
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        display_name = await self.get_display_name(target, target['telegram_id'])
+        
         # Уведомление в ЛС
         try:
             await context.bot.send_message(
                 target['telegram_id'],
                 f"🔇 ВАС ЗАМУТИЛИ\n\n"
-                f"⏱️ Срок: {time_str}\n"
+                f"⏱ Срок: {time_str}\n"
                 f"💬 Причина: {reason}\n"
                 f"📅 До: {until_str}"
             )
         except:
             pass
         
-        admin_name = f"@{user.username}" if user.username else user.first_name
-        display_name = await self.get_display_name(target, target['telegram_id'])
-        
         await update.message.reply_text(
             f"🔇 МУТ\n\n"
-            f"👤 Пользователь: {target_name}\n"
-            f"⏱️ Срок: {time_str}\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"⏱ Срок: {time_str}\n"
             f"📅 До: {until_str}\n"
             f"💬 Причина: {reason}\n"
             f"🦸 Модератор: {admin_name}\n\n"
@@ -7836,7 +7791,6 @@ class SpectrumBot:
 
         target_internal_id = target_data['id']
         target_telegram_id = target_data['telegram_id']
-        target_name = target_data.get('nickname') or target_data['first_name']
 
         if target_data['rank'] >= user_data['rank'] and user.id != OWNER_ID:
             await update.message.reply_text("⛔️ Нельзя забанить модератора выше рангом", parse_mode=ParseMode.MARKDOWN)
@@ -7874,11 +7828,11 @@ class SpectrumBot:
             self.db.ban_user(target_internal_id, user_data['id'], reason)
 
             admin_name = f"@{user.username}" if user.username else user.first_name
-            target_display_name = await self.get_display_name(target_data, target_telegram_id)
+            display_name = await self.get_display_name(target_data, target_telegram_id)
 
             text = (
                 f"🔴 Пользователь забанен\n\n"
-                f"👢 Пользователь: {target_display_name}\n"
+                f"👢 Пользователь: {display_name}\n"
                 f"🦸 Модератор: {admin_name}\n"
                 f"💬 Причина: {reason}\n"
                 f"📅 Срок: 30 дней"
@@ -8321,7 +8275,7 @@ class SpectrumBot:
     async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Создать голосование за бан"""
         if len(context.args) < 1:
-            await update.message.reply_text("❌ Использование: /banvote @user")
+            await update.message.reply_text("❌ Использование: /banvote @user или гб @user")
             return
         
         username = context.args[0].replace('@', '')
@@ -8345,6 +8299,9 @@ class SpectrumBot:
         
         vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
         
+        display_name = await self.get_display_name(target, target['telegram_id'])
+        creator_name = update.effective_user.first_name
+        
         keyboard = InlineKeyboardMarkup([
             [
                 InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
@@ -8354,8 +8311,8 @@ class SpectrumBot:
         
         await update.message.reply_text(
             f"🗳 ГОЛОСОВАНИЕ ЗА БАН\n\n"
-            f"👤 Цель:** {target['first_name']}\n"
-            f"👑 Инициатор:** {update.effective_user.first_name}\n"
+            f"👤 Цель: {display_name}\n"
+            f"👑 Инициатор: {creator_name}\n"
             f"📊 Требуется голосов: {required_votes}\n"
             f"🎚 Мин. ранг: {min_rank}\n\n"
             f"Голосуйте!",
@@ -8399,7 +8356,7 @@ class SpectrumBot:
     async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о голосовании"""
         if len(context.args) < 1:
-            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user")
+            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user или гб инфо @user")
             return
         
         username = context.args[0].replace('@', '')
@@ -8421,10 +8378,11 @@ class SpectrumBot:
         vote = dict(vote)
         creator = self.db.get_user_by_id(vote['created_by'])
         creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        display_name = await self.get_display_name(target, target['telegram_id'])
         
         text = (
             f"🗳 ИНФОРМАЦИЯ О ГОЛОСОВАНИИ\n\n"
-            f"👤 Цель: {target['first_name']}\n"
+            f"👤 Цель: {display_name}\n"
             f"👑 Инициатор: {creator_name}\n"
             f"📊 Требуется голосов: {vote['required_votes']}\n"
             f"🎚 Мин. ранг: {vote['min_rank']}\n"
@@ -8449,8 +8407,9 @@ class SpectrumBot:
         for vote in votes:
             vote = dict(vote)
             target = self.db.get_user_by_id(vote['target_id'])
-            target_name = target.get('nickname') or target['first_name'] if target else "Неизвестно"
-            text += f"• {target_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+            if target:
+                display_name = await self.get_display_name(target, target['telegram_id'])
+                text += f"• {display_name} — {vote['votes_for']}/{vote['required_votes']}\n"
         
         await update.message.reply_text(text)
         
