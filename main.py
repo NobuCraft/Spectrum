@@ -929,7 +929,7 @@ class Database:
         row = self.cursor.fetchone()
         return dict(row) if row else None
     
-    def update_user(self, user_id: int, platform: str = "telegram", kwargs) -> bool:
+    def update_user(self, user_id: int, platform: str = "telegram", **kwargs) -> bool:
         if not kwargs:
             return False
         for key, value in kwargs.items():
@@ -1763,7 +1763,7 @@ class Database:
         row = self.cursor.fetchone()
         return dict(row) if row else None
     
-    def update_duel(self, duel_id: int, platform: str = "telegram", kwargs):
+    def update_duel(self, duel_id: int, platform: str = "telegram", **kwargs):
         for key, value in kwargs.items():
             self.cursor.execute(f"UPDATE duels SET {key} = ? WHERE id = ? AND platform = ?", (value, duel_id, platform))
         self.conn.commit()
