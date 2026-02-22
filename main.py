@@ -9622,3 +9622,38 @@ if __name__ == "__main__":
         logger.error(f"❌ Фатальная ошибка: {e}")
         import traceback
         traceback.print_exc()
+
+    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        query = update.callback_query
+        await query.answer()
+        data = query.data
+        user = query.from_user
+        user_data = self.db.get_user(user.id)
+
+        if data == "random_chat":
+            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
+            row = self.db.cursor.fetchone()
+            if row:
+                await query.edit_message_text(
+                    f"🎲 Случайная беседа найдена!\n\n"
+                    f"Название: {row[1]}\n"
+                    f"ID: `{row[0]}`\n\n"
+                    f"Присоединяйтесь!"
+                )
+            else:
+                await query.edit_message_text("❌ Нет доступных бесед")
+
+        elif data == "top_chats":
+            await self.cmd_top_chats(update, context)
+
+        elif data == "help_menu":
+            await self.cmd_help(update, context)
+
+        elif data == "setup_info":
+            text = """
+# 🔧 Установка
+
+Подробная инструкция по установке бота:
+https://teletype.in/@nobucraft/2_pbVPOhaYo
+            """
+            await query.edit_message_text(text, disable_web_page_preview=True)
