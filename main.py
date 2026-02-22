@@ -7368,10 +7368,10 @@ class SpectrumBot:
         
         text = "👑 АДМИНИСТРАЦИЯ\n\n"
         for admin in admins:
-            name = admin['first_name']
-            username = f" (@{admin['username']})" if admin['username'] else ""
+            # Получаем отображаемое имя для каждого администратора
+            display_name = await self.get_display_name(admin, admin.get('telegram_id'))
             rank_emoji = RANKS[admin['rank']]["emoji"]
-            text += f"{rank_emoji} {name}{username} — {admin['rank_name']}\n"
+            text += f"{rank_emoji} {display_name} — {admin['rank_name']}\n"
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
