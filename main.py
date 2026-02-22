@@ -13,8 +13,8 @@ import asyncio
 import json
 import random
 import sqlite3
-import datetime  # ВАЖНО: добавить эту строку
-from datetime import datetime, timedelta  # И эту
+import datetime
+from datetime import datetime, timedelta, date
 import time
 import hashlib
 import re
@@ -143,6 +143,37 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
+
+# ========== КЛАСС ДЛЯ ГРАФИКОВ ==========
+class ChartGenerator:
+    @staticmethod
+    def create_activity_chart(days: list, counts: list, username: str = "Игрок"):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from datetime import datetime, timedelta
+        
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(8, 4))
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.set_facecolor('#2a2a2a')
+        
+        ax.plot(days, counts, marker='o', linestyle='-', color='#00d4ff', linewidth=2, markersize=6)
+        ax.fill_between(days, counts, color='#00d4ff', alpha=0.1)
+        
+        ax.set_title(f"АКТИВНОСТЬ {username.upper()}", fontsize=14, fontweight='bold', pad=20, color='white')
+        ax.set_ylabel("Сообщения", color='white')
+        ax.tick_params(colors='white')
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray')
+        
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100, facecolor=fig.get_facecolor())
+        buf.seek(0)
+        plt.close(fig)
+        return buf
 
 # ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ ==========
 class Style:
@@ -2195,6 +2226,69 @@ class Database:
 # ========== ИНИЦИАЛИЗАЦИЯ БД ==========
 db = Database()
 
+# ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
+def get_rank_emoji(rank: int) -> str:
+    return RANKS.get(rank, RANKS[0])["emoji"]
+
+def get_rank_name(rank: int) -> str:
+    return RANKS.get(rank, RANKS[0])["name"]
+
+def has_permission(user_data: Dict, required_rank: int) -> bool:
+    return user_data.get('rank', 0) >= required_rank
+
+def extract_user_id(text: str) -> Optional[int]:
+    match = re.search(r'@(\w+)', text)
+    if match:
+        username = match.group(1)
+        user = db.get_user_by_username(username)
+        if user:
+            return user['id']
+    
+    match = re.search(r'tg://user\?id=(\d+)', text)
+    if match:
+        return int(match.group(1))
+    
+    match = re.search(r'(\d+)', text)
+    if match:
+        return int(match.group(1))
+    
+    return None
+
+def parse_time(time_str: str) -> Optional[int]:
+    match = re.match(r'(\d+)([мчд])', time_str)
+    if not match:
+        return None
+    
+    amount = int(match.group(1))
+    unit = match.group(2)
+    
+    if unit == 'м':
+        return amount
+    elif unit == 'ч':
+        return amount * 60
+    elif unit == 'д':
+        return amount * 1440
+    
+    return None
+
+def parse_datetime(date_str: str) -> Optional[datetime]:
+    """Парсит дату в формате ДД.ММ ЧЧ:ММ"""
+    try:
+        now = datetime.now()
+        if '.' in date_str:
+            day_month, time_part = date_str.split()
+            day, month = map(int, day_month.split('.'))
+            hour, minute = map(int, time_part.split(':'))
+            year = now.year
+            if month < now.month:
+                year += 1
+            return datetime(year, month, day, hour, minute)
+        else:
+            hour, minute = map(int, date_str.split(':'))
+            return now.replace(hour=hour, minute=minute, second=0)
+    except:
+        return None
+
 # ========== GROQ AI КЛАСС (УЛУЧШЕННАЯ ВЕРСИЯ) ==========
 class GroqAI:
     def __init__(self, api_key: str):
@@ -2821,16 +2915,14 @@ class SpectrumBot:
                     pass
         
         # Создаем клавиатуру с кнопками
-        keyboard_buttons = [
-            InlineKeyboardButton("🎲 Случайная беседа", callback_data="random_chat"),
-            InlineKeyboardButton("🏆 Беседы топ дня", callback_data="top_chats"),
-            InlineKeyboardButton("📋 Команды", callback_data="help_menu"),
-            InlineKeyboardButton("🔧 Установка", callback_data="setup_info"),
-            InlineKeyboardButton("💜 Что такое неоны", callback_data="neons_info"),
-            InlineKeyboardButton("🎁 Бонусы", callback_data="bonuses_menu")
-        ]
-        
-        keyboard = InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 2))
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🎲 Случайная беседа", callback_data="random_chat")],
+            [InlineKeyboardButton("🏆 Беседы топ дня", callback_data="top_chats")],
+            [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
+            [InlineKeyboardButton("🔧 Установка", callback_data="setup_info")],
+            [InlineKeyboardButton("💜 Что такое неоны", callback_data="neons_info")],
+            [InlineKeyboardButton("🎁 Бонусы", callback_data="bonuses_menu")]
+        ])
         
         text = f"""
 👨‍💼 [Spectrum | Чат-менеджер](https://t.me/{BOT_USERNAME}) приветствует Вас!
@@ -3148,6 +3240,9 @@ class SpectrumBot:
         days, counts = self.db.get_weekly_stats(user.id)
         total_messages = sum(counts)
         avg_per_day = total_messages / 7 if total_messages > 0 else 0
+        
+        # Генерируем график
+        chart = ChartGenerator.create_activity_chart(days, counts, user.first_name)
         
         # Текст профиля
         profile_text = (
@@ -4870,7 +4965,22 @@ class SpectrumBot:
         if chat_id in self.mafia_games:
             game = self.mafia_games[chat_id]
             if game.status != "ended":
-                await update.message.reply_text(s.error("❌ Игра уже идёт! Присоединяйтесь: /mafiajoin"))
+                # Показываем текущее состояние игры
+                players_list = []
+                for pid in game.players:
+                    p = game.players_data[pid]
+                    players_list.append(f"• {p['name']}")
+                
+                players_text = "\n".join(players_list)
+                confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
+                
+                await update.message.reply_text(
+                    f"🔫 **МАФИЯ** (игра уже идёт)\n\n"
+                    f"👥 **Участники ({len(game.players)}):**\n"
+                    f"{players_text}\n\n"
+                    f"✅ **Подтвердили:** {confirmed}/{len(game.players)}\n"
+                    f"📌 /mafiajoin — присоединиться"
+                )
                 return
         
         # Создаём новую игру
@@ -4985,6 +5095,7 @@ class SpectrumBot:
         await self._update_mafia_game_message(game, context)
     
     async def _update_mafia_game_message(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
+        """Обновляет сообщение с информацией об игре"""
         if not game.message_id:
             return
         
@@ -4992,21 +5103,30 @@ class SpectrumBot:
             players_list = []
             for pid in game.players:
                 p = game.players_data[pid]
-                username = f" (@{p['username']})" if p['username'] else ""
-                players_list.append(f"• {p['name']}{username}")
+                status = "✅" if p['confirmed'] else "⏳"
+                players_list.append(f"{status} {p['name']}")
             
             players_text = "\n".join(players_list)
             confirmed = sum(1 for p in game.players if game.players_data[p]['confirmed'])
             
+            status_text = "🟢 **НАБОР ИГРОКОВ**" if game.status == "waiting" else f"🔴 **ИГРА ИДЁТ** (фаза: {game.phase})"
+            
             text = (
                 f"🔫 **МАФИЯ**\n\n"
+                f"{status_text}\n\n"
                 f"👥 **Участники ({len(game.players)}):**\n"
                 f"{players_text}\n\n"
                 f"✅ **Подтвердили:** {confirmed}/{len(game.players)}\n"
                 f"❌ **Нужно минимум:** {MAFIA_MIN_PLAYERS} игроков\n\n"
-                f"📌 /mafiajoin — присоединиться\n"
-                f"📌 /mafialeave — выйти"
             )
+            
+            if game.status == "waiting":
+                text += (
+                    f"📌 /mafiajoin — присоединиться\n"
+                    f"📌 /mafialeave — выйти"
+                )
+            else:
+                text += f"📊 День: {game.day} | Живых: {len(game.get_alive_players())}"
         else:
             text = (
                 f"🔫 **МАФИЯ**\n\n"
@@ -5023,73 +5143,6 @@ class SpectrumBot:
             )
         except Exception as e:
             logger.error(f"Ошибка обновления сообщения мафии: {e}")
-    
-    async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        if len(game.players) < MAFIA_MIN_PLAYERS:
-            await context.bot.send_message(
-                game.chat_id,
-                f"❌ Недостаточно игроков. Нужно минимум {MAFIA_MIN_PLAYERS}"
-            )
-            del self.mafia_games[game.chat_id]
-            return
-        
-        game.assign_roles()
-        game.status = "night"
-        game.phase = "night"
-        game.start_time = datetime.now()
-        
-        # Отправляем роли в ЛС каждому игроку
-        for player_id in game.players:
-            role = game.roles[player_id]
-            role_desc = game.get_role_description(role)
-            
-            try:
-                # Получаем AI ответ для роли
-                ai_message = None
-                if self.ai and self.ai.is_available:
-                    game_state = {
-                        'role': role,
-                        'players': len(game.players),
-                        'phase': 'night'
-                    }
-                    ai_message = await self.ai.get_game_response(
-                        player_id, 'mafia', game_state, 
-                        game.players_data[player_id]['name']
-                    )
-                
-                message = (
-                    f"🔫 **МАФИЯ**\n\n"
-                    f"🎭 **Ваша роль:** {role}\n"
-                    f"📖 {role_desc}\n\n"
-                )
-                
-                if ai_message:
-                    message += f"👁️ **Спектр:** {ai_message}\n\n"
-                
-                message += f"🌙 Наступает ночь. Ожидайте..."
-                
-                await self.send_private_message(player_id, message)
-            except Exception as e:
-                logger.error(f"Ошибка отправки роли игроку {player_id}: {e}")
-        
-        await context.bot.send_message(
-            game.chat_id,
-            f"🔫 **МАФИЯ**\n\n"
-            f"🌙 **НАСТУПИЛА НОЧЬ**\n"
-            f"📨 Роли розданы в ЛС\n"
-            f"🔪 Мафия выбирает жертву...",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        # Сохраняем в БД
-        self.db.cursor.execute('''
-            UPDATE mafia_games 
-            SET status = ?, phase = ?, roles = ?, alive = ?
-            WHERE game_id = ?
-        ''', (game.status, game.phase, json.dumps(game.roles), json.dumps(game.alive), game.game_id))
-        self.db.conn.commit()
-        
-        asyncio.create_task(self._mafia_night_timer(game, context))
     
     async def _mafia_night_timer(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
         await asyncio.sleep(MAFIA_NIGHT_TIME)
@@ -9553,10 +9606,19 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
 
     # ===== ОБРАБОТЧИК ОШИБОК =====
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        logger.error(f"Ошибка: {context.error}")
+        """Обработчик ошибок"""
         try:
+            # Логируем ошибку
+            logger.error(f"Ошибка: {context.error}")
+            
+            # Не отправляем сообщение об ошибке в каждом чате
+            # Только если это критическая ошибка и есть update
             if update and update.effective_message:
-                await update.effective_message.reply_text(s.error("❌ Произошла внутренняя ошибка"))
+                # Не спамим "внутренняя ошибка" на каждую мелочь
+                if "Database" in str(context.error) or "Connection" in str(context.error):
+                    await update.effective_message.reply_text(
+                        "❌ Ошибка базы данных. Попробуйте позже."
+                    )
         except:
             pass
 
