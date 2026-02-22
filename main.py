@@ -8740,7 +8740,7 @@ class SpectrumBot:
         import traceback
         traceback.print_exc()
 
-        async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         data = query.data
