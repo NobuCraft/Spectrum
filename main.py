@@ -1403,21 +1403,45 @@ class Database:
         ''', (user_id, username, first_name, text, chat_id, chat_title, platform))
         
         today = datetime.now().date().isoformat()
-        self.cursor.execute('''
-            INSERT INTO daily_stats (user_id, date, count, platform)
-            VALUES (?, ?, 1, ?)
-            ON CONFLICT(user_id, date, platform) DO UPDATE SET count = count + 1
-        ''', (user_id, today, platform))
         
+        # ИСПРАВЛЕНО: вместо ON CONFLICT используем проверку
         self.cursor.execute('''
-            INSERT INTO users (telegram_id, username, first_name, last_seen, messages_count, platform)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
-            ON CONFLICT(telegram_id, platform) DO UPDATE SET
-                last_seen = CURRENT_TIMESTAMP,
-                messages_count = messages_count + 1,
-                username = excluded.username,
-                first_name = excluded.first_name
-        ''', (user_id, username, first_name, platform))
+            SELECT id FROM daily_stats 
+            WHERE user_id = ? AND date = ? AND platform = ?
+        ''', (user_id, today, platform))
+        exists = self.cursor.fetchone()
+        
+        if exists:
+            self.cursor.execute('''
+                UPDATE daily_stats SET count = count + 1 
+                WHERE user_id = ? AND date = ? AND platform = ?
+            ''', (user_id, today, platform))
+        else:
+            self.cursor.execute('''
+                INSERT INTO daily_stats (user_id, date, count, platform)
+                VALUES (?, ?, 1, ?)
+            ''', (user_id, today, platform))
+        
+        # ИСПРАВЛЕНО: для users тоже
+        self.cursor.execute('''
+            SELECT id FROM users WHERE telegram_id = ? AND platform = ?
+        ''', (user_id, platform))
+        user_exists = self.cursor.fetchone()
+        
+        if user_exists:
+            self.cursor.execute('''
+                UPDATE users SET 
+                    last_seen = CURRENT_TIMESTAMP,
+                    messages_count = messages_count + 1,
+                    username = ?,
+                    first_name = ?
+                WHERE telegram_id = ? AND platform = ?
+            ''', (username, first_name, user_id, platform))
+        else:
+            self.cursor.execute('''
+                INSERT INTO users (telegram_id, username, first_name, last_seen, messages_count, platform)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+            ''', (user_id, username, first_name, platform))
         
         self.conn.commit()
         
@@ -8140,12 +8164,13 @@ class SpectrumBot:
             return
         
         state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+        chat_id = update.effective_chat.id
         
+        # ИСПРАВЛЕНО: используем INSERT OR REPLACE вместо ON CONFLICT
         self.db.cursor.execute(f'''
-            INSERT INTO chat_settings (chat_id, {setting})
+            INSERT OR REPLACE INTO chat_settings (chat_id, {setting})
             VALUES (?, ?)
-            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
-        ''', (update.effective_chat.id, state))
+        ''', (chat_id, state))
         self.db.conn.commit()
         
         status = "включен" if state else "выключен"
