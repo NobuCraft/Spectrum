@@ -7173,7 +7173,10 @@ class SpectrumBot:
     async def cmd_top_chat_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self._chat_stats_period(update, "all")
 
-    # ===== МОДЕРАЦИЯ (РАНГИ) =====
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - УПРАВЛЕНИЕ РАНГАМИ
+    # =========================================================================
+    
     async def _set_rank(self, update: Update, target_rank: int):
         """Общая логика установки ранга"""
         user = update.effective_user
@@ -7181,35 +7184,33 @@ class SpectrumBot:
         text = update.message.text
         
         if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 4+")
             return
         
-        target_user = await self._resolve_user(update, context, text)
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
         
         if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
+            await update.message.reply_text("⛔️ Нельзя назначить ранг выше своего")
             return
         
         self.db.set_rank(target_user['id'], target_rank, user_data['id'])
         rank_info = RANKS[target_rank]
-        
-        # Отправляем уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"👑 **ВАМ ВЫДАН РАНГ!**\n\n"
-            f"🦸 Модератор: {user.first_name}\n"
-            f"🎖 Ранг: {rank_info['emoji']} {rank_info['name']}"
-        )
-        
         await update.message.reply_text(
-            f"{s.success('Ранг назначен!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
-            parse_mode=ParseMode.MARKDOWN
+            f"✅ **Ранг назначен!**\n\n"
+            f"👤 **Пользователь:** {target_user['first_name']}\n"
+            f"🎖️ **Ранг:** {rank_info['emoji']} {rank_info['name']}"
         )
     
     async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7228,82 +7229,46 @@ class SpectrumBot:
         await self._set_rank(update, 5)
     
     async def cmd_lower_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Понизить ранг пользователя"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
-        target_user = await self._resolve_user(update, context, text)
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'@(\S+)', text)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
         
         if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         if target_user['rank'] <= 0:
-            await update.message.reply_text(s.error("❌ Пользователь и так участник"))
+            await update.message.reply_text("❌ Пользователь и так участник")
             return
         
         if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя понизить модератора выше рангом"))
+            await update.message.reply_text("⛔️ Нельзя понизить модератора выше рангом")
             return
         
         new_rank = target_user['rank'] - 1
         self.db.set_rank(target_user['id'], new_rank, user_data['id'])
         rank_info = RANKS[new_rank]
-        
-        # Отправляем уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"📉 **ВАШ РАНГ ПОНИЖЕН**\n\n"
-            f"🦸 Модератор: {user.first_name}\n"
-            f"🎖 Новый ранг: {rank_info['emoji']} {rank_info['name']}"
-        )
-        
         await update.message.reply_text(
-            f"{s.success('Ранг понижен!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item(f'Новый ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
-            parse_mode=ParseMode.MARKDOWN
+            f"✅ **Ранг понижен!**\n\n"
+            f"👤 **Пользователь:** {target_user['first_name']}\n"
+            f"🎖️ **Новый ранг:** {rank_info['emoji']} {rank_info['name']}"
         )
     
-    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        
-        if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
-            return
-        
-        target_user = await self._resolve_user(update, context, text)
-        
-        if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
-            return
-        
-        self.db.set_rank(target_user['id'], 0, user_data['id'])
-        
-        # Отправляем уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"📉 **ВАС СНЯЛИ С МОДЕРАЦИИ**\n\n"
-            f"🦸 Модератор: {user.first_name}"
-        )
-        
-        await update.message.reply_text(
-            f"{s.success('Модератор снят!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item('Теперь: 👤 Участник')}",
-            parse_mode=ParseMode.MARKDOWN
-        )
-
     async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Снять ранг с пользователя"""
         user = update.effective_user
@@ -7311,7 +7276,7 @@ class SpectrumBot:
         text = update.message.text
         
         if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         target_user = None
@@ -7324,37 +7289,38 @@ class SpectrumBot:
                 target_user = self.db.get_user_by_username(username)
         
         if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
+            await update.message.reply_text("⛔️ Нельзя снять модератора выше рангом")
             return
         
         self.db.set_rank(target_user['id'], 0, user_data['id'])
         await update.message.reply_text(
-            f"{s.success('Модератор снят!')}\n\n"
-            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
-            f"{s.item('Теперь: 👤 Участник')}",
-            parse_mode=ParseMode.MARKDOWN
+            f"✅ **Модератор снят!**\n\n"
+            f"👤 **Пользователь:** {target_user['first_name']}\n"
+            f"🎖️ **Теперь:** 👤 Участник"
         )
     
     async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистка вышедших модераторов"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
-        await update.message.reply_text(s.success("✅ Проверка вышедших модераторов выполнена"))
+        await update.message.reply_text("✅ Проверка вышедших модераторов выполнена")
     
     async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять всех модераторов"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 5 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Только для создателя"))
+            await update.message.reply_text("⛔️ Только для создателя")
             return
         
         self.db.cursor.execute("SELECT id FROM users WHERE rank > 0")
@@ -7363,25 +7329,30 @@ class SpectrumBot:
         for mod_id in mods:
             self.db.set_rank(mod_id[0], 0, user_data['id'])
         
-        await update.message.reply_text(
-            s.success(f"✅ Снято модераторов: {len(mods)}"),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        await update.message.reply_text(f"✅ Снято модераторов: {len(mods)}")
     
     async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список администраторов"""
         admins = self.db.get_admins()
         if not admins:
-            await update.message.reply_text(s.info("👥 В чате нет администраторов"))
+            await update.message.reply_text("👥 В чате нет администраторов")
             return
-        text = f"{s.header('АДМИНИСТРАЦИЯ')}\n\n"
+        
+        text = "👑 **АДМИНИСТРАЦИЯ**\n\n"
         for admin in admins:
             name = admin['first_name']
             username = f" (@{admin['username']})" if admin['username'] else ""
             rank_emoji = RANKS[admin['rank']]["emoji"]
-            text += f"{s.item(f'{rank_emoji} {name}{username} — {admin["rank_name"]}')}\n"
+            text += f"{rank_emoji} {name}{username} — {admin['rank_name']}\n"
+        
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ПРЕДУПРЕЖДЕНИЯ (ВАРНЫ)
+    # =========================================================================
+    
     async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Выдать предупреждение"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
@@ -7396,8 +7367,7 @@ class SpectrumBot:
         
         if update.message.reply_to_message:
             target_id = update.message.reply_to_message.from_user.id
-            target_data = self.db.get_user(target_id)
-            target_user = self.db.get_user_by_id(target_data['id'])
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
             parts = text.split('\n', 1)
             if len(parts) > 1 and parts[1].strip():
                 reason = parts[1].strip()
@@ -7423,13 +7393,16 @@ class SpectrumBot:
         target_name = f"@{target_user['username']}" if target_user.get('username') else target_user['first_name']
         
         # Уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"⚠️ **Предупреждение ({warns}/4)**\n\n"
-            f"👢 **Чат:** {update.effective_chat.title}\n"
-            f"💬 **Причина:** {reason}\n"
-            f"🦸 **Модератор:** {admin_name}"
-        )
+        try:
+            await context.bot.send_message(
+                target_user['telegram_id'],
+                f"⚠️ **Предупреждение ({warns}/4)**\n\n"
+                f"💬 **Причина:** {reason}\n"
+                f"🦸 **Модератор:** {admin_name}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
         
         await update.message.reply_text(
             f"⚠️ **Предупреждение ({warns}/4)**\n\n"
@@ -7445,18 +7418,19 @@ class SpectrumBot:
             self.db.mute_user(target_user['id'], minutes, user_data['id'], "2 предупреждения")
             try:
                 until_date = int(time.time()) + (minutes * 60)
-                permissions = ChatPermissions(can_send_messages=False)
-                await context.bot.restrict_chat_member(chat_id, target_user['telegram_id'], permissions=permissions, until_date=until_date)
-                
-                # Уведомление в ЛС о муте
-                await self.send_private_message(
-                    target_user['telegram_id'],
-                    f"🔇 **АВТОМАТИЧЕСКИЙ МУТ**\n\n"
-                    f"👢 **Чат:** {update.effective_chat.title}\n"
-                    f"⏳ **Срок:** 1 час\n"
-                    f"💬 **Причина:** Достигнуто 2 предупреждений"
+                permissions = {
+                    'can_send_messages': False,
+                    'can_send_media_messages': False,
+                    'can_send_polls': False,
+                    'can_send_other_messages': False,
+                    'can_add_web_page_previews': False
+                }
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id'],
+                    permissions=permissions,
+                    until_date=until_date
                 )
-                
                 await update.message.reply_text(f"🔇 **Мут на 1 час**\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка мута: {e}")
@@ -7466,18 +7440,19 @@ class SpectrumBot:
             self.db.mute_user(target_user['id'], minutes, user_data['id'], "3 предупреждения")
             try:
                 until_date = int(time.time()) + (minutes * 60)
-                permissions = ChatPermissions(can_send_messages=False)
-                await context.bot.restrict_chat_member(chat_id, target_user['telegram_id'], permissions=permissions, until_date=until_date)
-                
-                # Уведомление в ЛС о муте
-                await self.send_private_message(
-                    target_user['telegram_id'],
-                    f"🔇 **АВТОМАТИЧЕСКИЙ МУТ**\n\n"
-                    f"👢 **Чат:** {update.effective_chat.title}\n"
-                    f"⏳ **Срок:** 24 часа\n"
-                    f"💬 **Причина:** Достигнуто 3 предупреждений"
+                permissions = {
+                    'can_send_messages': False,
+                    'can_send_media_messages': False,
+                    'can_send_polls': False,
+                    'can_send_other_messages': False,
+                    'can_add_web_page_previews': False
+                }
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id'],
+                    permissions=permissions,
+                    until_date=until_date
                 )
-                
                 await update.message.reply_text(f"🔇 **Мут на 24 часа**\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка мута: {e}")
@@ -7485,38 +7460,32 @@ class SpectrumBot:
         elif warns >= 4:
             self.db.ban_user(target_user['id'], user_data['id'], "4 предупреждения")
             try:
-                await context.bot.ban_chat_member(chat_id, target_user['telegram_id'])
-                
-                # Уведомление в ЛС о бане
-                await self.send_private_message(
-                    target_user['telegram_id'],
-                    f"🔴 **ВЫ ЗАБЛОКИРОВАНЫ**\n\n"
-                    f"👢 **Чат:** {update.effective_chat.title}\n"
-                    f"⏳ **Срок:** Навсегда\n"
-                    f"💬 **Причина:** Достигнуто 4 предупреждений"
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id']
                 )
-                
                 await update.message.reply_text(f"🔴 **Пользователь забанен (4/4)**\n\n👤 {target_name}", parse_mode=ParseMode.MARKDOWN)
             except Exception as e:
                 logger.error(f"Ошибка бана: {e}")
     
     async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список предупреждений пользователя"""
         if not context.args:
-            await update.message.reply_text("❌ **Укажите пользователя:** `/warns @user`", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Укажите пользователя: `/warns @user`")
             return
         
         username = context.args[0].replace('@', '')
         target = self.db.get_user_by_username(username)
         
         if not target:
-            await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         warns_list = self.db.get_warns(target['id'])
         target_name = f"@{target['username']}" if target.get('username') else target['first_name']
         
         if not warns_list:
-            await update.message.reply_text(f"📋 **У {target_name} нет предупреждений**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"📋 У {target_name} нет предупреждений")
             return
         
         text = f"📋 **ПРЕДУПРЕЖДЕНИЯ: {target_name}**\n\n"
@@ -7533,14 +7502,14 @@ class SpectrumBot:
         
         text += f"📊 **Всего:** {len(warns_list)}/4"
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
+    
     async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Мои предупреждения"""
         user_data = self.db.get_user(update.effective_user.id)
         warns_list = self.db.get_warns(user_data['id'])
         
         if not warns_list:
-            await update.message.reply_text("✅ **У вас нет предупреждений**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("✅ У вас нет предупреждений")
             return
         
         user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
@@ -7561,19 +7530,19 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять последнее предупреждение"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 1 and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Недостаточно прав**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         target_user = None
         if update.message.reply_to_message:
             target_id = update.message.reply_to_message.from_user.id
-            target_data = self.db.get_user(target_id)
-            target_user = self.db.get_user_by_id(target_data['id'])
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
         else:
             match = re.search(r'снять варн\s+@?(\S+)', text, re.IGNORECASE)
             if match:
@@ -7581,7 +7550,7 @@ class SpectrumBot:
                 target_user = self.db.get_user_by_username(username)
         
         if not target_user:
-            await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
@@ -7589,15 +7558,8 @@ class SpectrumBot:
         admin_name = f"@{user.username}" if user.username else user.first_name
         
         if not removed:
-            await update.message.reply_text(f"📋 **У {target_name} нет предупреждений**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"📋 У {target_name} нет предупреждений")
             return
-        
-        # Уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"✅ **ПРЕДУПРЕЖДЕНИЕ СНЯТО**\n\n"
-            f"🦸 **Модератор:** {admin_name}"
-        )
         
         warns_list = self.db.get_warns(target_user['id'])
         remaining = len(warns_list)
@@ -7606,61 +7568,56 @@ class SpectrumBot:
             f"✅ **Предупреждение снято**\n\n"
             f"👤 **Пользователь:** {target_name}\n"
             f"🦸 **Модератор:** {admin_name}\n"
-            f"📊 **Осталось:** {remaining}/4",
-            parse_mode=ParseMode.MARKDOWN
+            f"📊 **Осталось:** {remaining}/4"
         )
     
     async def cmd_unwarn_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять все предупреждения"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         match = re.search(r'снять все варны\s+@?(\S+)', text, re.IGNORECASE)
         if not match:
-            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            await update.message.reply_text("❌ Укажите пользователя")
             return
         
         username = match.group(1)
         target_user = self.db.get_user_by_username(username)
         
         if not target_user:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         warns_list = self.db.get_warns(target_user['id'])
-        count = len(warns_list)
         for _ in warns_list:
             self.db.remove_last_warn(target_user['id'], user_data['id'])
         
         target_name = target_user.get('nickname') or target_user['first_name']
-        
-        # Уведомление в ЛС
-        await self.send_private_message(
-            target_user['telegram_id'],
-            f"✅ **ВСЕ ПРЕДУПРЕЖДЕНИЯ СНЯТЫ**\n\n"
-            f"🦸 **Модератор:** {user.first_name}\n"
-            f"📊 **Снято:** {count}"
-        )
-        
-        await update.message.reply_text(s.success(f"✅ Все предупреждения сняты с {target_name}"))
+        await update.message.reply_text(f"✅ Все предупреждения сняты с {target_name}")
+    
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - МУТ
+    # =========================================================================
     
     async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Замутить пользователя"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 2+"))
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 2+")
             return
         
         match = re.search(r'мут\s+@?(\S+)(?:\s+(\d+[мчд]))?(?:\s+(.+))?', text, re.IGNORECASE)
         if not match:
-            await update.message.reply_text(s.error("❌ Пример: мут @user 30м спам"))
+            await update.message.reply_text("❌ Пример: мут @user 30м спам")
             return
         
         username = match.group(1)
@@ -7669,16 +7626,16 @@ class SpectrumBot:
         
         minutes = parse_time(time_str)
         if not minutes:
-            await update.message.reply_text(s.error("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д"))
+            await update.message.reply_text("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
             return
         
         target = self.db.get_user_by_username(username)
         if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Нельзя замутить модератора выше рангом"))
+            await update.message.reply_text("⛔️ Нельзя замутить модератора выше рангом")
             return
         
         until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
@@ -7687,7 +7644,13 @@ class SpectrumBot:
         mute_success = False
         try:
             until_date = int(time.time()) + (minutes * 60)
-            permissions = ChatPermissions(can_send_messages=False)
+            permissions = {
+                'can_send_messages': False,
+                'can_send_media_messages': False,
+                'can_send_polls': False,
+                'can_send_other_messages': False,
+                'can_add_web_page_previews': False
+            }
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id'],
@@ -7699,37 +7662,39 @@ class SpectrumBot:
             logger.error(f"Ошибка мута: {e}")
         
         # Уведомление в ЛС
-        await self.send_private_message(
-            target['telegram_id'],
-            f"🔇 **ВЫ ЗАМУЧЕНЫ**\n\n"
-            f"👢 **Чат:** {update.effective_chat.title}\n"
-            f"⏳ **Срок:** {time_str}\n"
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"🔇 **ВАС ЗАМУТИЛИ**\n\n"
+                f"⏱️ **Срок:** {time_str}\n"
+                f"💬 **Причина:** {reason}\n"
+                f"📅 **До:** {until_str}"
+            )
+        except:
+            pass
+        
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        target_name = f"@{target['username']}" if target.get('username') else target['first_name']
+        
+        await update.message.reply_text(
+            f"🔇 **МУТ**\n\n"
+            f"👤 **Пользователь:** {target_name}\n"
+            f"⏱️ **Срок:** {time_str}\n"
+            f"📅 **До:** {until_str}\n"
             f"💬 **Причина:** {reason}\n"
-            f"🦸 **Модератор:** {user.first_name}"
+            f"🦸 **Модератор:** {admin_name}\n\n"
+            f"{'✅ Мут применен' if mute_success else '❌ Не удалось применить мут'}"
         )
-        
-        text = (
-            f"🔴 **Пользователь замучен**\n\n"
-            f"👢 **Пользователь:** {target['first_name']}\n"
-            f"⏳ **Срок:** {time_str}\n"
-            f"💬 **Причина:** {reason}\n"
-            f"🦸 **Модератор:** {user.first_name}"
-        )
-        
-        if not mute_success:
-            text += f"\n\n⚠️ Не удалось применить мут в Telegram, но в БД сохранено"
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список замученных пользователей"""
         muted = self.db.get_muted_users()
         
         if not muted:
-            await update.message.reply_text("📋 **Список замученных пуст**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("📋 Список замученных пуст")
             return
         
         text = "📋 **СПИСОК ЗАМУЧЕННЫХ**\n\n"
-        
         for mute in muted[:15]:
             until = datetime.fromisoformat(mute['mute_until']).strftime("%d.%m %H:%M")
             name = mute['first_name']
@@ -7744,57 +7709,65 @@ class SpectrumBot:
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
     async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять мут"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         chat_id = update.effective_chat.id
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         username = text.replace('размут', '').replace('@', '').strip()
         if not username and update.message.reply_to_message:
             target_id = update.message.reply_to_message.from_user.id
-            target_data = self.db.get_user(target_id)
-            target = self.db.get_user_by_id(target_data['id'])
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
         elif username:
             target = self.db.get_user_by_username(username)
         else:
-            await update.message.reply_text(s.error("❌ Укажите пользователя"))
+            await update.message.reply_text("❌ Укажите пользователя")
             return
         
         if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
         self.db.unmute_user(target['id'], user_data['id'])
         
         try:
-            permissions = ChatPermissions(
-                can_send_messages=True,
-                can_send_media_messages=True,
-                can_send_polls=True,
-                can_send_other_messages=True,
-                can_add_web_page_previews=True
-            )
+            permissions = {
+                'can_send_messages': True,
+                'can_send_media_messages': True,
+                'can_send_polls': True,
+                'can_send_other_messages': True,
+                'can_add_web_page_previews': True
+            }
             await context.bot.restrict_chat_member(
                 chat_id=chat_id,
                 user_id=target['telegram_id'],
                 permissions=permissions
             )
-        except Exception as e:
-            logger.error(f"Ошибка размута: {e}")
+        except:
+            pass
         
         # Уведомление в ЛС
-        await self.send_private_message(
-            target['telegram_id'],
-            f"✅ **МУТ СНЯТ**\n\n"
-            f"👢 **Чат:** {update.effective_chat.title}\n"
-            f"🦸 **Модератор:** {user.first_name}"
-        )
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                "✅ Мут снят"
+            )
+        except:
+            pass
         
-        await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        target_name = f"@{target['username']}" if target.get('username') else target['first_name']
+        
+        await update.message.reply_text(f"✅ Мут снят с {target_name}")
+    
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - БАН
+    # =========================================================================
     
     async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Забанить пользователя"""
@@ -7847,22 +7820,20 @@ class SpectrumBot:
                 user_id=target_telegram_id,
                 until_date=int(time.time()) + (30 * 24 * 60 * 60)  # 30 дней
             )
-            
-            # Бан в БД
+            ban_success_telegram = True
+            logger.info(f"Пользователь {target_telegram_id} забанен в чате {chat_id}")
+        except Exception as e:
+            ban_success_telegram = False
+            logger.error(f"Ошибка бана в Telegram для {target_telegram_id}: {e}")
+            await update.message.reply_text(f"❌ **Ошибка Telegram:** {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        # БАН В БАЗЕ ДАННЫХ
+        if ban_success_telegram:
             self.db.ban_user(target_internal_id, user_data['id'], reason)
-            
+
             admin_name = f"@{user.username}" if user.username else user.first_name
             target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
-
-            # Уведомление в ЛС
-            await self.send_private_message(
-                target_telegram_id,
-                f"🔴 **ВЫ ЗАБЛОКИРОВАНЫ**\n\n"
-                f"👢 **Чат:** {update.effective_chat.title}\n"
-                f"⏳ **Срок:** 30 дней\n"
-                f"💬 **Причина:** {reason}\n"
-                f"🦸 **Модератор:** {admin_name}"
-            )
 
             text = (
                 f"🔴 **Пользователь забанен**\n\n"
@@ -7872,23 +7843,30 @@ class SpectrumBot:
                 f"📅 **Срок:** 30 дней"
             )
             await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-            
-        except Exception as e:
-            logger.error(f"Ошибка бана: {e}")
-            await update.message.reply_text(
-                f"❌ **Ошибка:** {str(e)[:100]}",
-                parse_mode=ParseMode.MARKDOWN
-            )
+
+            # Уведомление в ЛС
+            try:
+                await context.bot.send_message(
+                    target_telegram_id,
+                    f"🔴 **Вас заблокировали в чате**\n\n"
+                    f"👢 **Чат:** {update.effective_chat.title}\n"
+                    f"🦸 **Модератор:** {admin_name}\n"
+                    f"💬 **Причина:** {reason}\n"
+                    f"📅 **Срок:** 30 дней",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить пользователя {target_telegram_id} о бане: {e}")
     
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список забаненных"""
         bans = self.db.get_banlist()
         
         if not bans:
-            await update.message.reply_text("📋 **Список забаненных пуст**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("📋 Список забаненных пуст")
             return
         
         text = "📋 **СПИСОК ЗАБАНЕННЫХ**\n\n"
-        
         for ban in bans[:15]:
             name = ban.get('first_name', 'Неизвестно')
             username = f" (@{ban['username']})" if ban.get('username') else ""
@@ -7944,14 +7922,6 @@ class SpectrumBot:
         admin_name = f"@{user.username}" if user.username else user.first_name
         target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
 
-        # Уведомление в ЛС
-        await self.send_private_message(
-            target_telegram_id,
-            f"✅ **ВЫ РАЗБЛОКИРОВАНЫ**\n\n"
-            f"👢 **Чат:** {update.effective_chat.title}\n"
-            f"🦸 **Модератор:** {admin_name}"
-        )
-
         if unban_success_telegram:
             await update.message.reply_text(
                 f"✅ **Бан снят**\n\n"
@@ -7959,93 +7929,72 @@ class SpectrumBot:
                 f"🦸 **Модератор:** {admin_name}",
                 parse_mode=ParseMode.MARKDOWN
             )
+            # Уведомление в ЛС
+            try:
+                await context.bot.send_message(
+                    target_telegram_id,
+                    f"✅ **Вас разблокировали в чате**\n\n"
+                    f"👢 **Чат:** {update.effective_chat.title}\n"
+                    f"🦸 **Модератор:** {admin_name}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить {target_telegram_id} о разбане: {e}")
         else:
             await update.message.reply_text(
                 f"⚠️ **Бан снят в базе данных, но возникла ошибка при разбане в Telegram.**\n\n"
                 f"👤 **Пользователь:** {target_display_name}",
                 parse_mode=ParseMode.MARKDOWN
             )
-
+    
     async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Кикнуть пользователя"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         chat_id = update.effective_chat.id
-
+        
         if user_data['rank'] < 1 and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Недостаточно прав. Нужен ранг 1+**", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
-
-        match = re.search(r'кик\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-        if not match:
-            await update.message.reply_text("❌ **Пример:** `кик @user`", parse_mode=ParseMode.MARKDOWN)
+        
+        username = text.replace('кик', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+        
+        if not target and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
             return
-
-        username = match.group(1)
-        reason = match.group(2) if match.group(2) else "Нарушение правил"
-
-        target_data = self.db.get_user_by_username(username)
-        if not target_data:
-            await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
-            return
-
-        target_telegram_id = target_data['telegram_id']
-        target_name = target_data.get('nickname') or target_data['first_name']
-
-        if target_data['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Нельзя кикнуть модератора выше рангом**", parse_mode=ParseMode.MARKDOWN)
-            return
-
+        
         try:
-            # Баним на 40 секунд (Telegram автоматически разбанит)
-            await context.bot.ban_chat_member(
-                chat_id=chat_id,
-                user_id=target_telegram_id,
-                until_date=int(time.time()) + 40
-            )
-            
-            admin_name = f"@{user.username}" if user.username else user.first_name
-            target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
-
-            # Уведомление в ЛС
-            await self.send_private_message(
-                target_telegram_id,
-                f"👢 **ВЫ БЫЛИ КИКНУТЫ**\n\n"
-                f"👢 **Чат:** {update.effective_chat.title}\n"
-                f"💬 **Причина:** {reason}\n"
-                f"🦸 **Модератор:** {admin_name}"
-            )
-
-            text = (
-                f"👢 **Пользователь кикнут**\n\n"
-                f"👤 **Пользователь:** {target_display_name}\n"
-                f"🦸 **Модератор:** {admin_name}\n"
-                f"💬 **Причина:** {reason}"
-            )
-            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-            
+            await context.bot.ban_chat_member(chat_id, target['telegram_id'])
+            await context.bot.unban_chat_member(chat_id, target['telegram_id'])
+            await update.message.reply_text(f"✅ {target['first_name']} исключен")
         except Exception as e:
-            logger.error(f"Ошибка кика: {e}")
-            await update.message.reply_text(
-                f"❌ **Ошибка:** {str(e)[:100]}",
-                parse_mode=ParseMode.MARKDOWN
-            )
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+    
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ПРОВЕРКА ПРАВ
+    # =========================================================================
     
     async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверка прав бота в чате"""
         chat_id = update.effective_chat.id
         
         try:
             bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
             
             if bot_member.status == 'creator':
-                await update.message.reply_text(s.success("✅ Бот является создателем чата! Полные права."))
+                await update.message.reply_text("✅ Бот является создателем чата! Полные права.")
             elif bot_member.status == 'administrator':
                 rights = []
                 if bot_member.can_restrict_members:
                     rights.append("✅ может банить/мутить")
                 else:
-                    rights.append("❌ НЕТ ПРАВА на бан/мут! (нужно включить)")
+                    rights.append("❌ НЕТ ПРАВА на бан/мут!")
                 
                 if bot_member.can_delete_messages:
                     rights.append("✅ может удалять сообщения")
@@ -8057,39 +8006,32 @@ class SpectrumBot:
                 else:
                     rights.append("❌ не может закреплять")
                 
-                if bot_member.can_invite_users:
-                    rights.append("✅ может приглашать")
-                else:
-                    rights.append("❌ не может приглашать")
-                
-                if bot_member.can_change_info:
-                    rights.append("✅ может менять информацию")
-                else:
-                    rights.append("❌ не может менять информацию")
-                
                 rights_text = "\n".join(rights)
                 await update.message.reply_text(
-                    f"👑 **Бот администратор**\n\n{rights_text}",
-                    parse_mode=ParseMode.MARKDOWN
+                    f"👑 **Бот администратор**\n\n{rights_text}"
                 )
             else:
-                await update.message.reply_text(s.error("❌ Бот не администратор! Выдайте права администратора."))
+                await update.message.reply_text("❌ Бот не администратор! Выдайте права.")
         except Exception as e:
-            await update.message.reply_text(s.error(f"❌ Ошибка проверки: {e}"))
-
-    # ===== ТРИГГЕРЫ =====
+            await update.message.reply_text(f"❌ Ошибка проверки: {e}")
+    
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ТРИГГЕРЫ
+    # =========================================================================
+    
     async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Добавить триггер"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         text = text[9:].strip()
         if "=" not in text:
-            await update.message.reply_text(s.error("❌ Формат: +триггер слово = действие"))
+            await update.message.reply_text("❌ Формат: +триггер слово = действие")
             return
         
         word, action = text.split("=", 1)
@@ -8101,7 +8043,7 @@ class SpectrumBot:
         action_value = action_parts[1] if len(action_parts) > 1 else None
         
         if action_type not in ["delete", "mute", "warn", "ban"]:
-            await update.message.reply_text(s.error("❌ Действие должно быть: delete, mute, warn, ban"))
+            await update.message.reply_text("❌ Действие должно быть: delete, mute, warn, ban")
             return
         
         self.db.cursor.execute('''
@@ -8110,38 +8052,40 @@ class SpectrumBot:
         ''', (update.effective_chat.id, word, action_type, action_value, user_data['id']))
         self.db.conn.commit()
         
-        await update.message.reply_text(s.success(f"✅ Триггер добавлен: {word} -> {action}"))
+        await update.message.reply_text(f"✅ Триггер добавлен: {word} -> {action}")
     
     async def cmd_remove_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Удалить триггер"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         trigger_id = text[9:].strip()
         if not trigger_id.isdigit():
-            await update.message.reply_text(s.error("❌ Укажите ID триггера"))
+            await update.message.reply_text("❌ Укажите ID триггера")
             return
         
         self.db.cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", 
                              (int(trigger_id), update.effective_chat.id))
         self.db.conn.commit()
         
-        await update.message.reply_text(s.success("✅ Триггер удален"))
+        await update.message.reply_text("✅ Триггер удален")
     
     async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список триггеров в чате"""
         self.db.cursor.execute("SELECT id, word, action, action_value FROM triggers WHERE chat_id = ?", 
                              (update.effective_chat.id,))
         triggers = self.db.cursor.fetchall()
         
         if not triggers:
-            await update.message.reply_text(s.info("В этом чате нет триггеров"))
+            await update.message.reply_text("ℹ️ В этом чате нет триггеров")
             return
         
-        text = f"{s.header('ТРИГГЕРЫ ЧАТА')}\n\n"
+        text = "🔹 **ТРИГГЕРЫ ЧАТА**\n\n"
         for trigger in triggers:
             action_text = trigger[2]
             if trigger[3]:
@@ -8150,32 +8094,36 @@ class SpectrumBot:
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - НАСТРОЙКИ ЧАТА
+    # =========================================================================
+    
     async def _toggle_setting(self, update: Update, setting: str):
+        """Включить/выключить настройку"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         parts = update.message.text.split()
         if len(parts) < 2:
-            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            await update.message.reply_text("❌ Укажите on или off")
             return
         
         state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
-        chat_id = update.effective_chat.id
         
-        # ИСПРАВЛЕНО: используем INSERT OR REPLACE вместо ON CONFLICT
         self.db.cursor.execute(f'''
-            INSERT OR REPLACE INTO chat_settings (chat_id, {setting})
+            INSERT INTO chat_settings (chat_id, {setting})
             VALUES (?, ?)
-        ''', (chat_id, state))
+            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
+        ''', (update.effective_chat.id, state))
         self.db.conn.commit()
         
         status = "включен" if state else "выключен"
         names = {"antimat": "Антимат", "antilink": "Антиссылки", "antiflood": "Антифлуд"}
-        await update.message.reply_text(s.success(f"✅ {names[setting]} {status}"))
+        await update.message.reply_text(f"✅ {names.get(setting, setting)} {status}")
     
     async def cmd_set_antimat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self._toggle_setting(update, "antimat")
@@ -8187,16 +8135,17 @@ class SpectrumBot:
         await self._toggle_setting(update, "antiflood")
     
     async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистить сообщения"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         parts = update.message.text.split()
         if len(parts) < 2:
-            await update.message.reply_text(s.error("❌ Укажите количество: чистка 50"))
+            await update.message.reply_text("❌ Укажите количество: чистка 50")
             return
         
         try:
@@ -8204,7 +8153,7 @@ class SpectrumBot:
             if count > 100:
                 count = 100
         except:
-            await update.message.reply_text(s.error("❌ Количество должно быть числом"))
+            await update.message.reply_text("❌ Количество должно быть числом")
             return
         
         try:
@@ -8215,41 +8164,45 @@ class SpectrumBot:
             
             if messages:
                 await context.bot.delete_messages(update.effective_chat.id, messages)
-                await context.bot.send_message(update.effective_chat.id, 
-                                              s.success(f"✅ Удалено {len(messages)} сообщений"),
-                                              disable_notification=True)
+                await context.bot.send_message(
+                    update.effective_chat.id, 
+                    f"✅ Удалено {len(messages)} сообщений",
+                    disable_notification=True
+                )
         except Exception as e:
-            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+            await update.message.reply_text(f"❌ Ошибка: {e}")
     
     async def cmd_clear_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Очистить сообщения пользователя"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         text = update.message.text
         
         if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         username = text.replace('чистка от', '').strip().replace('@', '')
         target = self.db.get_user_by_username(username)
         
         if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            await update.message.reply_text("❌ Пользователь не найден")
             return
         
-        await update.message.reply_text(s.info(f"🔄 Удаляю сообщения {target['first_name']}..."))
+        await update.message.reply_text(f"🔄 Удаляю сообщения {target['first_name']}...")
     
     async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить приветствие"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         welcome_text = update.message.text[12:].strip()
         if not welcome_text:
-            await update.message.reply_text(s.error("❌ Укажите текст приветствия"))
+            await update.message.reply_text("❌ Укажите текст приветствия")
             return
         
         self.db.cursor.execute('''
@@ -8259,19 +8212,20 @@ class SpectrumBot:
         ''', (update.effective_chat.id, welcome_text))
         self.db.conn.commit()
         
-        await update.message.reply_text(s.success("✅ Приветствие установлено"))
+        await update.message.reply_text("✅ Приветствие установлено")
     
     async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Установить правила"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         rules_text = update.message.text[9:].strip()
         if not rules_text:
-            await update.message.reply_text(s.error("❌ Укажите текст правил"))
+            await update.message.reply_text("❌ Укажите текст правил")
             return
         
         self.db.cursor.execute('''
@@ -8281,28 +8235,30 @@ class SpectrumBot:
         ''', (update.effective_chat.id, rules_text))
         self.db.conn.commit()
         
-        await update.message.reply_text(s.success("✅ Правила установлены"))
+        await update.message.reply_text("✅ Правила установлены")
     
     async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Показать правила"""
         self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (update.effective_chat.id,))
         row = self.db.cursor.fetchone()
         
         if row and row[0]:
-            await update.message.reply_text(f"📜 **Правила чата:**\n\n{row[0]}", parse_mode=ParseMode.MARKDOWN)
+            await update.message.reply_text(f"📜 **Правила чата:**\n\n{row[0]}")
         else:
-            await update.message.reply_text(s.info("В этом чате ещё не установлены правила"))
+            await update.message.reply_text("ℹ️ В этом чате ещё не установлены правила")
     
     async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Включить/выключить капчу"""
         user = update.effective_user
         user_data = self.db.get_user(user.id)
         
         if user_data['rank'] < 3 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            await update.message.reply_text("⛔️ Недостаточно прав")
             return
         
         parts = update.message.text.split()
         if len(parts) < 2:
-            await update.message.reply_text(s.error("❌ Укажите on или off"))
+            await update.message.reply_text("❌ Укажите on или off")
             return
         
         state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
@@ -8315,8 +8271,148 @@ class SpectrumBot:
         self.db.conn.commit()
         
         status = "включена" if state else "выключена"
-        await update.message.reply_text(s.success(f"✅ Капча {status}"))
-
+        await update.message.reply_text(f"✅ Капча {status}")
+    
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ГОЛОСОВАНИЕ ЗА БАН
+    # =========================================================================
+    
+    async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Создать голосование за бан"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /banvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        required_votes = 5
+        min_rank = 0
+        
+        if len(context.args) >= 3:
+            try:
+                required_votes = int(context.args[1])
+                min_rank = int(context.args[2])
+            except:
+                pass
+        
+        vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
+        
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
+                InlineKeyboardButton("❌ ПРОТИВ", callback_data=f"vote_against_{vote_id}")
+            ]
+        ])
+        
+        await update.message.reply_text(
+            f"🗳 **ГОЛОСОВАНИЕ ЗА БАН**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {update.effective_user.first_name}\n"
+            f"📊 **Требуется голосов:** {required_votes}\n"
+            f"🎚 **Мин. ранг:** {min_rank}\n\n"
+            f"Голосуйте!",
+            reply_markup=keyboard
+        )
+    
+    async def cmd_stop_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Остановить голосование"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /stopvote @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        
+        if vote['created_by'] != user_data['id'] and user_data['rank'] < 3:
+            await update.message.reply_text("❌ У вас нет прав на остановку этого голосования")
+            return
+        
+        self.db.cursor.execute("UPDATE ban_votes SET status = 'stopped' WHERE id = ?", (vote['id'],))
+        self.db.conn.commit()
+        
+        await update.message.reply_text("✅ Голосование остановлено")
+    
+    async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Информация о голосовании"""
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user")
+            return
+        
+        username = context.args[0].replace('@', '')
+        chat_id = update.effective_chat.id
+        
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+        
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+        
+        vote = dict(vote)
+        creator = self.db.get_user_by_id(vote['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        
+        text = (
+            f"🗳 **ИНФОРМАЦИЯ О ГОЛОСОВАНИИ**\n\n"
+            f"👤 **Цель:** {target['first_name']}\n"
+            f"👑 **Инициатор:** {creator_name}\n"
+            f"📊 **Требуется голосов:** {vote['required_votes']}\n"
+            f"🎚 **Мин. ранг:** {vote['min_rank']}\n"
+            f"✅ **Голосов ЗА:** {vote['votes_for']}\n"
+            f"❌ **Голосов ПРОТИВ:** {vote['votes_against']}"
+        )
+        
+        await update.message.reply_text(text)
+    
+    async def cmd_vote_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Список активных голосований"""
+        chat_id = update.effective_chat.id
+        
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND status = 'active'", (chat_id,))
+        votes = self.db.cursor.fetchall()
+        
+        if not votes:
+            await update.message.reply_text("ℹ️ Нет активных голосований")
+            return
+        
+        text = "🗳 **АКТИВНЫЕ ГОЛОСОВАНИЯ**\n\n"
+        for vote in votes:
+            vote = dict(vote)
+            target = self.db.get_user_by_id(vote['target_id'])
+            target_name = target.get('nickname') or target['first_name'] if target else "Неизвестно"
+            text += f"• {target_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+        
+        await update.message.reply_text(text)
+        
     # ===== ТАЙНЫЙ ОРДЕН (УЛУЧШЕННАЯ ВЕРСИЯ) =====
     async def cmd_order(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Информация о Тайном Ордене"""
