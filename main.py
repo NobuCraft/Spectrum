@@ -487,6 +487,7 @@ class Database:
                 day INTEGER DEFAULT 1,
                 story TEXT,
                 players TEXT DEFAULT '[]',
+                confirmed_players TEXT DEFAULT '[]'
                 players_data TEXT DEFAULT '{}',
                 roles TEXT DEFAULT '{}',
                 alive TEXT DEFAULT '[]',
@@ -2950,6 +2951,27 @@ class SpectrumBot:
         )
         
         self.db.log_action(user_data['id'], 'start', platform="telegram")
+
+    async def cmd_test_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Тестовая команда для проверки AI"""
+        if not self.ai or not self.ai.is_available:
+            await update.message.reply_text("❌ AI не подключен")
+            return
+        
+        await update.message.reply_text("🤖 AI работает!")
+        
+        # Тестовый запрос
+        response = await self.ai.get_response(
+            update.effective_user.id,
+            "Привет, как дела?",
+            update.effective_user.first_name,
+            force_response=True
+        )
+        
+        if response:
+            await update.message.reply_text(f"🤖 Ответ: {response}")
+        else:
+            await update.message.reply_text("❌ AI не ответил")
     
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Команда помощи"""
@@ -8830,6 +8852,12 @@ async def handle_new_chat_members(self, update: Update, context: ContextTypes.DE
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
+
+        if not query.message:
+            logger.error("Нет сообщения для редактирования")
+            return
+    
+        data = query.data
         data = query.data
         user = query.from_user
         user_data = self.db.get_user(user.id)
@@ -9447,6 +9475,9 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
         self.app.add_handler(CommandHandler("use_invisible", self.cmd_use_invisible))
         self.app.add_handler(CommandHandler("allow_invisible", self.cmd_allow_invisible))
         self.app.add_handler(CommandHandler("ban_invisible", self.cmd_ban_invisible))
+
+        # ===== ТЕСТОВЫЕ КОМАНДЫ =====
+        self.app.add_handler(CommandHandler("testai", self.cmd_test_ai))
         
         # ===== РП КОМАНДЫ =====
         self.app.add_handler(CommandHandler("rp_hack", self.cmd_rp_hack))
