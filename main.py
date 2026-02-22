@@ -8740,13 +8740,13 @@ class SpectrumBot:
         import traceback
         traceback.print_exc()
 
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
         data = query.data
         user = query.from_user
         user_data = self.db.get_user(user.id)
-        
+
         if data == "random_chat":
             self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
             row = self.db.cursor.fetchone()
@@ -8759,32 +8759,22 @@ class SpectrumBot:
                 )
             else:
                 await query.edit_message_text("❌ Нет доступных бесед")
-        
+
         elif data == "top_chats":
             await self.cmd_top_chats(update, context)
-        
+
         elif data == "help_menu":
             await self.cmd_help(update, context)
-        
+
         elif data == "setup_info":
             text = """
 # 🔧 Установка
 
 Подробная инструкция по установке бота:
 https://teletype.in/@nobucraft/2_pbVPOhaYo
-
-Основные шаги:
-1. Добавьте бота в группу
-2. Дайте права администратора
-3. Настройте приветствие: +приветствие Текст
-4. Установите правила: +правила Текст
-5. Настройте модерацию через !модер
             """
             await query.edit_message_text(text, disable_web_page_preview=True)
 
-        elif data == "disabled":
-            await query.answer("Эта клетка уже открыта", show_alert=False)
-        
         elif data == "neons_info":
             text = """
 # 💜 Что такое неоны?
@@ -8813,39 +8803,36 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
 /exchange — биржа
             """
             await query.edit_message_text(text)
-        
+
         elif data == "bonuses_menu":
             await self.cmd_bonuses(update, context)
 
-        elif data == "random_chat":
-            await self.cmd_random_chat(update, context)
-        
         elif data == "top_chats_day":
             context.args = ["день"]
             await self.cmd_top_chats(update, context)
-        
+
         elif data == "top_chats_week":
             context.args = ["неделя"]
             await self.cmd_top_chats(update, context)
-        
+
         elif data == "top_chats_month":
             context.args = ["месяц"]
             await self.cmd_top_chats(update, context)
-        
+
         elif data.startswith("chat_card_"):
             chat_id = int(data.split('_')[2])
             await query.edit_message_text(
                 "📇 **Карточка чата**\n\nФункция в разработке",
                 parse_mode=ParseMode.MARKDOWN
             )
-        
+
         elif data.startswith("boss_attack_"):
             boss_id = int(data.split('_')[2])
             await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=True)
-        
+
         elif data == "boss_regen":
             await self.cmd_regen(update, context)
-        
+
         elif data == "boss_buy_weapon":
             keyboard_buttons = [
                 InlineKeyboardButton("🗡 Меч (+10 урона) - 200💰", callback_data="buy_weapon_sword"),
@@ -8859,7 +8846,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard
             )
-        
+
         elif data.startswith("buy_weapon_"):
             weapon = data.replace("buy_weapon_", "")
             weapons = {
@@ -8883,7 +8870,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                         s.error(f"❌ Недостаточно монет. Нужно {w['price']} 💰"),
                         parse_mode=ParseMode.MARKDOWN
                     )
-        
+
         elif data == "boss_list":
             bosses = self.db.get_bosses()
             text = f"{s.header('👾 БОССЫ')}\n\n"
@@ -8907,7 +8894,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 1))
             )
-        
+
         elif data.startswith("saper_"):
             parts = data.split('_')
             if len(parts) >= 3:
@@ -8961,7 +8948,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                                 parse_mode=ParseMode.MARKDOWN,
                                 reply_markup=InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 3))
                             )
-        
+
         elif data.startswith("vote_for_"):
             vote_id = int(data.split('_')[2])
             if self.db.vote_for_ban(vote_id, user_data['id'], True):
@@ -8982,14 +8969,14 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                         )
             else:
                 await query.edit_message_text(s.error("❌ Не удалось проголосовать"))
-        
+
         elif data.startswith("vote_against_"):
             vote_id = int(data.split('_')[2])
             if self.db.vote_for_ban(vote_id, user_data['id'], False):
                 await query.edit_message_text(s.success("✅ Ваш голос учтён (ПРОТИВ БАНА)"))
             else:
                 await query.edit_message_text(s.error("❌ Не удалось проголосовать"))
-        
+
         elif data.startswith("mafia_confirm_"):
             chat_id = int(data.split('_')[2])
             if chat_id in self.mafia_games:
@@ -8997,7 +8984,6 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 if user.id in game.players:
                     game.confirm_player(user.id)
                     
-                    # Сохраняем подтверждение в БД
                     self.db.cursor.execute('''
                         INSERT INTO mafia_confirmations (game_id, user_id, confirmed)
                         VALUES (?, ?, 1)
@@ -9013,7 +8999,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                     
                     if game.all_confirmed():
                         await self._mafia_start_game(game, context)
-        
+
         elif data.startswith("accept_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
@@ -9040,7 +9026,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
             )
             
             asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
-        
+
         elif data.startswith("reject_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
@@ -9057,7 +9043,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 f"Ставка возвращена.",
                 parse_mode=ParseMode.MARKDOWN
             )
-        
+
         elif data.startswith("marry_accept_"):
             proposer_id = int(data.split('_')[2])
             
@@ -9098,7 +9084,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 f"{s.item(f'{user_data["first_name"]} принял(а) ваше предложение!')}",
                 parse_mode=ParseMode.MARKDOWN
             )
-        
+
         elif data.startswith("marry_reject_"):
             proposer_id = int(data.split('_')[2])
             await query.edit_message_text(s.error("❌ Предложение отклонено"), parse_mode=ParseMode.MARKDOWN)
@@ -9107,7 +9093,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 s.error("❌ Ваше предложение отклонили"),
                 parse_mode=ParseMode.MARKDOWN
             )
-        
+
         elif data == "bookmark_help":
             text = """
 # 📌 Закладки
@@ -9121,7 +9107,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
 • `-Закладка [ID]` — удалить
             """
             await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
-        
+
         elif data == "circle_help":
             text = """
 # 🔄 Кружки
@@ -9135,7 +9121,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
 • `-Кружок [номер]` — выйти
             """
             await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
-        
+
         elif data == "achievements_help":
             text = """
 # 🏅 Ачивки
@@ -9622,38 +9608,3 @@ if __name__ == "__main__":
         logger.error(f"❌ Фатальная ошибка: {e}")
         import traceback
         traceback.print_exc()
-
-    async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        query = update.callback_query
-        await query.answer()
-        data = query.data
-        user = query.from_user
-        user_data = self.db.get_user(user.id)
-
-        if data == "random_chat":
-            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
-            row = self.db.cursor.fetchone()
-            if row:
-                await query.edit_message_text(
-                    f"🎲 Случайная беседа найдена!\n\n"
-                    f"Название: {row[1]}\n"
-                    f"ID: `{row[0]}`\n\n"
-                    f"Присоединяйтесь!"
-                )
-            else:
-                await query.edit_message_text("❌ Нет доступных бесед")
-
-        elif data == "top_chats":
-            await self.cmd_top_chats(update, context)
-
-        elif data == "help_menu":
-            await self.cmd_help(update, context)
-
-        elif data == "setup_info":
-            text = """
-# 🔧 Установка
-
-Подробная инструкция по установке бота:
-https://teletype.in/@nobucraft/2_pbVPOhaYo
-            """
-            await query.edit_message_text(text, disable_web_page_preview=True)
