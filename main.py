@@ -477,7 +477,7 @@ class Database:
             )
         ''')
         
-        # Таблица игр мафии (новая версия с полным функционалом)
+        # Таблица игр мафии (исправленная версия)
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS mafia_games (
                 game_id TEXT PRIMARY KEY,
@@ -486,13 +486,12 @@ class Database:
                 phase INTEGER DEFAULT 1,
                 day INTEGER DEFAULT 1,
                 story TEXT,
-                players TEXT DEFAULT '[]',
-                confirmed_players TEXT DEFAULT '[]'
-                players_data TEXT DEFAULT '{}',
-                roles TEXT DEFAULT '{}',
-                alive TEXT DEFAULT '[]',
-                votes TEXT DEFAULT '{}',
-                night_actions TEXT DEFAULT '{}',
+                players TEXT,
+                players_data TEXT,
+                roles TEXT,
+                alive TEXT,
+                votes TEXT,
+                night_actions TEXT,
                 creator_id INTEGER,
                 message_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
