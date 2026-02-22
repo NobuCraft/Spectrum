@@ -8752,35 +8752,6 @@ class SpectrumBot:
             except Exception as e:
                 logger.error(f"AI response error: {e}")
     
-    async def handle_new_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        chat_id = update.effective_chat.id
-        
-        self.db.cursor.execute("SELECT welcome FROM chat_settings WHERE chat_id = ?", (chat_id,))
-        row = self.db.cursor.fetchone()
-        welcome_text = row[0] if row and row[0] else "Добро пожаловать!"
-        
-        for member in update.message.new_chat_members:
-            if member.is_bot:
-                continue
-            
-            self.db.get_user(member.id, member.first_name)
-            
-            user_data = self.db.get_user_by_id(member.id)
-            gender = user_data.get('gender', 'не указан')
-            
-            welcome = welcome_text.replace('{имя}', member.first_name)
-            if gender == 'м':
-                welcome = welcome.replace('{ж|м|мн}', 'присоединился')
-            elif gender == 'ж':
-                welcome = welcome.replace('{ж|м|мн}', 'присоединилась')
-            else:
-                welcome = welcome.replace('{ж|м|мн}', 'присоединился(ась)')
-            
-            await update.message.reply_text(
-                f"👋 {welcome}\n\n{member.first_name}, используй /help для команд!",
-                parse_mode=ParseMode.MARKDOWN
-            )
-    
     async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка выхода участника из чата"""
         member = update.message.left_chat_member
@@ -8807,6 +8778,54 @@ class SpectrumBot:
             f"Покинул чат {update.effective_chat.title}",
             chat_id=update.effective_chat.id
         )
+
+async def handle_new_chat_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик добавления бота в новые чаты (без проверки прав)"""
+    for member in update.message.new_chat_members:
+        if member.id == context.bot.id:
+            # Бота добавили в новый чат
+            chat = update.effective_chat
+            added_by = update.message.from_user
+            
+            # Текст сообщения (без заголовка)
+            welcome_text = f"""
+Привет, **{chat.title}**! 
+Меня добавил **{added_by.first_name}**.
+
+📌 **Основные команды:**
+• /menu — главное меню
+• /help — список всех команд
+• /profile — мой профиль
+• /balance — мой баланс
+• /games — игры
+
+⚠️ **Для полноценной работы выдайте мне права администратора!**
+
+👑 Владелец: {OWNER_USERNAME}
+            """
+            
+            # Клавиатура
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
+                [InlineKeyboardButton("👑 Владелец", url=f"https://t.me/{OWNER_USERNAME.replace('@', '')}")]
+            ])
+            
+            # Отправляем фото с подписью
+            await update.message.reply_photo(
+                photo="https://i.ibb.co/QjF1bLST/photo-2026-02-22-22-19-50.jpg",
+                caption=welcome_text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=keyboard
+            )
+            
+            logger.info(f"✅ Бот добавлен в чат: {chat.title} (ID: {chat.id})")
+            
+            # Сохраняем в БД
+            self.db.cursor.execute('''
+                INSERT OR IGNORE INTO chat_settings (chat_id, chat_name)
+                VALUES (?, ?)
+            ''', (chat.id, chat.title))
+            self.db.conn.commit()
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -9594,7 +9613,7 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
         
         # Обработчики сообщений
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
-        self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_members))
+        self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_chat_members))
         self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
         
         # Callback кнопки
