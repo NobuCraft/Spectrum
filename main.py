@@ -6655,8 +6655,9 @@ class SpectrumBot:
         
         text += f"📊 **Всего:** {len(warns_list)}/4"
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-    
+
 async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Мои предупреждения"""
     user_data = self.db.get_user(update.effective_user.id)
     warns_list = self.db.get_warns(user_data['id'])
     
@@ -6903,87 +6904,93 @@ async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         await update.message.reply_text(s.success(f"✅ Мут снят с {target['first_name']}"))
     
-    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        chat_id = update.effective_chat.id
+async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Забанить пользователя"""
+    user = update.effective_user
+    user_data = self.db.get_user(user.id)
+    text = update.message.text
+    chat_id = update.effective_chat.id
 
-        if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Недостаточно прав. Нужен ранг 2+**", parse_mode=ParseMode.MARKDOWN)
+    if user_data['rank'] < 2 and user.id != OWNER_ID:
+        await update.message.reply_text("⛔️ **Недостаточно прав. Нужен ранг 2+**", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+    if not match:
+        await update.message.reply_text("❌ **Пример:** `бан @user спам`", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    username = match.group(1)
+    reason = match.group(2) if match.group(2) else "Нарушение правил"
+
+    target_data = self.db.get_user_by_username(username)
+    if not target_data:
+        await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    target_internal_id = target_data['id']
+    target_telegram_id = target_data['telegram_id']
+    target_name = target_data.get('nickname') or target_data['first_name']
+
+    if target_data['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+        await update.message.reply_text("⛔️ **Нельзя забанить модератора выше рангом**", parse_mode=ParseMode.MARKDOWN)
+        return
+
+    # Проверяем права бота
+    try:
+        bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+        if bot_member.status not in ['administrator', 'creator']:
+            await update.message.reply_text("❌ **Бот не администратор!** Выдайте права.", parse_mode=ParseMode.MARKDOWN)
             return
-
-        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
-        if not match:
-            await update.message.reply_text("❌ **Пример:** `бан @user спам`", parse_mode=ParseMode.MARKDOWN)
+        if not bot_member.can_restrict_members:
+            await update.message.reply_text("❌ **У бота нет права на блокировку!**", parse_mode=ParseMode.MARKDOWN)
             return
+    except Exception as e:
+        logger.error(f"Ошибка проверки прав: {e}")
 
-        username = match.group(1)
-        reason = match.group(2) if match.group(2) else "Нарушение правил"
+    # НАСТОЯЩИЙ БАН В TELEGRAM
+    try:
+        await context.bot.ban_chat_member(
+            chat_id=chat_id,
+            user_id=target_telegram_id,
+            until_date=int(time.time()) + (30 * 24 * 60 * 60)  # 30 дней
+        )
+        
+        # Бан в БД
+        self.db.ban_user(target_internal_id, user_data['id'], reason)
+        
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
 
-        target_data = self.db.get_user_by_username(username)
-        if not target_data:
-            await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
-            return
+        text = (
+            f"🔴 **Пользователь забанен**\n\n"
+            f"👢 **Пользователь:** {target_display_name}\n"
+            f"🦸 **Модератор:** {admin_name}\n"
+            f"💬 **Причина:** {reason}\n"
+            f"📅 **Срок:** 30 дней"
+        )
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
-        target_internal_id = target_data['id']
-        target_telegram_id = target_data['telegram_id']
-
-        if target_data['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Нельзя забанить модератора выше рангом**", parse_mode=ParseMode.MARKDOWN)
-            return
-
+        # Уведомление в ЛС
         try:
-            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
-            if bot_member.status not in ['administrator', 'creator']:
-                await update.message.reply_text("❌ **Бот не администратор!** Выдайте права.", parse_mode=ParseMode.MARKDOWN)
-                return
-            if not bot_member.can_restrict_members:
-                await update.message.reply_text("❌ **У бота нет права на блокировку!**", parse_mode=ParseMode.MARKDOWN)
-                return
-        except Exception as e:
-            logger.error(f"Ошибка проверки прав: {e}")
-
-        try:
-            await context.bot.ban_chat_member(
-                chat_id=chat_id,
-                user_id=target_telegram_id,
-                until_date=int(time.time()) + (30 * 24 * 60 * 60)
-            )
-            
-            self.db.ban_user(target_internal_id, user_data['id'], reason)
-            
-            admin_name = f"@{user.username}" if user.username else user.first_name
-            target_name = f"@{target_data['username']}" if target_data.get('username') else target_data['first_name']
-
-            text = (
-                f"🔴 **Пользователь забанен**\n\n"
-                f"👢 **Пользователь:** {target_name}\n"
+            await context.bot.send_message(
+                target_telegram_id,
+                f"🔴 **Вас заблокировали в чате**\n\n"
+                f"👢 **Чат:** {update.effective_chat.title}\n"
                 f"🦸 **Модератор:** {admin_name}\n"
                 f"💬 **Причина:** {reason}\n"
-                f"📅 **Срок:** 30 дней"
-            )
-            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-            try:
-                await context.bot.send_message(
-                    target_telegram_id,
-                    f"🔴 **Вас заблокировали в чате**\n\n"
-                    f"👢 **Чат:** {update.effective_chat.title}\n"
-                    f"🦸 **Модератор:** {admin_name}\n"
-                    f"💬 **Причина:** {reason}\n"
-                    f"📅 **Срок:** 30 дней",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                logger.error(f"Не удалось уведомить пользователя {target_telegram_id} о бане: {e}")
-                
-        except Exception as e:
-            logger.error(f"Ошибка бана: {e}")
-            await update.message.reply_text(
-                f"❌ **Ошибка:** {str(e)[:100]}",
+                f"📅 **Срок:** 30 дней",
                 parse_mode=ParseMode.MARKDOWN
             )
+        except Exception as e:
+            logger.error(f"Не удалось уведомить пользователя {target_telegram_id} о бане: {e}")
+            
+    except Exception as e:
+        logger.error(f"Ошибка бана: {e}")
+        await update.message.reply_text(
+            f"❌ **Ошибка:** {str(e)[:100]}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         bans = self.db.get_banlist()
@@ -7006,96 +7013,73 @@ async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE)
         
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
     
-    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        chat_id = update.effective_chat.id
+async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Разбанить пользователя"""
+    user = update.effective_user
+    user_data = self.db.get_user(user.id)
+    text = update.message.text
+    chat_id = update.effective_chat.id
 
-        if user_data['rank'] < 2 and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ **Недостаточно прав. Нужен ранг 2+**", parse_mode=ParseMode.MARKDOWN)
-            return
+    if user_data['rank'] < 2 and user.id != OWNER_ID:
+        await update.message.reply_text("⛔️ **Недостаточно прав. Нужен ранг 2+**", parse_mode=ParseMode.MARKDOWN)
+        return
 
-        username = text.replace('разбан', '').replace('@', '').strip()
-        if not username:
-            await update.message.reply_text("❌ **Укажите пользователя:** `разбан @user`", parse_mode=ParseMode.MARKDOWN)
-            return
+    username = text.replace('разбан', '').replace('@', '').strip()
+    if not username:
+        await update.message.reply_text("❌ **Укажите пользователя:** `разбан @user`", parse_mode=ParseMode.MARKDOWN)
+        return
 
-        target_data = self.db.get_user_by_username(username)
-        if not target_data:
-            await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
-            return
+    target_data = self.db.get_user_by_username(username)
+    if not target_data:
+        await update.message.reply_text("❌ **Пользователь не найден**", parse_mode=ParseMode.MARKDOWN)
+        return
 
-        target_internal_id = target_data['id']
-        target_telegram_id = target_data['telegram_id']
+    target_internal_id = target_data['id']
+    target_telegram_id = target_data['telegram_id']
+    target_name = target_data.get('nickname') or target_data['first_name']
 
+    # Разбан в Telegram
+    try:
+        await context.bot.unban_chat_member(
+            chat_id=chat_id,
+            user_id=target_telegram_id,
+            only_if_banned=True
+        )
+        unban_success_telegram = True
+    except Exception as e:
+        unban_success_telegram = False
+        logger.error(f"Ошибка разбана в Telegram для {target_telegram_id}: {e}")
+
+    # Разбан в БД
+    self.db.unban_user(target_internal_id, user_data['id'])
+
+    admin_name = f"@{user.username}" if user.username else user.first_name
+    target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
+
+    if unban_success_telegram:
+        await update.message.reply_text(
+            f"✅ **Бан снят**\n\n"
+            f"👤 **Пользователь:** {target_display_name}\n"
+            f"🦸 **Модератор:** {admin_name}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        # Уведомление в ЛС
         try:
-            await context.bot.unban_chat_member(
-                chat_id=chat_id,
-                user_id=target_telegram_id,
-                only_if_banned=True
-            )
-            unban_success_telegram = True
-        except Exception as e:
-            unban_success_telegram = False
-            logger.error(f"Ошибка разбана в Telegram для {target_telegram_id}: {e}")
-
-        self.db.unban_user(target_internal_id, user_data['id'])
-
-        admin_name = f"@{user.username}" if user.username else user.first_name
-        target_name = f"@{target_data['username']}" if target_data.get('username') else target_data['first_name']
-
-        if unban_success_telegram:
-            await update.message.reply_text(
-                f"✅ **Бан снят**\n\n"
-                f"👤 **Пользователь:** {target_name}\n"
+            await context.bot.send_message(
+                target_telegram_id,
+                f"✅ **Вас разблокировали в чате**\n\n"
+                f"👢 **Чат:** {update.effective_chat.title}\n"
                 f"🦸 **Модератор:** {admin_name}",
                 parse_mode=ParseMode.MARKDOWN
             )
-            try:
-                await context.bot.send_message(
-                    target_telegram_id,
-                    f"✅ **Вас разблокировали в чате**\n\n"
-                    f"👢 **Чат:** {update.effective_chat.title}\n"
-                    f"🦸 **Модератор:** {admin_name}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                logger.error(f"Не удалось уведомить {target_telegram_id} о разбане: {e}")
-        else:
-            await update.message.reply_text(
-                f"⚠️ **Бан снят в базе данных, но возникла ошибка при разбане в Telegram.**\n\n"
-                f"👤 **Пользователь:** {target_name}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-    
-    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id)
-        text = update.message.text
-        chat_id = update.effective_chat.id
-        
-        if user_data['rank'] < 1 and user.id != OWNER_ID:
-            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
-            return
-        
-        username = text.replace('кик', '').replace('@', '').strip()
-        target = self.db.get_user_by_username(username)
-        
-        if not target and update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        
-        if not target:
-            await update.message.reply_text(s.error("❌ Пользователь не найден"))
-            return
-        
-        try:
-            await context.bot.ban_chat_member(chat_id, target['telegram_id'])
-            await context.bot.unban_chat_member(chat_id, target['telegram_id'])
-            await update.message.reply_text(s.success(f"✅ {target['first_name']} исключен"))
         except Exception as e:
-            await update.message.reply_text(s.error(f"❌ Ошибка: {e}"))
+            logger.error(f"Не удалось уведомить {target_telegram_id} о разбане: {e}")
+    else:
+        await update.message.reply_text(
+            f"⚠️ **Бан снят в базе данных, но возникла ошибка при разбане в Telegram.**\n\n"
+            f"👤 **Пользователь:** {target_display_name}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
