@@ -5,6 +5,7 @@
 СПЕКТР v3.0 ULTIMATE - ИСПРАВЛЕННАЯ И УЛУЧШЕННАЯ ВЕРСИЯ
 """
 
+# ========== ИМПОРТЫ ==========
 import os
 import sys
 import logging
@@ -12,7 +13,8 @@ import asyncio
 import json
 import random
 import sqlite3
-import datetime
+import datetime  # ВАЖНО: добавить эту строку
+from datetime import datetime, timedelta  # И эту
 import time
 import hashlib
 import re
