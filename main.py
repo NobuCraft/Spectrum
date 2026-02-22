@@ -7279,6 +7279,41 @@ class SpectrumBot:
             f"{s.item('Теперь: 👤 Участник')}",
             parse_mode=ParseMode.MARKDOWN
         )
+
+    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Снять ранг с пользователя"""
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав"))
+            return
+        
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            username = text.replace('снять', '').replace('разжаловать', '').strip().replace('@', '')
+            if username:
+                target_user = self.db.get_user_by_username(username)
+        
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+        
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя снять модератора выше рангом"))
+            return
+        
+        self.db.set_rank(target_user['id'], 0, user_data['id'])
+        await update.message.reply_text(
+            f"{s.success('Модератор снят!')}\n\n"
+            f"{s.item(f'Пользователь: {target_user["first_name"]}')}\n"
+            f"{s.item('Теперь: 👤 Участник')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
     
     async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -8800,16 +8835,16 @@ class SpectrumBot:
             chat_id=update.effective_chat.id
         )
 
-async def handle_new_chat_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработчик добавления бота в новые чаты (без проверки прав)"""
-    for member in update.message.new_chat_members:
-        if member.id == context.bot.id:
-            # Бота добавили в новый чат
-            chat = update.effective_chat
-            added_by = update.message.from_user
-            
-            # Текст сообщения (без заголовка)
-            welcome_text = f"""
+    async def handle_new_chat_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработчик добавления бота в новые чаты (без проверки прав)"""
+        for member in update.message.new_chat_members:
+            if member.id == context.bot.id:
+                # Бота добавили в новый чат
+                chat = update.effective_chat
+                added_by = update.message.from_user
+                
+                # Текст сообщения
+                welcome_text = f"""
 Привет, **{chat.title}**! 
 Меня добавил **{added_by.first_name}**.
 
@@ -8823,30 +8858,30 @@ async def handle_new_chat_members(self, update: Update, context: ContextTypes.DE
 ⚠️ **Для полноценной работы выдайте мне права администратора!**
 
 👑 Владелец: {OWNER_USERNAME}
-            """
-            
-            # Клавиатура
-            keyboard = InlineKeyboardMarkup([
-                [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
-                [InlineKeyboardButton("👑 Владелец", url=f"https://t.me/{OWNER_USERNAME.replace('@', '')}")]
-            ])
-            
-            # Отправляем фото с подписью
-            await update.message.reply_photo(
-                photo="https://i.ibb.co/QjF1bLST/photo-2026-02-22-22-19-50.jpg",
-                caption=welcome_text,
-                parse_mode=ParseMode.MARKDOWN,
-                reply_markup=keyboard
-            )
-            
-            logger.info(f"✅ Бот добавлен в чат: {chat.title} (ID: {chat.id})")
-            
-            # Сохраняем в БД
-            self.db.cursor.execute('''
-                INSERT OR IGNORE INTO chat_settings (chat_id, chat_name)
-                VALUES (?, ?)
-            ''', (chat.id, chat.title))
-            self.db.conn.commit()
+                """
+                
+                # Клавиатура
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
+                    [InlineKeyboardButton("👑 Владелец", url=f"https://t.me/{OWNER_USERNAME.replace('@', '')}")]
+                ])
+                
+                # Отправляем фото с подписью
+                await update.message.reply_photo(
+                    photo="https://i.ibb.co/QjF1bLST/photo-2026-02-22-22-19-50.jpg",
+                    caption=welcome_text,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=keyboard
+                )
+                
+                logger.info(f"✅ Бот добавлен в чат: {chat.title} (ID: {chat.id})")
+                
+                # Сохраняем в БД
+                self.db.cursor.execute('''
+                    INSERT OR IGNORE INTO chat_settings (chat_id, chat_name)
+                    VALUES (?, ?)
+                ''', (chat.id, chat.title))
+                self.db.conn.commit()
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
