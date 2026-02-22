@@ -8868,7 +8868,7 @@ class SpectrumBot:
                 
                 # Отправляем фото с подписью
                 await update.message.reply_photo(
-                    photo="https://i.ibb.co/QjF1bLST/photo-2026-02-22-22-19-50.jpg",
+                    photo="https://i.postimg.cc/wxt62Qy5/photo-2026-02-22-22-19-50.jpg",
                     caption=welcome_text,
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
