@@ -8727,18 +8727,31 @@ class SpectrumBot:
             )
     
     async def handle_left_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Обработка выхода участника из чата"""
         member = update.message.left_chat_member
         if member.is_bot:
             return
         
-        await update.message.reply_text(f"👋 {member.first_name} покинул чат...", parse_mode=ParseMode.MARKDOWN)
-    
-    except KeyboardInterrupt:
-        logger.info("👋 Программа завершена пользователем")
-    except Exception as e:
-        logger.error(f"❌ Фатальная ошибка: {e}")
-        import traceback
-        traceback.print_exc()
+        # Получаем информацию о пользователе
+        user_data = self.db.get_user_by_id(member.id)
+        if user_data:
+            name = user_data.get('nickname') or member.first_name
+        else:
+            name = member.first_name
+        
+        # Отправляем сообщение о выходе
+        await update.message.reply_text(
+            f"👋 {name} покинул чат...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        
+        # Логируем событие
+        self.db.log_action(
+            member.id, 
+            'left_chat', 
+            f"Покинул чат {update.effective_chat.title}",
+            chat_id=update.effective_chat.id
+        )
 
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
