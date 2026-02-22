@@ -2786,7 +2786,7 @@ class SpectrumBot:
     # ===== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =====
     
     async def get_ai_response(self, user_id: int, message: str, context_type: str = "normal", 
-                             username: str = "Пользователь", chat_id: int = None, kwargs) -> Optional[str]:
+                             username: str = "Пользователь", chat_id: int = None, **kwargs) -> Optional[str]:
         """Получает ответ от AI, если он доступен"""
         if self.ai and self.ai.is_available:
             if context_type == "game":
