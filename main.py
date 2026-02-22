@@ -2918,6 +2918,42 @@ class SpectrumBot:
         
         return keyboard
 
+    async def get_display_name(self, user_data: Dict, user_id: int = None, platform: str = "telegram") -> str:
+        """Получает отображаемое имя пользователя (username > ник > first_name)
+        
+        Args:
+            user_data: словарь с данными пользователя из БД
+            user_id: telegram_id пользователя (для получения актуального username)
+            platform: платформа (telegram/vk)
+        
+        Returns:
+            str: отображаемое имя
+        """
+        # Если есть username в БД
+        if user_data and user_data.get('username'):
+            return f"@{user_data['username']}"
+        
+        # Если есть никнейм
+        if user_data and user_data.get('nickname'):
+            return user_data['nickname']
+        
+        # Пытаемся получить актуальный username из Telegram
+        if user_id and platform == "telegram":
+            try:
+                chat = await self.app.bot.get_chat(user_id)
+                if chat.username:
+                    # Сохраняем username в БД
+                    if user_data:
+                        self.db.update_user(user_data['id'], platform=platform, username=chat.username)
+                    return f"@{chat.username}"
+                if chat.first_name:
+                    return chat.first_name
+            except:
+                pass
+        
+        # Если ничего не нашли, возвращаем first_name из БД или "Пользователь"
+        return user_data.get('first_name', 'Пользователь') if user_data else 'Пользователь'
+
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Обработка команды /start с новым дизайном"""
@@ -7184,33 +7220,38 @@ class SpectrumBot:
         text = update.message.text
         
         if user_data['rank'] < 4 and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 4+")
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
             return
         
-        target_user = None
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
-        else:
-            match = re.search(r'@(\S+)', text)
-            if match:
-                username = match.group(1)
-                target_user = self.db.get_user_by_username(username)
+        target_user = await self._resolve_user(update, context, text)
         
         if not target_user:
-            await update.message.reply_text("❌ Пользователь не найден")
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
             return
         
         if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
-            await update.message.reply_text("⛔️ Нельзя назначить ранг выше своего")
+            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
             return
         
         self.db.set_rank(target_user['id'], target_rank, user_data['id'])
         rank_info = RANKS[target_rank]
+        
+        # ПОЛУЧАЕМ ОТОБРАЖАЕМОЕ ИМЯ
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+        
+        # Отправляем уведомление в ЛС
+        await self.send_private_message(
+            target_user['telegram_id'],
+            f"👑 **ВАМ ВЫДАН РАНГ!**\n\n"
+            f"🦸 Модератор: {user.first_name}\n"
+            f"🎖 Ранг: {rank_info['emoji']} {rank_info['name']}"
+        )
+        
         await update.message.reply_text(
-            f"✅ Ранг назначен!\n\n"
-            f"👤 Пользователь: {target_user['first_name']}\n"
-            f"🎖️ Ранг: {rank_info['emoji']} {rank_info['name']}"
+            f"{s.success('Ранг назначен!')}\n\n"
+            f"{s.item(f'Пользователь: {display_name}')}\n"
+            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
         )
     
     async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -7390,7 +7431,7 @@ class SpectrumBot:
         warns = self.db.add_warn(target_user['id'], user_data['id'], reason)
         
         admin_name = f"@{user.username}" if user.username else user.first_name
-        target_name = f"@{target_user['username']}" if target_user.get('username') else target_user['first_name']
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
         
         # Уведомление в ЛС
         try:
@@ -7482,7 +7523,7 @@ class SpectrumBot:
             return
         
         warns_list = self.db.get_warns(target['id'])
-        target_name = f"@{target['username']}" if target.get('username') else target['first_name']
+        display_name = await self.get_display_name(target, target['telegram_id'])
         
         if not warns_list:
             await update.message.reply_text(f"📋 У {target_name} нет предупреждений")
@@ -7554,7 +7595,7 @@ class SpectrumBot:
             return
         
         removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
-        target_name = f"@{target_user['username']}" if target_user.get('username') else target_user['first_name']
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
         admin_name = f"@{user.username}" if user.username else user.first_name
         
         if not removed:
@@ -7674,7 +7715,7 @@ class SpectrumBot:
             pass
         
         admin_name = f"@{user.username}" if user.username else user.first_name
-        target_name = f"@{target['username']}" if target.get('username') else target['first_name']
+        display_name = await self.get_display_name(target, target['telegram_id'])
         
         await update.message.reply_text(
             f"🔇 МУТ\n\n"
@@ -7761,7 +7802,7 @@ class SpectrumBot:
             pass
         
         admin_name = f"@{user.username}" if user.username else user.first_name
-        target_name = f"@{target['username']}" if target.get('username') else target['first_name']
+        display_name = await self.get_display_name(target, target['telegram_id'])
         
         await update.message.reply_text(f"✅ Мут снят с {target_name}")
     
@@ -7833,7 +7874,7 @@ class SpectrumBot:
             self.db.ban_user(target_internal_id, user_data['id'], reason)
 
             admin_name = f"@{user.username}" if user.username else user.first_name
-            target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
+            target_display_name = await self.get_display_name(target_data, target_telegram_id)
 
             text = (
                 f"🔴 Пользователь забанен\n\n"
@@ -7920,7 +7961,7 @@ class SpectrumBot:
         self.db.unban_user(target_internal_id, user_data['id'])
 
         admin_name = f"@{user.username}" if user.username else user.first_name
-        target_display_name = f"@{target_data['username']}" if target_data.get('username') else target_name
+        target_display_name = await self.get_display_name(target_data, target_telegram_id)
 
         if unban_success_telegram:
             await update.message.reply_text(
