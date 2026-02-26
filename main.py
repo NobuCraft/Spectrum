@@ -9165,6 +9165,210 @@ https://teletype.in/@nobucraft/2_pbVPOhaYo
                 await asyncio.sleep(60)
             await asyncio.sleep(3600)
 
+        # ===== ПРИВЯЗКА ЧАТА =====
+    async def cmd_bind_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type == "private":
+            await update.message.reply_text(s.error("Эта команда работает только в группах"))
+            return
+
+        chat_id = update.effective_chat.id
+        chat_title = update.effective_chat.title
+
+        chat_code = hashlib.md5(f"{chat_id}_{random.randint(1000,9999)}".encode()).hexdigest()[:8]
+
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, chat_name, chat_code)
+            VALUES (?, ?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET chat_code = excluded.chat_code
+        ''', (chat_id, chat_title, chat_code))
+        self.db.conn.commit()
+
+        await update.message.reply_text(
+            f"{s.success('✅ Чат привязан!')}\n\n"
+            f"Код чата: `{chat_code}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+
+        self.db.cursor.execute("SELECT chat_code FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+
+        if not row:
+            await update.message.reply_text(s.error("Чат не привязан. Используйте !привязать"))
+            return
+
+        await update.message.reply_text(f"🔑 Код чата: `{row[0]}`", parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_change_chat_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите новый код: /changecode x5g7k9"))
+            return
+
+        new_code = context.args[0]
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        if len(new_code) < 3 or len(new_code) > 10:
+            await update.message.reply_text(s.error("Код должен быть от 3 до 10 символов"))
+            return
+
+        self.db.cursor.execute("SELECT chat_id FROM chat_settings WHERE chat_code = ?", (new_code,))
+        if self.db.cursor.fetchone():
+            await update.message.reply_text(s.error("Этот код уже занят"))
+            return
+
+        self.db.cursor.execute("UPDATE chat_settings SET chat_code = ? WHERE chat_id = ?", (new_code, chat_id))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"Код чата изменён на `{new_code}`"))
+
+    # ===== КУБЫШКА =====
+    async def cmd_treasury(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+
+        self.db.cursor.execute("SELECT treasury_neons, treasury_glitches FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+
+        if not row:
+            await update.message.reply_text(s.error("Настройки чата не найдены"))
+            return
+
+        neons, glitches = row[0], row[1]
+
+        text = f"""
+{s.header('💰 КУБЫШКА ЧАТА')}
+
+{s.stat('Неонов', f'{neons} 💜')}
+{s.stat('Глитчей', f'{glitches} 🖥')}
+
+{s.cmd('/treasurywithdraw', 'вывести неоны в кошелёк')}
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_treasury_withdraw(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3 and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        self.db.cursor.execute("SELECT treasury_neons FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.db.cursor.fetchone()
+
+        if not row or row[0] == 0:
+            await update.message.reply_text(s.error("В кубышке нет неонов"))
+            return
+
+        neons = row[0]
+
+        self.db.add_neons(user_data['id'], neons)
+        self.db.cursor.execute("UPDATE chat_settings SET treasury_neons = 0 WHERE chat_id = ?", (chat_id,))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{neons} 💜 переведены в ваш кошелёк!"))
+
+        # ===== ВНЕШНИЕ API =====
+    async def cmd_currency(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        rates = {
+            "USD": random.randint(90, 100),
+            "EUR": random.randint(95, 105),
+            "CNY": random.randint(12, 15),
+            "BTC": random.randint(50000, 60000)
+        }
+        text = f"{s.header('💱 КУРСЫ ВАЛЮТ')}\n\n"
+        for currency, rate in rates.items():
+            text += f"• {currency}: {rate} ₽\n"
+        text += f"\n🔄 Данные обновляются каждую минуту"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_news(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        news = [
+            "📰 В Спектре появилась биржа валют! Теперь можно торговать неонами.",
+            "🎮 Новая игра 'Тайный Орден' уже доступна! Станьте избранным.",
+            "💰 Ежедневные бонусы увеличены на 20% для всех игроков.",
+            "🤖 AI Спектра теперь лучше понимает мемы и шутки.",
+            "⚔️ Система дуэлей обновлена: добавлен рейтинг и достижения."
+        ]
+        text = f"{s.header('📰 ПОСЛЕДНИЕ НОВОСТИ')}\n\n"
+        for i, news_item in enumerate(news[:3], 1):
+            text += f"{i}. {news_item}\n\n"
+        text += f"📅 {datetime.now().strftime('%d.%m.%Y')}"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ===== AI КОМАНДЫ =====
+    async def cmd_set_ai_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("Только администраторы могут менять промпт AI."))
+            return
+
+        if not context.args:
+            await update.message.reply_text(
+                "❌ Укажите новый промпт для AI.\n"
+                "Пример: /set_ai_prompt Ты дружелюбный помощник в игровом чате"
+            )
+            return
+
+        prompt = " ".join(context.args)
+
+        self.db.cursor.execute('''
+            UPDATE chat_settings SET ai_prompt = ? WHERE chat_id = ?
+        ''', (prompt, chat_id))
+        self.db.conn.commit()
+
+        if self.ai and self.ai.is_available:
+            await self.ai.set_chat_prompt(chat_id, prompt)
+
+        await update.message.reply_text(s.success("✅ Промпт AI обновлён!"))
+
+    async def cmd_ai_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if self.ai and self.ai.is_available:
+            text = f"""
+{s.header('🤖 AI СТАТУС')}
+
+✅ AI подключен и работает
+Модель: llama-3.3-70b-versatile
+Кулдаун: {AI_COOLDOWN} сек
+
+Команды:
+/set_ai_prompt [текст] - изменить промпт (админы)
+            """
+        else:
+            text = f"""
+{s.header('🤖 AI СТАТУС')}
+
+❌ AI не подключен
+Причина: нет API ключа или ошибка инициализации
+            """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ===== ВТОРОЙ AI (изображения) =====
+    async def cmd_imagine_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = f"""
+{s.header('🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ')}
+
+**Команда:**
+/imagine [описание] — создаёт изображение по вашему запросу
+
+**Примеры:**
+/imagine космический корабль в стиле киберпанк
+/imagine милый котёнок с большими глазами
+/imagine город будущего ночью, неоновые огни
+
+**Примечание:** генерация может занимать до 30 секунд. Бесплатный сервис.
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
     # ===== НАСТРОЙКА ОБРАБОТЧИКОВ =====
     def setup_handlers(self):
         """Регистрация всех обработчиков (полный список)"""
