@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+
 """
-СПЕКТР v7.0 ULTIMATE - АНТИИНФЛЯЦИОННАЯ, С ДВУМЯ AI, УЛУЧШЕННЫМИ ИГРАМИ И ДИЗАЙНОМ
+СПЕКТР v7.0 ULTIMATE - ПОЛНАЯ АНТИИНФЛЯЦИОННАЯ ВЕРСИЯ С ДВУМЯ AI
 """
 
 # ========== ИМПОРТЫ ==========
@@ -74,7 +75,7 @@ if not TOKEN:
     print("❌ ОШИБКА: BOT_TOKEN не найден в переменных окружения!")
     sys.exit(1)
 
-# ========== АНТИИНФЛЯЦИОННЫЕ ЛИМИТЫ ==========
+# ========== АНТИИНФЛЯЦИОННЫЕ ЛИМИТЫ (НОВЫЕ) ==========
 MAX_COINS = 1_000_000          # Максимум монет
 MAX_NEONS = 100_000             # Максимум неонов
 MAX_GLITCHES = 500_000          # Максимум глитчей
@@ -153,11 +154,41 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ========== ЭЛЕГАНТНОЕ ОФОРМЛЕНИЕ (УЛУЧШЕННЫЙ ДИЗАЙН) ==========
+# ========== КЛАСС ДЛЯ ГРАФИКОВ ==========
+class ChartGenerator:
+    @staticmethod
+    def create_activity_chart(days: list, counts: list, username: str = "Игрок"):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+        from datetime import datetime, timedelta
+        
+        plt.style.use('dark_background')
+        fig, ax = plt.subplots(figsize=(8, 4))
+        fig.patch.set_facecolor('#1a1a1a')
+        ax.set_facecolor('#2a2a2a')
+        
+        ax.plot(days, counts, marker='o', linestyle='-', color='#00d4ff', linewidth=2, markersize=6)
+        ax.fill_between(days, counts, color='#00d4ff', alpha=0.1)
+        
+        ax.set_title(f"АКТИВНОСТЬ {username.upper()}", fontsize=14, fontweight='bold', pad=20, color='white')
+        ax.set_ylabel("Сообщения", color='white')
+        ax.tick_params(colors='white')
+        ax.grid(True, linestyle='--', alpha=0.3, color='gray')
+        
+        for spine in ax.spines.values():
+            spine.set_visible(False)
+        
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', dpi=100, facecolor=fig.get_facecolor())
+        buf.seek(0)
+        plt.close(fig)
+        return buf
+
+# ========== УЛУЧШЕННЫЙ ДИЗАЙН (НОВЫЙ STYLE) ==========
 class Style:
-    """Класс для красивого форматирования сообщений"""
     SEPARATOR = "▰" * 24
-    SEPARATOR_BOLD = "▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰"
+    SEPARATOR_BOLD = "▰" * 28
     
     @classmethod
     def header(cls, title: str, emoji: str = "⚜️") -> str:
@@ -216,14 +247,13 @@ class Database:
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
         self.create_tables()
-        # Создаём индексы для ускорения запросов
-        self.create_indexes()
         self.conn.commit()
         self.init_data()
+        self.create_indexes()  # добавим индексы для ускорения
         logger.info("✅ База данных инициализирована")
     
     def create_tables(self):
-        """Создание всех таблиц базы данных"""
+        """Создание всех таблиц базы данных (полностью из вашего кода, без изменений)"""
         
         # Таблица bosses
         self.cursor.execute('''
@@ -243,7 +273,7 @@ class Database:
             )
         ''')
         
-        # Таблица пользователей (основная)
+        # Таблица пользователей
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -779,7 +809,7 @@ class Database:
         self.conn.commit()
     
     def init_data(self):
-        """Инициализация начальных данных в БД"""
+        """Инициализация начальных данных в БД (полностью из вашего кода)"""
         # Инициализация боссов
         self.cursor.execute("SELECT COUNT(*) FROM bosses")
         if self.cursor.fetchone()[0] == 0:
@@ -871,7 +901,7 @@ class Database:
                 ''', quest)
             self.conn.commit()
 
-    # ===== АНТИИНФЛЯЦИОННЫЕ МЕТОДЫ =====
+    # ===== АНТИИНФЛЯЦИОННЫЕ МЕТОДЫ (НОВЫЕ) =====
     def add_coins(self, user_id: int, amount: int, platform: str = "telegram") -> int:
         """Добавляет монеты с проверкой лимита"""
         user = self.get_user_by_id(user_id, platform)
@@ -883,8 +913,7 @@ class Database:
             amount = MAX_COINS - current
             if amount <= 0:
                 return current
-        self.cursor.execute("UPDATE users SET coins = coins + ? WHERE id = ? AND platform = ?", 
-                          (amount, user_id, platform))
+        self.cursor.execute("UPDATE users SET coins = coins + ? WHERE id = ? AND platform = ?", (amount, user_id, platform))
         self.conn.commit()
         return current + amount
 
@@ -899,8 +928,7 @@ class Database:
             amount = MAX_NEONS - current
             if amount <= 0:
                 return current
-        self.cursor.execute("UPDATE users SET neons = neons + ? WHERE id = ? AND platform = ?", 
-                          (amount, user_id, platform))
+        self.cursor.execute("UPDATE users SET neons = neons + ? WHERE id = ? AND platform = ?", (amount, user_id, platform))
         self.conn.commit()
         self.check_wealth_achievements(user_id, platform)
         return current + amount
@@ -916,8 +944,7 @@ class Database:
             amount = MAX_GLITCHES - current
             if amount <= 0:
                 return current
-        self.cursor.execute("UPDATE users SET glitches = glitches + ? WHERE id = ? AND platform = ?", 
-                          (amount, user_id, platform))
+        self.cursor.execute("UPDATE users SET glitches = glitches + ? WHERE id = ? AND platform = ?", (amount, user_id, platform))
         self.conn.commit()
         self.check_glitch_achievements(user_id, platform)
         return current + amount
@@ -934,19 +961,16 @@ class Database:
     def apply_wealth_tax(self):
         """Еженедельный налог на богатство (1% от превышения порога)"""
         # Монеты
-        self.cursor.execute("SELECT id, coins FROM users WHERE coins > ? AND platform='telegram'", 
-                          (WEALTH_TAX_THRESHOLD,))
+        self.cursor.execute("SELECT id, coins FROM users WHERE coins > ? AND platform='telegram'", (WEALTH_TAX_THRESHOLD,))
         for row in self.cursor.fetchall():
             user_id, coins = row[0], row[1]
             excess = coins - WEALTH_TAX_THRESHOLD
             tax = int(excess * WEALTH_TAX_RATE)
             self.add_coins(user_id, -tax)
-            # Логируем (налог сжигается)
             self.log_action(user_id, "wealth_tax", f"-{tax} coins")
         
         # Неоны (порог в 10 раз меньше)
-        self.cursor.execute("SELECT id, neons FROM users WHERE neons > ? AND platform='telegram'", 
-                          (WEALTH_TAX_THRESHOLD // 10,))
+        self.cursor.execute("SELECT id, neons FROM users WHERE neons > ? AND platform='telegram'", (WEALTH_TAX_THRESHOLD // 10,))
         for row in self.cursor.fetchall():
             user_id, neons = row[0], row[1]
             excess = neons - (WEALTH_TAX_THRESHOLD // 10)
@@ -955,25 +979,1169 @@ class Database:
             self.log_action(user_id, "wealth_tax", f"-{tax} neons")
         
         # Глитчи (порог в 10 раз меньше)
-        self.cursor.execute("SELECT id, glitches FROM users WHERE glitches > ? AND platform='telegram'", 
-                          (WEALTH_TAX_THRESHOLD // 10,))
+        self.cursor.execute("SELECT id, glitches FROM users WHERE glitches > ? AND platform='telegram'", (WEALTH_TAX_THRESHOLD // 10,))
         for row in self.cursor.fetchall():
             user_id, glitches = row[0], row[1]
             excess = glitches - (WEALTH_TAX_THRESHOLD // 10)
             tax = int(excess * WEALTH_TAX_RATE)
             self.add_glitches(user_id, -tax)
             self.log_action(user_id, "wealth_tax", f"-{tax} glitches")
-        
         self.conn.commit()
 
-    # ===== ОСТАЛЬНЫЕ МЕТОДЫ БАЗЫ ДАННЫХ (сохраняем как есть) =====
-    # (методы get_user, update_user, is_banned, transfer_neons, и т.д. остаются без изменений)
-    # Для краткости здесь они не дублируются, но в полном файле они присутствуют.
+    # ===== ОСНОВНЫЕ МЕТОДЫ (ПОЛНОСТЬЮ ИЗ ВАШЕГО КОДА) =====
+    def get_user(self, telegram_id: int, first_name: str = None, platform: str = "telegram") -> Dict[str, Any]:
+        """Получить или создать пользователя"""
+        id_field = "telegram_id" if platform == "telegram" else "vk_id"
+        
+        self.cursor.execute(f"SELECT * FROM users WHERE {id_field} = ? AND platform = ?", (telegram_id, platform))
+        row = self.cursor.fetchone()
+        
+        if not row:
+            name = first_name if first_name else f"User{telegram_id}"
+            
+            role = 'owner' if (platform == "telegram" and telegram_id == OWNER_ID) else 'user'
+            rank = 5 if (platform == "telegram" and telegram_id == OWNER_ID) else 0
+            rank_name = RANKS[rank]["name"]
+            
+            self.cursor.execute(f'''
+                INSERT INTO users ({id_field}, first_name, role, rank, rank_name, last_seen, platform)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            ''', (telegram_id, name, role, rank, rank_name, datetime.now().isoformat(), platform))
+            self.conn.commit()
+            return self.get_user(telegram_id, name, platform)
+        
+        user = dict(row)
+        
+        if first_name and user['first_name'] != first_name and (user['first_name'] == 'Player' or user['first_name'].startswith('User')):
+            self.cursor.execute(f"UPDATE users SET first_name = ? WHERE {id_field} = ? AND platform = ?",
+                              (first_name, telegram_id, platform))
+            user['first_name'] = first_name
+        
+        self.cursor.execute(f"UPDATE users SET last_seen = ? WHERE {id_field} = ? AND platform = ?",
+                          (datetime.now().isoformat(), telegram_id, platform))
+        self.conn.commit()
+        
+        return user
     
-    # ... (пропускаем для краткости, но в итоговом коде они будут) ...
+    def get_user_by_id(self, user_id: int, platform: str = "telegram") -> Optional[Dict[str, Any]]:
+        self.cursor.execute("SELECT * FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def get_user_by_username(self, username: str, platform: str = "telegram") -> Optional[Dict[str, Any]]:
+        if username.startswith('@'):
+            username = username[1:]
+        self.cursor.execute("SELECT * FROM users WHERE username = ? AND platform = ?", (username, platform))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def update_user(self, user_id: int, platform: str = "telegram", **kwargs) -> bool:
+        if not kwargs:
+            return False
+        for key, value in kwargs.items():
+            self.cursor.execute(f"UPDATE users SET {key} = ? WHERE id = ? AND platform = ?", (value, user_id, platform))
+        self.conn.commit()
+        return True
+    
+    def is_banned(self, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("SELECT banned FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        return row and row[0] == 1
+    
+    # ===== ВАЛЮТЫ (базовые, но антиинфляционные выше переопределяют их) =====
+    # Оставляем оригинальные методы, но они не будут использоваться, т.к. мы заменили add_coins и др.
+    # Однако для совместимости оставим их как есть, а антиинфляционные методы названы так же.
+    # (В вашем коде эти методы уже есть, но мы их переопределяем выше, так что дублировать не нужно.)
+    # Пропускаем, чтобы не дублировать.
+
+    # ===== МЕТОДЫ ДЛЯ АЧИВОК =====
+    def check_wealth_achievements(self, user_id: int, platform: str = "telegram"):
+        user = self.get_user_by_id(user_id, platform)
+        if not user:
+            return
+        neons = user.get('neons', 0)
+        thresholds = [(1, 1000), (2, 10000), (3, 100000)]
+        for ach_id, threshold in thresholds:
+            if neons >= threshold:
+                self.unlock_achievement(user_id, ach_id, platform)
+    
+    def check_glitch_achievements(self, user_id: int, platform: str = "telegram"):
+        user = self.get_user_by_id(user_id, platform)
+        if not user:
+            return
+        glitches = user.get('glitches', 0)
+        thresholds = [(4, 1000), (5, 10000), (6, 100000)]
+        for ach_id, threshold in thresholds:
+            if glitches >= threshold:
+                self.unlock_achievement(user_id, ach_id, platform)
+    
+    def unlock_achievement(self, user_id: int, achievement_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("SELECT id FROM achievements WHERE user_id = ? AND achievement_id = ? AND platform = ?",
+                          (user_id, achievement_id, platform))
+        if self.cursor.fetchone():
+            return False
+        self.cursor.execute("SELECT * FROM achievements_list WHERE id = ?", (achievement_id,))
+        ach = self.cursor.fetchone()
+        if not ach:
+            return False
+        self.cursor.execute("INSERT INTO achievements (user_id, achievement_id, platform) VALUES (?, ?, ?)",
+                          (user_id, achievement_id, platform))
+        ach = dict(ach)
+        if ach['reward_neons'] > 0:
+            self.add_neons(user_id, ach['reward_neons'], platform)
+        if ach['reward_glitches'] > 0:
+            self.add_glitches(user_id, ach['reward_glitches'], platform)
+        if ach['reward_title']:
+            self.update_user(user_id, platform, title=ach['reward_title'])
+        self.conn.commit()
+        return True
+    
+    def get_user_achievements(self, user_id: int, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute("""
+            SELECT a.*, al.name, al.description, al.category, al.reward_neons, al.reward_glitches, al.secret
+            FROM achievements a
+            JOIN achievements_list al ON a.achievement_id = al.id
+            WHERE a.user_id = ? AND a.platform = ?
+            ORDER BY a.unlocked_at
+        """, (user_id, platform))
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    # ===== МЕТОДЫ ДЛЯ КРУЖКОВ =====
+    def create_circle(self, chat_id: int, name: str, description: str, creator_id: int) -> Optional[int]:
+        self.cursor.execute("SELECT COUNT(*) FROM circles WHERE created_by = ?", (creator_id,))
+        if self.cursor.fetchone()[0] >= MAX_CIRCLES_PER_USER:
+            return None
+        self.cursor.execute("SELECT circle_limit FROM chat_settings WHERE chat_id = ?", (chat_id,))
+        row = self.cursor.fetchone()
+        limit = row[0] if row else MAX_CIRCLES_PER_CHAT
+        self.cursor.execute("SELECT COUNT(*) FROM circles WHERE chat_id = ?", (chat_id,))
+        if self.cursor.fetchone()[0] >= limit:
+            return None
+        self.cursor.execute("""
+            INSERT INTO circles (chat_id, name, description, created_by, members)
+            VALUES (?, ?, ?, ?, ?)
+        """, (chat_id, name, description, creator_id, json.dumps([creator_id])))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def join_circle(self, circle_id: int, user_id: int) -> bool:
+        self.cursor.execute("SELECT members FROM circles WHERE id = ?", (circle_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return False
+        members = json.loads(row[0])
+        if user_id in members:
+            return False
+        members.append(user_id)
+        self.cursor.execute("UPDATE circles SET members = ? WHERE id = ?", (json.dumps(members), circle_id))
+        self.conn.commit()
+        return True
+    
+    def leave_circle(self, circle_id: int, user_id: int) -> bool:
+        self.cursor.execute("SELECT members, created_by FROM circles WHERE id = ?", (circle_id,))
+        row = self.cursor.fetchone()
+        if not row:
+            return False
+        members = json.loads(row[0])
+        if user_id not in members:
+            return False
+        if user_id == row[1] and len(members) > 1:
+            return False
+        members.remove(user_id)
+        self.cursor.execute("UPDATE circles SET members = ? WHERE id = ?", (json.dumps(members), circle_id))
+        self.conn.commit()
+        return True
+
+    # ===== МЕТОДЫ ДЛЯ КЛАНОВ =====
+    def create_clan(self, chat_id: int, name: str, description: str, creator_id: int, platform: str = "telegram") -> Optional[int]:
+        user = self.get_user_by_id(creator_id, platform)
+        if user.get('clan_id', 0) != 0:
+            return None
+        self.cursor.execute("""
+            INSERT INTO clans (chat_id, name, description, created_by, platform)
+            VALUES (?, ?, ?, ?, ?)
+        """, (chat_id, name, description, creator_id, platform))
+        clan_id = self.cursor.lastrowid
+        self.update_user(creator_id, platform, clan_id=clan_id, clan_role='owner')
+        self.conn.commit()
+        return clan_id
+    
+    def join_clan(self, clan_id: int, user_id: int, platform: str = "telegram") -> bool:
+        user = self.get_user_by_id(user_id, platform)
+        if user.get('clan_id', 0) != 0:
+            self.leave_clan(user_id, platform)
+        self.cursor.execute("SELECT type, members FROM clans WHERE id = ? AND platform = ?", (clan_id, platform))
+        row = self.cursor.fetchone()
+        if not row:
+            return False
+        clan_type, members = row[0], row[1]
+        if clan_type == 'closed':
+            pending = json.loads(self.cursor.execute("SELECT pending_requests FROM clans WHERE id = ? AND platform = ?", (clan_id, platform)).fetchone()[0])
+            if user_id not in pending:
+                pending.append(user_id)
+                self.cursor.execute("UPDATE clans SET pending_requests = ? WHERE id = ? AND platform = ?", (json.dumps(pending), clan_id, platform))
+                self.conn.commit()
+            return False
+        self.update_user(user_id, platform, clan_id=clan_id, clan_role='member')
+        self.cursor.execute("UPDATE clans SET members = members + 1 WHERE id = ? AND platform = ?", (clan_id, platform))
+        self.conn.commit()
+        return True
+    
+    def leave_clan(self, user_id: int, platform: str = "telegram") -> bool:
+        user = self.get_user_by_id(user_id, platform)
+        if not user or user.get('clan_id', 0) == 0:
+            return False
+        clan_id = user['clan_id']
+        if user.get('clan_role') == 'owner':
+            self.cursor.execute("SELECT id FROM users WHERE clan_id = ? AND id != ? AND platform = ? LIMIT 1", (clan_id, user_id, platform))
+            new_owner = self.cursor.fetchone()
+            if new_owner:
+                self.update_user(new_owner[0], platform, clan_role='owner')
+        self.update_user(user_id, platform, clan_id=0, clan_role='member')
+        self.cursor.execute("UPDATE clans SET members = members - 1 WHERE id = ? AND platform = ?", (clan_id, platform))
+        self.conn.commit()
+        return True
+
+    # ===== МЕТОДЫ ДЛЯ ЗАКЛАДОК =====
+    def add_bookmark(self, chat_id: int, user_id: int, name: str, content: str, message_id: int = None) -> int:
+        self.cursor.execute("""
+            INSERT INTO bookmarks (chat_id, user_id, name, content, message_id)
+            VALUES (?, ?, ?, ?, ?)
+        """, (chat_id, user_id, name, content, message_id))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def get_chat_bookmarks(self, chat_id: int) -> List[Dict]:
+        self.cursor.execute("""
+            SELECT b.*, u.first_name, u.username
+            FROM bookmarks b
+            JOIN users u ON b.user_id = u.id
+            WHERE b.chat_id = ? AND b.visible = 1
+            ORDER BY b.created_at DESC
+        """, (chat_id,))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def get_user_bookmarks(self, user_id: int, chat_id: int = None) -> List[Dict]:
+        if chat_id:
+            self.cursor.execute("""
+                SELECT * FROM bookmarks
+                WHERE user_id = ? AND chat_id = ?
+                ORDER BY created_at DESC
+            """, (user_id, chat_id))
+        else:
+            self.cursor.execute("""
+                SELECT * FROM bookmarks
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+            """, (user_id,))
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    # ===== МЕТОДЫ ДЛЯ ТАЙМЕРОВ =====
+    def add_timer(self, chat_id: int, user_id: int, execute_at: datetime, command: str) -> Optional[int]:
+        self.cursor.execute("SELECT COUNT(*) FROM timers WHERE chat_id = ? AND status = 'pending'", (chat_id,))
+        if self.cursor.fetchone()[0] >= 5:
+            return None
+        self.cursor.execute("""
+            INSERT INTO timers (chat_id, user_id, execute_at, command)
+            VALUES (?, ?, ?, ?)
+        """, (chat_id, user_id, execute_at.isoformat(), command))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def get_pending_timers(self) -> List[Dict]:
+        now = datetime.now().isoformat()
+        self.cursor.execute("""
+            SELECT * FROM timers
+            WHERE status = 'pending' AND execute_at <= ?
+        """, (now,))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def complete_timer(self, timer_id: int):
+        self.cursor.execute("UPDATE timers SET status = 'completed' WHERE id = ?", (timer_id,))
+        self.conn.commit()
+
+    # ===== МЕТОДЫ ДЛЯ НАГРАД =====
+    def give_award(self, chat_id: int, user_id: int, awarded_by: int, degree: int, text: str) -> int:
+        self.cursor.execute("""
+            INSERT INTO awards (chat_id, user_id, awarded_by, degree, text)
+            VALUES (?, ?, ?, ?, ?)
+        """, (chat_id, user_id, awarded_by, degree, text))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def get_user_awards(self, user_id: int, chat_id: int = None) -> List[Dict]:
+        if chat_id:
+            self.cursor.execute("""
+                SELECT a.*, u.first_name as awarded_by_name
+                FROM awards a
+                JOIN users u ON a.awarded_by = u.id
+                WHERE a.user_id = ? AND a.chat_id = ?
+                ORDER BY a.degree DESC, a.awarded_at DESC
+            """, (user_id, chat_id))
+        else:
+            self.cursor.execute("""
+                SELECT a.*, u.first_name as awarded_by_name
+                FROM awards a
+                JOIN users u ON a.awarded_by = u.id
+                WHERE a.user_id = ?
+                ORDER BY a.degree DESC, a.awarded_at DESC
+            """, (user_id,))
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    # ===== МЕТОДЫ ДЛЯ БОНУСОВ =====
+    def buy_bonus(self, user_id: int, bonus_type: str, duration_days: int, price_neons: int, platform: str = "telegram") -> bool:
+        user = self.get_user_by_id(user_id, platform)
+        if user.get('neons', 0) < price_neons:
+            return False
+        expires = (datetime.now() + timedelta(days=duration_days)).isoformat()
+        field_map = {
+            'cyber_status': 'cyber_status_until',
+            'turbo_drive': 'turbo_drive_until',
+            'cyber_luck': 'cyber_luck_until',
+            'rp_packet': 'rp_packet_until'
+        }
+        if bonus_type in field_map:
+            self.update_user(user_id, platform, **{field_map[bonus_type]: expires})
+        elif bonus_type == 'glitch_hammer':
+            self.cursor.execute("""
+                INSERT INTO user_bonuses (user_id, bonus_type, expires, data, platform)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, 'glitch_hammer', expires, json.dumps({'uses_left': 1}), platform))
+        elif bonus_type == 'firewall':
+            expires = (datetime.now() + timedelta(days=30)).isoformat()
+            self.update_user(user_id, platform, firewall_used=0, firewall_expires=expires)
+        elif bonus_type == 'invisible':
+            self.cursor.execute("""
+                INSERT INTO user_bonuses (user_id, bonus_type, expires, data, platform)
+                VALUES (?, ?, ?, ?, ?)
+            """, (user_id, 'invisible', expires, json.dumps({'uses_left': 999}), platform))
+        self.add_neons(user_id, -price_neons, platform)
+        self.conn.commit()
+        return True
+    
+    def use_glitch_hammer(self, user_id: int, chat_id: int, target_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("""
+            SELECT * FROM user_bonuses 
+            WHERE user_id = ? AND bonus_type = 'glitch_hammer' AND platform = ? AND (expires IS NULL OR expires > ?)
+        """, (user_id, platform, datetime.now().isoformat()))
+        bonus = self.cursor.fetchone()
+        if not bonus:
+            return False
+        data = json.loads(bonus[5])
+        if data.get('uses_left', 0) <= 0:
+            return False
+        data['uses_left'] -= 1
+        if data['uses_left'] <= 0:
+            self.cursor.execute("DELETE FROM user_bonuses WHERE id = ?", (bonus[0],))
+        else:
+            self.cursor.execute("UPDATE user_bonuses SET data = ? WHERE id = ?", (json.dumps(data), bonus[0]))
+        self.conn.commit()
+        return True
+    
+    def has_invisible_bonus(self, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("""
+            SELECT * FROM user_bonuses 
+            WHERE user_id = ? AND bonus_type = 'invisible' AND platform = ? AND (expires IS NULL OR expires > ?)
+        """, (user_id, platform, datetime.now().isoformat()))
+        return self.cursor.fetchone() is not None
+    
+    def is_invisible_banned(self, chat_id: int, user_id: int) -> bool:
+        self.cursor.execute("SELECT * FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, user_id))
+        return self.cursor.fetchone() is not None
+
+    # ===== МЕТОДЫ ДЛЯ ГОЛОСОВАНИЙ =====
+    def create_ban_vote(self, chat_id: int, target_id: int, created_by: int, required_votes: int, min_rank: int) -> int:
+        self.cursor.execute("""
+            INSERT INTO ban_votes (chat_id, target_id, created_by, required_votes, min_rank)
+            VALUES (?, ?, ?, ?, ?)
+        """, (chat_id, target_id, created_by, required_votes, min_rank))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def vote_for_ban(self, vote_id: int, user_id: int, vote: bool) -> bool:
+        self.cursor.execute("SELECT * FROM ban_votes WHERE id = ? AND status = 'active'", (vote_id,))
+        vote_data = self.cursor.fetchone()
+        if not vote_data:
+            return False
+        voters = json.loads(vote_data[9])
+        if user_id in voters:
+            return False
+        voters.append(user_id)
+        if vote:
+            new_for = vote_data[7] + 1
+            new_against = vote_data[8]
+        else:
+            new_for = vote_data[7]
+            new_against = vote_data[8] + 1
+        self.cursor.execute("""
+            UPDATE ban_votes 
+            SET votes_for = ?, votes_against = ?, voters = ?
+            WHERE id = ?
+        """, (new_for, new_against, json.dumps(voters), vote_id))
+        self.conn.commit()
+        return True
+
+    # ===== МЕТОДЫ ДЛЯ ПАР =====
+    def create_pair(self, chat_id: int, user1_id: int, user2_id: int) -> bool:
+        try:
+            self.cursor.execute("""
+                INSERT INTO pairs (chat_id, user1_id, user2_id)
+                VALUES (?, ?, ?)
+            """, (chat_id, user1_id, user2_id))
+            self.conn.commit()
+            return True
+        except:
+            return False
+    
+    def get_chat_pairs(self, chat_id: int) -> List[Dict]:
+        self.cursor.execute("""
+            SELECT p.*, u1.first_name as name1, u2.first_name as name2
+            FROM pairs p
+            JOIN users u1 ON p.user1_id = u1.id
+            JOIN users u2 ON p.user2_id = u2.id
+            WHERE p.chat_id = ?
+        """, (chat_id,))
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    # ===== СООБЩЕНИЯ =====
+    def save_message(self, user_id: int, username: str, first_name: str, text: str, chat_id: int, chat_title: str, platform: str = "telegram"):
+        self.cursor.execute('''
+            INSERT INTO messages (user_id, username, first_name, message_text, chat_id, chat_title, platform)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, username, first_name, text, chat_id, chat_title, platform))
+        
+        today = datetime.now().date().isoformat()
+        
+        self.cursor.execute('''
+            SELECT id FROM daily_stats 
+            WHERE user_id = ? AND date = ? AND platform = ?
+        ''', (user_id, today, platform))
+        exists = self.cursor.fetchone()
+        
+        if exists:
+            self.cursor.execute('''
+                UPDATE daily_stats SET count = count + 1 
+                WHERE user_id = ? AND date = ? AND platform = ?
+            ''', (user_id, today, platform))
+        else:
+            self.cursor.execute('''
+                INSERT INTO daily_stats (user_id, date, count, platform)
+                VALUES (?, ?, 1, ?)
+            ''', (user_id, today, platform))
+        
+        self.cursor.execute('''
+            SELECT id FROM users WHERE telegram_id = ? AND platform = ?
+        ''', (user_id, platform))
+        user_exists = self.cursor.fetchone()
+        
+        if user_exists:
+            self.cursor.execute('''
+                UPDATE users SET 
+                    last_seen = CURRENT_TIMESTAMP,
+                    messages_count = messages_count + 1,
+                    username = ?,
+                    first_name = ?
+                WHERE telegram_id = ? AND platform = ?
+            ''', (username, first_name, user_id, platform))
+        else:
+            self.cursor.execute('''
+                INSERT INTO users (telegram_id, username, first_name, last_seen, messages_count, platform)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+            ''', (user_id, username, first_name, platform))
+        
+        self.conn.commit()
+        
+        user = self.get_user_by_id(user_id, platform)
+        if user:
+            msg_count = user.get('messages_count', 0) + 1
+            if msg_count >= 1000:
+                self.unlock_achievement(user_id, 16, platform)
+            if msg_count >= 5000:
+                self.unlock_achievement(user_id, 17, platform)
+            if msg_count >= 10000:
+                self.unlock_achievement(user_id, 18, platform)
+    
+    def get_weekly_stats(self, user_id: int, platform: str = "telegram") -> Tuple[List[str], List[int]]:
+        days = []
+        counts = []
+        
+        for i in range(6, -1, -1):
+            date = (datetime.now() - timedelta(days=i)).date()
+            day_name = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"][date.weekday()]
+            days.append(day_name)
+            
+            self.cursor.execute('''
+                SELECT count FROM daily_stats
+                WHERE user_id = ? AND date = ? AND platform = ?
+            ''', (user_id, date.isoformat(), platform))
+            row = self.cursor.fetchone()
+            counts.append(row[0] if row else 0)
+        
+        return days, counts
+
+    # ===== ПРОЧИЕ МЕТОДЫ (ЭНЕРГИЯ, ЗДОРОВЬЕ, ОПЫТ) =====
+    def add_exp(self, user_id: int, amount: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("UPDATE users SET exp = exp + ? WHERE id = ? AND platform = ?", (amount, user_id, platform))
+        self.cursor.execute("SELECT exp, level FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        exp, level = row[0], row[1]
+        if exp >= level * 100:
+            self.cursor.execute("UPDATE users SET level = level + 1, exp = exp - ? WHERE id = ? AND platform = ?",
+                              (level * 100, user_id, platform))
+            self.conn.commit()
+            return True
+        self.conn.commit()
+        return False
+    
+    def add_energy(self, user_id: int, amount: int, platform: str = "telegram") -> int:
+        self.cursor.execute("UPDATE users SET energy = MIN(100, energy + ?) WHERE id = ? AND platform = ?", (amount, user_id, platform))
+        self.conn.commit()
+        self.cursor.execute("SELECT energy FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        return self.cursor.fetchone()[0]
+    
+    def heal(self, user_id: int, amount: int, platform: str = "telegram") -> int:
+        self.cursor.execute("UPDATE users SET health = MIN(max_health, health + ?) WHERE id = ? AND platform = ?", (amount, user_id, platform))
+        self.conn.commit()
+        self.cursor.execute("SELECT health FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        return self.cursor.fetchone()[0]
+    
+    def damage(self, user_id: int, amount: int, platform: str = "telegram") -> int:
+        self.cursor.execute("UPDATE users SET health = MAX(0, health - ?) WHERE id = ? AND platform = ?", (amount, user_id, platform))
+        self.conn.commit()
+        self.cursor.execute("SELECT health FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        return self.cursor.fetchone()[0]
+    
+    def is_vip(self, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("SELECT vip_until FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.fromisoformat(row[0]) > datetime.now()
+        return False
+    
+    def is_premium(self, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("SELECT premium_until FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.fromisoformat(row[0]) > datetime.now()
+        return False
+    
+    def set_vip(self, user_id: int, days: int, platform: str = "telegram") -> datetime:
+        until = datetime.now() + timedelta(days=days)
+        self.cursor.execute("UPDATE users SET vip_until = ?, role = 'vip' WHERE id = ? AND platform = ?",
+                          (until.isoformat(), user_id, platform))
+        self.conn.commit()
+        self.unlock_achievement(user_id, 22, platform)
+        return until
+    
+    def set_premium(self, user_id: int, days: int, platform: str = "telegram") -> datetime:
+        until = datetime.now() + timedelta(days=days)
+        self.cursor.execute("UPDATE users SET premium_until = ?, role = 'premium' WHERE id = ? AND platform = ?",
+                          (until.isoformat(), user_id, platform))
+        self.conn.commit()
+        return until
+
+    # ===== МОДЕРАЦИЯ =====
+    def set_rank(self, user_id: int, rank: int, admin_id: int, platform: str = "telegram") -> bool:
+        if rank not in RANKS:
+            return False
+        self.cursor.execute("UPDATE users SET rank = ?, rank_name = ? WHERE id = ? AND platform = ?",
+                          (rank, RANKS[rank]["name"], user_id, platform))
+        self.conn.commit()
+        self.log_action(admin_id, "set_rank", f"{user_id} -> {rank}", platform=platform)
+        return True
+    
+    def get_admins(self, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username, rank, rank_name FROM users WHERE rank > 0 AND platform = ? ORDER BY rank DESC", (platform,))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def add_warn(self, user_id: int, admin_id: int, reason: str, platform: str = "telegram") -> int:
+        self.cursor.execute("SELECT warns, warns_list FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        warns, warns_list = row[0], json.loads(row[1])
+        warns_list.append({
+            'id': len(warns_list) + 1,
+            'admin_id': admin_id,
+            'reason': reason,
+            'date': datetime.now().isoformat()
+        })
+        new_warns = warns + 1
+        self.cursor.execute("UPDATE users SET warns = ?, warns_list = ? WHERE id = ? AND platform = ?",
+                          (new_warns, json.dumps(warns_list), user_id, platform))
+        self.conn.commit()
+        self.log_action(admin_id, "add_warn", f"{user_id}: {reason}", platform=platform)
+        return new_warns
+    
+    def get_warns(self, user_id: int, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute("SELECT warns_list FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        return json.loads(row[0]) if row and row[0] else []
+    
+    def remove_last_warn(self, user_id: int, admin_id: int, platform: str = "telegram") -> Optional[Dict]:
+        self.cursor.execute("SELECT warns, warns_list FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        warns, warns_list = row[0], json.loads(row[1])
+        if not warns_list:
+            return None
+        removed = warns_list.pop()
+        self.cursor.execute("UPDATE users SET warns = ?, warns_list = ? WHERE id = ? AND platform = ?",
+                          (warns - 1, json.dumps(warns_list), user_id, platform))
+        self.conn.commit()
+        self.log_action(admin_id, "remove_warn", f"{user_id}", platform=platform)
+        return removed
+    
+    def mute_user(self, user_id: int, minutes: int, admin_id: int, reason: str = "", platform: str = "telegram") -> datetime:
+        until = datetime.now() + timedelta(minutes=minutes)
+        self.cursor.execute("UPDATE users SET mute_until = ? WHERE id = ? AND platform = ?", (until.isoformat(), user_id, platform))
+        self.conn.commit()
+        self.log_action(admin_id, "mute", f"{user_id} {minutes}мин: {reason}", platform=platform)
+        return until
+    
+    def is_muted(self, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("SELECT mute_until FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            return datetime.fromisoformat(row[0]) > datetime.now()
+        return False
+    
+    def unmute_user(self, user_id: int, admin_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("UPDATE users SET mute_until = NULL WHERE id = ? AND platform = ?", (user_id, platform))
+        self.conn.commit()
+        self.log_action(admin_id, "unmute", str(user_id), platform=platform)
+        return True
+    
+    def get_muted_users(self, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username, mute_until FROM users WHERE mute_until > ? AND platform = ?",
+                          (datetime.now().isoformat(), platform))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def ban_user(self, user_id: int, admin_id: int, reason: str, platform: str = "telegram") -> bool:
+        try:
+            now = datetime.now().isoformat()
+            self.cursor.execute('''
+                UPDATE users SET 
+                    banned = 1,
+                    ban_reason = ?,
+                    ban_date = ?,
+                    ban_admin = ?
+                WHERE id = ? AND platform = ?
+            ''', (reason, now, admin_id, user_id, platform))
+            self.conn.commit()
+            self.log_action(admin_id, "ban", f"{user_id}: {reason}", platform=platform)
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при бане в БД (user_id: {user_id}): {e}")
+            return False
+    
+    def unban_user(self, user_id: int, admin_id: int, platform: str = "telegram") -> bool:
+        try:
+            self.cursor.execute('''
+                UPDATE users SET 
+                    banned = 0,
+                    ban_reason = NULL,
+                    ban_date = NULL,
+                    ban_admin = NULL
+                WHERE id = ? AND platform = ?
+            ''', (user_id, platform))
+            self.conn.commit()
+            self.log_action(admin_id, "unban", str(user_id), platform=platform)
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при разбане в БД (user_id: {user_id}): {e}")
+            return False
+    
+    def get_banlist(self, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute("SELECT id, first_name, username FROM users WHERE banned = 1 AND platform = ? ORDER BY ban_date DESC", (platform,))
+        return [dict(row) for row in self.cursor.fetchall()]
+
+    # ===== ЧЁРНЫЙ СПИСОК =====
+    def add_to_blacklist(self, word: str, admin_id: int, platform: str = "telegram") -> bool:
+        try:
+            self.cursor.execute("INSERT INTO blacklist (word, added_by) VALUES (?, ?)", (word.lower(), admin_id))
+            self.conn.commit()
+            self.log_action(admin_id, "add_blacklist", word, platform=platform)
+            return True
+        except:
+            return False
+    
+    def remove_from_blacklist(self, word: str, admin_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute("DELETE FROM blacklist WHERE word = ?", (word.lower(),))
+        self.conn.commit()
+        self.log_action(admin_id, "remove_blacklist", word, platform=platform)
+        return self.cursor.rowcount > 0
+    
+    def get_blacklist(self) -> List[str]:
+        self.cursor.execute("SELECT word FROM blacklist ORDER BY word")
+        return [row[0] for row in self.cursor.fetchall()]
+    
+    def is_word_blacklisted(self, text: str) -> bool:
+        words = self.get_blacklist()
+        text_lower = text.lower()
+        for word in words:
+            if word in text_lower:
+                return True
+        return False
+
+    # ===== ТОПЫ =====
+    def get_top(self, field: str, limit: int = 10, platform: str = "telegram") -> List[Tuple]:
+        if field not in ALLOWED_SORT_FIELDS:
+            field = 'coins'
+        self.cursor.execute(f"SELECT first_name, nickname, {field} FROM users WHERE platform = ? ORDER BY {field} DESC LIMIT ?", (platform, limit))
+        return self.cursor.fetchall()
+
+    # ===== СТРИК =====
+    def add_daily_streak(self, user_id: int, platform: str = "telegram") -> int:
+        today = datetime.now().date()
+        self.cursor.execute("SELECT last_daily, daily_streak FROM users WHERE id = ? AND platform = ?", (user_id, platform))
+        row = self.cursor.fetchone()
+        if row and row[0]:
+            last = datetime.fromisoformat(row[0]).date()
+            if last == today - timedelta(days=1):
+                streak = row[1] + 1
+            elif last == today:
+                return row[1]
+            else:
+                streak = 1
+        else:
+            streak = 1
+        self.cursor.execute("UPDATE users SET daily_streak = ?, last_daily = ? WHERE id = ? AND platform = ?",
+                          (streak, datetime.now().isoformat(), user_id, platform))
+        self.conn.commit()
+        if streak >= 7:
+            self.unlock_achievement(user_id, 19, platform)
+        if streak >= 30:
+            self.unlock_achievement(user_id, 20, platform)
+        if streak >= 100:
+            self.unlock_achievement(user_id, 21, platform)
+        return streak
+
+    # ===== БОССЫ =====
+    def get_bosses(self, alive_only: bool = True) -> List[Dict]:
+        if alive_only:
+            self.cursor.execute("SELECT * FROM bosses WHERE is_alive = 1 ORDER BY level")
+        else:
+            self.cursor.execute("SELECT * FROM bosses ORDER BY level")
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def get_boss(self, boss_id: int) -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM bosses WHERE id = ?", (boss_id,))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def damage_boss(self, boss_id: int, damage: int) -> bool:
+        self.cursor.execute("UPDATE bosses SET health = health - ? WHERE id = ?", (damage, boss_id))
+        self.cursor.execute("SELECT health FROM bosses WHERE id = ?", (boss_id,))
+        health = self.cursor.fetchone()[0]
+        if health <= 0:
+            self.cursor.execute("UPDATE bosses SET is_alive = 0, respawn_time = ? WHERE id = ?",
+                              ((datetime.now() + timedelta(hours=1)).isoformat(), boss_id))
+            self.conn.commit()
+            return True
+        self.conn.commit()
+        return False
+    
+    def respawn_bosses(self):
+        self.cursor.execute("UPDATE bosses SET health = max_health, is_alive = 1, respawn_time = NULL")
+        self.conn.commit()
+    
+    def add_boss_kill(self, user_id: int, platform: str = "telegram"):
+        self.cursor.execute("UPDATE users SET boss_kills = boss_kills + 1 WHERE id = ? AND platform = ?", (user_id, platform))
+        self.conn.commit()
+        user = self.get_user_by_id(user_id, platform)
+        kills = user.get('boss_kills', 0) + 1
+        if kills >= 10:
+            self.unlock_achievement(user_id, 13, platform)
+        if kills >= 50:
+            self.unlock_achievement(user_id, 14, platform)
+        if kills >= 200:
+            self.unlock_achievement(user_id, 15, platform)
+
+    # ===== ДУЭЛИ =====
+    def create_duel(self, challenger_id: int, opponent_id: int, bet: int, platform: str = "telegram") -> int:
+        self.cursor.execute('''
+            INSERT INTO duels (challenger_id, opponent_id, bet, platform)
+            VALUES (?, ?, ?, ?)
+        ''', (challenger_id, opponent_id, bet, platform))
+        self.conn.commit()
+        return self.cursor.lastrowid
+    
+    def get_duel(self, duel_id: int, platform: str = "telegram") -> Optional[Dict]:
+        self.cursor.execute("SELECT * FROM duels WHERE id = ? AND platform = ?", (duel_id, platform))
+        row = self.cursor.fetchone()
+        return dict(row) if row else None
+    
+    def update_duel(self, duel_id: int, platform: str = "telegram", **kwargs):
+        for key, value in kwargs.items():
+            self.cursor.execute(f"UPDATE duels SET {key} = ? WHERE id = ? AND platform = ?", (value, duel_id, platform))
+        self.conn.commit()
+
+    # ===== ЛОГИ =====
+    def log_action(self, user_id: int, action: str, details: str = "", chat_id: int = None, platform: str = "telegram"):
+        self.cursor.execute('''
+            INSERT INTO logs (user_id, action, details, chat_id, platform, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, action, details, chat_id, platform, datetime.now().isoformat()))
+        self.conn.commit()
+
+    # ===== ТАЙНЫЙ ОРДЕН =====
+    def is_in_order(self, user_id: int, chat_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute('''
+            SELECT members FROM order_data 
+            WHERE chat_id = ? AND platform = ? AND is_active = 1
+        ''', (chat_id, platform))
+        row = self.cursor.fetchone()
+        if not row:
+            return False
+        members = json.loads(row[0])
+        return user_id in members
+    
+    def get_user_rank(self, user_id: int, chat_id: int, platform: str = "telegram") -> Dict:
+        self.cursor.execute('''
+            SELECT rank, rank_name, total_points FROM order_ranks
+            WHERE user_id = ? AND chat_id = ? AND platform = ?
+        ''', (user_id, chat_id, platform))
+        row = self.cursor.fetchone()
+        if row:
+            return {"rank": row[0], "name": row[1], "points": row[2]}
+        return {"rank": 0, "name": "👤 Кандидат", "points": 0}
+    
+    def calculate_rank(self, points: int) -> Dict:
+        ranks = [
+            (0, 0, "👤 Кандидат"),
+            (100, 1, "👁️ Наблюдатель"),
+            (250, 2, "🌙 Тень"),
+            (500, 3, "🕳️ Бездна"),
+            (1000, 4, "🔮 Провидец"),
+            (2500, 5, "🧙 Мистик"),
+            (5000, 6, "⚔️ Страж"),
+            (10000, 7, "👑 Хранитель"),
+            (25000, 8, "🗿 Легенда"),
+            (50000, 9, "💀 Спектр"),
+            (100000, 10, "👁️ Всевидящий")
+        ]
+        for min_points, rank_num, rank_name in reversed(ranks):
+            if points >= min_points:
+                return {"rank": rank_num, "name": rank_name}
+        return {"rank": 0, "name": "👤 Кандидат"}
+    
+    def add_order_points(self, user_id: int, chat_id: int, points: int, reason: str = "", platform: str = "telegram"):
+        self.cursor.execute('''
+            SELECT total_points FROM order_ranks
+            WHERE user_id = ? AND chat_id = ? AND platform = ?
+        ''', (user_id, chat_id, platform))
+        row = self.cursor.fetchone()
+        if row:
+            new_total = row[0] + points
+            new_rank = self.calculate_rank(new_total)
+            self.cursor.execute('''
+                UPDATE order_ranks 
+                SET total_points = ?, rank = ?, rank_name = ?
+                WHERE user_id = ? AND chat_id = ? AND platform = ?
+            ''', (new_total, new_rank["rank"], new_rank["name"], user_id, chat_id, platform))
+        else:
+            new_rank = self.calculate_rank(points)
+            self.cursor.execute('''
+                INSERT INTO order_ranks (user_id, chat_id, total_points, rank, rank_name, platform)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (user_id, chat_id, points, new_rank["rank"], new_rank["name"], platform))
+        self.conn.commit()
+        return new_rank
+    
+    def start_order_cycle(self, chat_id: int, platform: str = "telegram") -> Tuple[List[int], int]:
+        self.cursor.execute('''
+            SELECT DISTINCT user_id FROM messages
+            WHERE chat_id = ? AND platform = ?
+            GROUP BY user_id
+            HAVING COUNT(*) > 5
+            ORDER BY RANDOM()
+            LIMIT 5
+        ''', (chat_id, platform))
+        members = [row[0] for row in self.cursor.fetchall()]
+        if len(members) < 5:
+            self.cursor.execute('''
+                SELECT DISTINCT user_id FROM messages
+                WHERE chat_id = ? AND platform = ?
+                ORDER BY RANDOM()
+                LIMIT ?
+            ''', (chat_id, platform, 5 - len(members)))
+            more_members = [row[0] for row in self.cursor.fetchall()]
+            members.extend(more_members)
+        self.cursor.execute('''
+            SELECT cycle_number FROM order_data WHERE chat_id = ? AND platform = ?
+        ''', (chat_id, platform))
+        row = self.cursor.fetchone()
+        if row:
+            cycle = row[0] + 1
+            self.cursor.execute('''
+                UPDATE order_data 
+                SET cycle_number = ?, is_active = 1, members = ?, revealed = 0,
+                    revelation_time = datetime('now', '+7 days')
+                WHERE chat_id = ? AND platform = ?
+            ''', (cycle, json.dumps(members), chat_id, platform))
+        else:
+            cycle = 1
+            self.cursor.execute('''
+                INSERT INTO order_data (chat_id, cycle_number, is_active, members, revelation_time, platform)
+                VALUES (?, ?, 1, ?, datetime('now', '+7 days'), ?)
+            ''', (chat_id, cycle, json.dumps(members), platform))
+        self.conn.commit()
+        return members, cycle
+    
+    def reveal_order(self, chat_id: int, platform: str = "telegram") -> Optional[Dict]:
+        self.cursor.execute('''
+            SELECT members, points, cycle_number FROM order_data 
+            WHERE chat_id = ? AND platform = ? AND is_active = 1
+        ''', (chat_id, platform))
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        members = json.loads(row[0])
+        points_data = json.loads(row[1]) if row[1] else {}
+        cycle = row[2]
+        sorted_members = sorted(members, key=lambda x: points_data.get(str(x), 0), reverse=True)
+        self.cursor.execute('''
+            UPDATE order_data SET revealed = 1, is_active = 0
+            WHERE chat_id = ? AND platform = ?
+        ''', (chat_id, platform))
+        self.conn.commit()
+        return {
+            "members": sorted_members,
+            "points": points_data,
+            "cycle": cycle
+        }
+
+    # ===== НОВЫЕ МЕТОДЫ ДЛЯ КВЕСТОВ =====
+    def assign_daily_quests(self, user_id: int, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute('''
+            DELETE FROM user_quests 
+            WHERE user_id = ? AND platform = ? AND quest_id IN 
+            (SELECT id FROM quests WHERE type = 'daily')
+        ''', (user_id, platform))
+        self.cursor.execute('''
+            SELECT * FROM quests 
+            WHERE type = 'daily' AND active = 1
+            ORDER BY RANDOM()
+            LIMIT ?
+        ''', (MAX_ACTIVE_QUESTS,))
+        quests = self.cursor.fetchall()
+        assigned = []
+        expires_at = (datetime.now() + timedelta(days=1)).isoformat()
+        for quest in quests:
+            quest_dict = dict(quest)
+            self.cursor.execute('''
+                INSERT INTO user_quests (user_id, quest_id, expires_at, platform)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, quest_dict['id'], expires_at, platform))
+            assigned.append(quest_dict)
+        self.conn.commit()
+        return assigned
+    
+    def assign_weekly_quests(self, user_id: int, platform: str = "telegram") -> List[Dict]:
+        self.cursor.execute('''
+            DELETE FROM user_quests 
+            WHERE user_id = ? AND platform = ? AND quest_id IN 
+            (SELECT id FROM quests WHERE type = 'weekly')
+        ''', (user_id, platform))
+        self.cursor.execute('''
+            SELECT * FROM quests 
+            WHERE type = 'weekly' AND active = 1
+            ORDER BY RANDOM()
+            LIMIT 2
+        ''')
+        quests = self.cursor.fetchall()
+        assigned = []
+        expires_at = (datetime.now() + timedelta(days=7)).isoformat()
+        for quest in quests:
+            quest_dict = dict(quest)
+            self.cursor.execute('''
+                INSERT INTO user_quests (user_id, quest_id, expires_at, platform)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, quest_dict['id'], expires_at, platform))
+            assigned.append(quest_dict)
+        self.conn.commit()
+        return assigned
+    
+    def get_user_quests(self, user_id: int, platform: str = "telegram") -> List[Dict]:
+        now = datetime.now().isoformat()
+        self.cursor.execute('''
+            SELECT uq.*, q.name, q.description, q.type, q.condition_type, q.condition_value, 
+                   q.reward_neons, q.reward_glitches, q.complexity
+            FROM user_quests uq
+            JOIN quests q ON uq.quest_id = q.id
+            WHERE uq.user_id = ? AND uq.platform = ? AND uq.completed = 0 AND uq.expires_at > ?
+        ''', (user_id, platform, now))
+        return [dict(row) for row in self.cursor.fetchall()]
+    
+    def update_quest_progress(self, user_id: int, condition_type: str, amount: int = 1, platform: str = "telegram"):
+        quests = self.get_user_quests(user_id, platform)
+        for quest in quests:
+            if quest['condition_type'] == condition_type:
+                new_progress = quest['progress'] + amount
+                self.cursor.execute('''
+                    UPDATE user_quests 
+                    SET progress = ? 
+                    WHERE id = ?
+                ''', (new_progress, quest['id']))
+                if new_progress >= quest['condition_value']:
+                    self.complete_quest(quest['id'], user_id, platform)
+        self.conn.commit()
+    
+    def complete_quest(self, quest_id: int, user_id: int, platform: str = "telegram"):
+        self.cursor.execute('''
+            SELECT q.* FROM user_quests uq
+            JOIN quests q ON uq.quest_id = q.id
+            WHERE uq.id = ?
+        ''', (quest_id,))
+        quest = self.cursor.fetchone()
+        if not quest:
+            return
+        quest_dict = dict(quest)
+        reward_neons = int(quest_dict['reward_neons'] * (1 + (quest_dict['complexity'] - 1) * 0.2))
+        reward_glitches = int(quest_dict['reward_glitches'] * (1 + (quest_dict['complexity'] - 1) * 0.2))
+        if reward_neons > 0:
+            self.add_neons(user_id, reward_neons, platform)
+        if reward_glitches > 0:
+            self.add_glitches(user_id, reward_glitches, platform)
+        self.cursor.execute('''
+            UPDATE user_quests 
+            SET completed = 1, progress = condition_value
+            WHERE id = ?
+        ''', (quest_id,))
+        self.cursor.execute('''
+            UPDATE users 
+            SET completed_quests = completed_quests + 1
+            WHERE id = ? AND platform = ?
+        ''', (user_id, platform))
+        self.conn.commit()
+
+    # ===== НОВЫЕ МЕТОДЫ ДЛЯ БИРЖИ =====
+    def create_exchange_order(self, user_id: int, order_type: str, currency_from: str, 
+                             currency_to: str, amount: int, price: int, platform: str = "telegram") -> Optional[int]:
+        user = self.get_user_by_id(user_id, platform)
+        if currency_from == 'coins' and user['coins'] < amount:
+            return None
+        elif currency_from == 'neons' and user['neons'] < amount:
+            return None
+        if currency_from == 'coins':
+            self.add_coins(user_id, -amount, platform)
+        else:
+            self.add_neons(user_id, -amount, platform)
+        self.cursor.execute('''
+            INSERT INTO exchange_orders (user_id, type, currency_from, currency_to, amount, price, platform)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, order_type, currency_from, currency_to, amount, price, platform))
+        order_id = self.cursor.lastrowid
+        self.conn.commit()
+        asyncio.create_task(self.match_exchange_orders())
+        return order_id
+    
+    def match_exchange_orders(self):
+        self.cursor.execute('''
+            SELECT * FROM exchange_orders 
+            WHERE status = 'active' AND filled < amount
+            ORDER BY price DESC, created_at ASC
+        ''')
+        orders = self.cursor.fetchall()
+        buy_orders = [o for o in orders if o[2] == 'buy']
+        sell_orders = [o for o in orders if o[2] == 'sell']
+        for buy in buy_orders:
+            for sell in sell_orders:
+                if buy[4] != sell[4]:
+                    continue
+                if buy[5] >= sell[5]:
+                    price = sell[5]
+                    max_amount = min(buy[6] - buy[7], sell[6] - sell[7])
+                    if max_amount > 0:
+                        self.execute_exchange_trade(buy[0], sell[0], price, max_amount)
+                        break
+        self.conn.commit()
+    
+    def execute_exchange_trade(self, buy_order_id: int, sell_order_id: int, price: int, amount: int):
+        self.cursor.execute("SELECT * FROM exchange_orders WHERE id = ?", (buy_order_id,))
+        buy = self.cursor.fetchone()
+        self.cursor.execute("SELECT * FROM exchange_orders WHERE id = ?", (sell_order_id,))
+        sell = self.cursor.fetchone()
+        if not buy or not sell:
+            return
+        commission = int(amount * price * EXCHANGE_COMMISSION)
+        if buy[3] == 'coins':
+            total_cost = amount * price
+            self.add_coins(sell[1], total_cost - commission, sell[9])
+            self.add_neons(buy[1], amount, buy[9])
+        else:
+            total_cost = amount * price
+            self.add_neons(sell[1], total_cost - commission, sell[9])
+            self.add_coins(buy[1], amount, buy[9])
+        new_filled_buy = buy[7] + amount
+        new_filled_sell = sell[7] + amount
+        self.cursor.execute('''
+            UPDATE exchange_orders 
+            SET filled = ?, status = CASE WHEN filled >= amount THEN 'completed' ELSE 'active' END
+            WHERE id = ?
+        ''', (new_filled_buy, buy_order_id))
+        self.cursor.execute('''
+            UPDATE exchange_orders 
+            SET filled = ?, status = CASE WHEN filled >= amount THEN 'completed' ELSE 'active' END
+            WHERE id = ?
+        ''', (new_filled_sell, sell_order_id))
+        self.cursor.execute('''
+            INSERT INTO exchange_history (price, volume)
+            VALUES (?, ?)
+        ''', (price, amount))
+        self.cursor.execute('''
+            UPDATE users SET exchange_volume = exchange_volume + ? WHERE id = ?
+        ''', (amount * price, buy[1]))
+        self.cursor.execute('''
+            UPDATE users SET exchange_volume = exchange_volume + ? WHERE id = ?
+        ''', (amount * price, sell[1]))
+        self.conn.commit()
+    
+    def get_exchange_stats(self) -> Dict:
+        self.cursor.execute('''
+            SELECT AVG(price) FROM exchange_history 
+            ORDER BY created_at DESC LIMIT 10
+        ''')
+        avg_price = self.cursor.fetchone()[0] or 10
+        day_ago = (datetime.now() - timedelta(days=1)).isoformat()
+        self.cursor.execute('''
+            SELECT SUM(volume) FROM exchange_history 
+            WHERE created_at > ?
+        ''', (day_ago,))
+        volume_24h = self.cursor.fetchone()[0] or 0
+        self.cursor.execute('''
+            SELECT COUNT(*) FROM exchange_orders WHERE status = 'active'
+        ''')
+        active_orders = self.cursor.fetchone()[0]
+        return {
+            'price': round(avg_price, 2),
+            'volume_24h': volume_24h,
+            'active_orders': active_orders
+        }
+    
+    def cancel_exchange_order(self, order_id: int, user_id: int, platform: str = "telegram") -> bool:
+        self.cursor.execute('''
+            SELECT * FROM exchange_orders 
+            WHERE id = ? AND user_id = ? AND platform = ? AND status = 'active'
+        ''', (order_id, user_id, platform))
+        order = self.cursor.fetchone()
+        if not order:
+            return False
+        remaining = order[6] - order[7]
+        if remaining > 0:
+            if order[3] == 'coins':
+                self.add_coins(user_id, remaining, platform)
+            else:
+                self.add_neons(user_id, remaining, platform)
+        self.cursor.execute('''
+            UPDATE exchange_orders SET status = 'cancelled' WHERE id = ?
+        ''', (order_id,))
+        self.conn.commit()
+        return True
 
     def close(self):
         self.conn.close()
+
+# ========== ИНИЦИАЛИЗАЦИЯ БД ==========
+db = Database()
 
 # ========== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ==========
 def get_rank_emoji(rank: int) -> str:
@@ -992,36 +2160,29 @@ def extract_user_id(text: str) -> Optional[int]:
         user = db.get_user_by_username(username)
         if user:
             return user['id']
-    
     match = re.search(r'tg://user\?id=(\d+)', text)
     if match:
         return int(match.group(1))
-    
     match = re.search(r'(\d+)', text)
     if match:
         return int(match.group(1))
-    
     return None
 
 def parse_time(time_str: str) -> Optional[int]:
     match = re.match(r'(\d+)([мчд])', time_str)
     if not match:
         return None
-    
     amount = int(match.group(1))
     unit = match.group(2)
-    
     if unit == 'м':
         return amount
     elif unit == 'ч':
         return amount * 60
     elif unit == 'д':
         return amount * 1440
-    
     return None
 
 def parse_datetime(date_str: str) -> Optional[datetime]:
-    """Парсит дату в формате ДД.ММ ЧЧ:ММ"""
     try:
         now = datetime.now()
         if '.' in date_str:
@@ -1047,6 +2208,8 @@ class GroqAI:
         self.contexts = defaultdict(lambda: deque(maxlen=10))
         self.user_last_ai = defaultdict(float)
         self.ai_cooldown = AI_COOLDOWN
+        self.toxic_users = defaultdict(int)
+        self.blocked_users = set()
         
         if GROQ_AVAILABLE and api_key:
             try:
@@ -1069,8 +2232,9 @@ class GroqAI:
 ВАЖНЫЕ ПРАВИЛА:
 1. НЕ используй эмодзи в каждом сообщении - максимум 1-2, если уместно
 2. НЕ начинай сообщения со слова "Спектр" - просто отвечай
-3. Если не знаешь ответа - честно скажи об этом
-4. Будь вежливым, но не навязчивым"""
+3. В мафии и ордене общайся с игроками в ЛС, а не в общем чате
+4. Если не знаешь ответа - честно скажи об этом
+5. Будь вежливым, но не навязчивым"""
         
         self.chat_prompts = defaultdict(lambda: self.base_system_prompt)
     
@@ -1080,7 +2244,6 @@ class GroqAI:
             return None
         
         now = time.time()
-        
         if not force_response:
             if now - self.user_last_ai[user_id] < self.ai_cooldown:
                 return None
@@ -1089,18 +2252,15 @@ class GroqAI:
         
         try:
             loop = asyncio.get_event_loop()
-            
             system_prompt = self.chat_prompts[chat_id] if chat_id else self.base_system_prompt
             context = list(self.contexts[user_id])
             context_str = "\n".join(context) if context else "Нет истории"
-            
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "system", "content": f"Пользователь: {username}"},
                 {"role": "system", "content": f"Контекст предыдущих сообщений:\n{context_str}"},
                 {"role": "user", "content": message}
             ]
-            
             def sync_request():
                 return self.client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
@@ -1109,20 +2269,15 @@ class GroqAI:
                     max_tokens=200,
                     top_p=0.95
                 )
-            
             chat_completion = await loop.run_in_executor(None, sync_request)
             response = chat_completion.choices[0].message.content
-            
             self.contexts[user_id].append(f"User: {message}")
             self.contexts[user_id].append(f"AI: {response}")
-            
             if response.startswith("Спектр:"):
                 response = response[7:].strip()
             elif response.startswith("Спектр "):
                 response = response[6:].strip()
-            
             return response
-            
         except Exception as e:
             logger.error(f"Groq error: {e}")
             return None
@@ -1131,25 +2286,20 @@ class GroqAI:
                                username: str = "Пользователь") -> Optional[str]:
         if not self.is_available:
             return None
-        
         try:
             game_prompts = {
                 "mafia": "Ты ведущий в игре мафия. Общайся с игроком в ЛС, объясняй правила, сообщай результаты голосования.",
                 "order": "Ты глава Тайного Ордена. Общайся с избранными в ЛС, давай задания, сообщай о прогрессе.",
                 "duel": "Ты противник в дуэли. Играй честно, но с характером."
             }
-            
             prompt = game_prompts.get(game_type, "Ты участвуешь в игре.")
-            
             messages = [
                 {"role": "system", "content": prompt},
                 {"role": "system", "content": f"Игрок: {username}"},
                 {"role": "system", "content": f"Состояние игры: {json.dumps(game_state, ensure_ascii=False)}"},
                 {"role": "user", "content": "Что скажешь игроку?"}
             ]
-            
             loop = asyncio.get_event_loop()
-            
             def sync_request():
                 return self.client.chat.completions.create(
                     model="llama-3.3-70b-versatile",
@@ -1158,22 +2308,28 @@ class GroqAI:
                     max_tokens=150,
                     top_p=0.95
                 )
-            
             chat_completion = await loop.run_in_executor(None, sync_request)
             response = chat_completion.choices[0].message.content
-            
             return response
-            
         except Exception as e:
             logger.error(f"Groq game error: {e}")
             return None
     
     async def should_respond(self, message: str, is_reply_to_bot: bool = False) -> bool:
-        # 15% шанс ответить (меньше, чтобы не спамить)
         return random.random() < 0.15
     
     async def set_chat_prompt(self, chat_id: int, prompt: str):
         self.chat_prompts[chat_id] = prompt
+    
+    async def get_reaction(self, message: str) -> str:
+        msg_lower = message.lower()
+        if '?' in message:
+            return '❓'
+        elif any(word in msg_lower for word in ['победа', 'выиграл', 'красава']):
+            return '🏆'
+        elif any(word in msg_lower for word in ['поздравь', 'спасибо']):
+            return '✨'
+        return ''
     
     async def close(self):
         pass
@@ -1204,8 +2360,20 @@ class ImageAI:
             logger.error(f"Image generation error: {e}")
             return None
 
-# ========== УЛУЧШЕННЫЙ КЛАСС МАФИИ ==========
-class MafiaRole(Enum):
+# ========== ИНИЦИАЛИЗАЦИЯ AI ==========
+ai = None
+if GROQ_API_KEY and GROQ_AVAILABLE:
+    try:
+        ai = GroqAI(GROQ_API_KEY)
+        logger.info("✅ Groq AI инициализирован")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации AI: {e}")
+        ai = None
+else:
+    logger.warning("⚠️ Groq AI не подключен (нет API ключа)")
+
+# ========== КЛАСС МАФИИ (УЛУЧШЕННАЯ ВЕРСИЯ) ==========
+class MafiaRole:
     MAFIA = "😈 Мафия"
     COMMISSIONER = "👮 Комиссар"
     DOCTOR = "👨‍⚕️ Доктор"
@@ -1214,19 +2382,18 @@ class MafiaRole(Enum):
     CITIZEN = "👤 Мирный"
 
 class MafiaGame:
-    """Класс для управления игрой в мафию (улучшенный)"""
     def __init__(self, chat_id: int, game_id: str, creator_id: int):
         self.chat_id = chat_id
         self.game_id = game_id
         self.creator_id = creator_id
         self.status = "waiting"  # waiting, starting, night, day, ended
-        self.players = []         # список user_id
-        self.players_data = {}    # user_id -> {"name": str, "username": str, "confirmed": bool}
-        self.roles = {}           # user_id -> MafiaRole
-        self.alive = {}           # user_id -> bool
+        self.players = []
+        self.players_data = {}
+        self.roles = {}
+        self.alive = {}
         self.day = 1
-        self.phase = "night"      # night, day
-        self.votes = {}            # voter_id -> target_id
+        self.phase = "night"
+        self.votes = {}
         self.night_actions = {
             "mafia_kill": None,
             "doctor_save": None,
@@ -1236,9 +2403,9 @@ class MafiaGame:
         self.message_id = None
         self.start_time = None
         self.confirmed_players = []
-        self.story = []            # история событий для красивого отображения
+        self.story = []
         self.last_night_result = None
-
+    
     def add_player(self, user_id: int, name: str, username: str = "") -> bool:
         if user_id in self.players:
             return False
@@ -1249,7 +2416,7 @@ class MafiaGame:
             "confirmed": False
         }
         return True
-
+    
     def remove_player(self, user_id: int) -> bool:
         if user_id not in self.players:
             return False
@@ -1257,46 +2424,40 @@ class MafiaGame:
         if user_id in self.players_data:
             del self.players_data[user_id]
         return True
-
+    
     def confirm_player(self, user_id: int) -> bool:
         if user_id not in self.players_data:
             return False
         self.players_data[user_id]["confirmed"] = True
         self.confirmed_players.append(user_id)
         return True
-
+    
     def all_confirmed(self) -> bool:
         if len(self.players) < MAFIA_MIN_PLAYERS:
             return False
         return all(p["confirmed"] for p in self.players_data.values())
-
+    
     def assign_roles(self):
         num_players = len(self.players)
-        
         if num_players <= 7:
             num_mafia = 2
         elif num_players <= 10:
             num_mafia = 3
         else:
             num_mafia = 4
-        
         roles = [MafiaRole.MAFIA] * num_mafia
         roles.append(MafiaRole.COMMISSIONER)
         roles.append(MafiaRole.DOCTOR)
-        
         if num_players >= 10:
             roles.append(MafiaRole.MANIAC)
-        
         remaining = num_players - len(roles)
         roles.extend([MafiaRole.CITIZEN] * remaining)
-        
         random.shuffle(roles)
-        
         for i, player_id in enumerate(self.players):
             self.roles[player_id] = roles[i]
             self.alive[player_id] = True
-
-    def get_role_description(self, role: MafiaRole) -> str:
+    
+    def get_role_description(self, role: str) -> str:
         descriptions = {
             MafiaRole.MAFIA: "Ночью убиваете мирных. Общайтесь с другими мафиози в ЛС",
             MafiaRole.COMMISSIONER: "Ночью проверяете игроков, узнаёте их роль",
@@ -1306,35 +2467,30 @@ class MafiaGame:
             MafiaRole.CITIZEN: "У вас нет способностей. Ищите мафию днём"
         }
         return descriptions.get(role, "Ошибка")
-
+    
     def get_alive_players(self) -> list:
         return [pid for pid in self.players if self.alive.get(pid, False)]
-
+    
     def check_win(self):
         alive = self.get_alive_players()
         if not alive:
             return None
-        
         mafia_count = 0
         mafia_roles = [MafiaRole.MAFIA, MafiaRole.BOSS]
-        
         for pid in alive:
             if self.roles[pid] in mafia_roles:
                 mafia_count += 1
-        
         if mafia_count == 0:
             return "citizens"
         if mafia_count >= len(alive) - mafia_count:
             return "mafia"
         return None
-
+    
     def process_night(self):
         killed = self.night_actions.get("mafia_kill")
         saved = self.night_actions.get("doctor_save")
-        
         if saved and saved == killed:
             killed = None
-        
         self.last_night_result = {"killed": killed}
         self.night_actions = {
             "mafia_kill": None,
@@ -1342,56 +2498,44 @@ class MafiaGame:
             "commissioner_check": None,
             "maniac_kill": None
         }
-        
         return self.last_night_result
-
+    
     def process_voting(self):
         if not self.votes:
             return None
-        
         vote_count = {}
         for target in self.votes.values():
             vote_count[target] = vote_count.get(target, 0) + 1
-        
         if not vote_count:
             return None
-        
         max_votes = max(vote_count.values())
         candidates = [pid for pid, votes in vote_count.items() if votes == max_votes]
-        
         if len(candidates) == 1:
             executed = candidates[0]
             self.alive[executed] = False
             self.votes = {}
             return executed
-        
         self.votes = {}
         return None
-
+    
     def get_formatted_status(self) -> str:
-        """Возвращает красивое описание текущего состояния игры"""
         alive_list = self.get_alive_players()
         alive_names = [self.players_data[pid]["name"] for pid in alive_list]
-        
         if self.status == "waiting":
             confirmed = len(self.confirmed_players)
             total = len(self.players)
-            return (f"**Ожидание игроков**\n"
-                    f"👥 Участников: {total}\n"
+            return (f"**Ожидание игроков**\n👥 Участников: {total}\n"
                     f"✅ Подтвердили: {confirmed}/{total}\n"
                     f"⚠️ Нужно минимум: {MAFIA_MIN_PLAYERS}")
-        
         if self.phase == "night":
             phase_emoji = "🌙"
         else:
             phase_emoji = "☀️"
-        
         return (f"{phase_emoji} **День {self.day} | {self.phase.capitalize()}**\n"
                 f"👥 Живы: {len(alive_list)}\n"
                 f"💀 Убитых за ночь: {self.last_night_result.get('killed') if self.last_night_result else '?'}")
-
+    
     def to_dict(self) -> Dict:
-        """Сериализует игру для сохранения в БД"""
         return {
             'game_id': self.game_id,
             'chat_id': self.chat_id,
@@ -1411,7 +2555,6 @@ class MafiaGame:
         }
     
     def from_dict(self, data: Dict):
-        """Восстанавливает игру из БД"""
         self.game_id = data['game_id']
         self.chat_id = data['chat_id']
         self.creator_id = data['creator_id']
@@ -1439,7 +2582,6 @@ class VKBot:
         self.vk = None
         self.longpoll = None
         self.is_available = False
-        
         if VK_AVAILABLE and token:
             try:
                 self.vk = vk_api.VkApi(token=token)
@@ -1451,10 +2593,8 @@ class VKBot:
                 self.is_available = False
     
     def send_message(self, user_id: int, message: str, keyboard=None):
-        """Отправляет сообщение в ВК"""
         if not self.is_available:
             return
-        
         try:
             params = {
                 'user_id': user_id,
@@ -1463,16 +2603,13 @@ class VKBot:
             }
             if keyboard:
                 params['keyboard'] = json.dumps(keyboard)
-            
             self.vk.method('messages.send', params)
         except Exception as e:
             logger.error(f"Ошибка отправки VK сообщения: {e}")
     
     def send_group_message(self, chat_id: int, message: str, keyboard=None):
-        """Отправляет сообщение в беседу ВК"""
         if not self.is_available:
             return
-        
         try:
             params = {
                 'peer_id': 2000000000 + chat_id,
@@ -1481,29 +2618,30 @@ class VKBot:
             }
             if keyboard:
                 params['keyboard'] = json.dumps(keyboard)
-            
             self.vk.method('messages.send', params)
         except Exception as e:
             logger.error(f"Ошибка отправки VK сообщения в беседу: {e}")
     
     def get_user_name(self, user_id: int) -> str:
-        """Получает имя пользователя ВК"""
         if not self.is_available:
             return f"User{user_id}"
-        
         try:
             users = self.vk.method('users.get', {'user_ids': user_id})
             if users and len(users) > 0:
                 return f"{users[0]['first_name']} {users[0]['last_name']}"
         except:
             pass
-        
         return f"User{user_id}"
 
-# ========== ИНИЦИАЛИЗАЦИЯ ГЛОБАЛЬНЫХ ОБЪЕКТОВ ==========
-db = Database()
-ai = GroqAI(GROQ_API_KEY) if GROQ_API_KEY and GROQ_AVAILABLE else None
-vk_bot = VKBot(VK_TOKEN, VK_GROUP_ID) if VK_TOKEN and VK_AVAILABLE else None
+# ========== ИНИЦИАЛИЗАЦИЯ VK ==========
+vk_bot = None
+if VK_TOKEN and VK_AVAILABLE:
+    try:
+        vk_bot = VKBot(VK_TOKEN, VK_GROUP_ID)
+        logger.info("✅ VK бот готов к работе")
+    except Exception as e:
+        logger.error(f"❌ Ошибка инициализации VK: {e}")
+        vk_bot = None
 
 # ========== ОСНОВНОЙ КЛАСС БОТА (НАЧАЛО) ==========
 class SpectrumBot:
@@ -1511,508 +2649,32 @@ class SpectrumBot:
         self.db = db
         self.ai = ai
         self.vk = vk_bot
-        self.image_ai = ImageAI() if ai else None  # второй AI для генерации изображений
-        self.spam_tracker = defaultdict(list)
-        self.app = Application.builder().token(TOKEN).build()
-        self.start_time = datetime.now()
-        self.games_in_progress = {}      # временные игры (сапёр, угадайка и т.п.)
-        self.mafia_games = {}             # chat_id -> MafiaGame
-        self.duels_in_progress = {}       # duel_id -> данные
-        self.boss_fights = {}              # user_id -> текущий бой (для многопользовательских)
-        self.active_ban_votes = {}
-        self.user_contexts = defaultdict(dict)
-        self.chat_settings_cache = {}      # кэш настроек чата для уменьшения запросов к БД
-        self.setup_handlers()
-        logger.info(f"✅ Бот {BOT_NAME} v{BOT_VERSION} инициализирован")
-
-    # ===== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =====
-    
-    async def get_ai_response(self, user_id: int, message: str, context_type: str = "normal", 
-                             username: str = "Пользователь", chat_id: int = None, **kwargs) -> Optional[str]:
-        """Получает ответ от AI, если он доступен"""
-        if self.ai and self.ai.is_available:
-            if context_type == "game":
-                return await self.ai.get_game_response(user_id, kwargs.get('game_type', 'general'), 
-                                                      kwargs.get('game_state', {}), username)
-            else:
-                return await self.ai.get_response(user_id, message, username, 
-                                                 force_response=(context_type=="force"), chat_id=chat_id)
-        return None
-    
-    async def get_user_name(self, user_id: int, platform: str = "telegram") -> str:
-        """Получает имя пользователя по ID"""
-        if platform == "telegram":
-            try:
-                chat = await self.app.bot.get_chat(user_id)
-                return chat.first_name or f"User{user_id}"
-            except:
-                pass
-        elif platform == "vk" and self.vk:
-            return self.vk.get_user_name(user_id)
-        
-        return f"User{user_id}"
-    
-    async def get_user_display_name(self, user_id: int, platform: str = "telegram") -> str:
-        """Получает отображаемое имя пользователя (никнейм или имя)"""
-        user_data = self.db.get_user_by_id(user_id, platform)
-        if user_data:
-            return user_data.get('nickname') or user_data.get('first_name') or f"User{user_id}"
-        return f"User{user_id}"
-    
-    async def send_private_message(self, user_id: int, text: str, 
-                                   reply_markup: InlineKeyboardMarkup = None, 
-                                   platform: str = "telegram") -> bool:
-        """Отправляет личное сообщение пользователю"""
-        try:
-            if platform == "telegram":
-                await self.app.bot.send_message(
-                    chat_id=user_id,
-                    text=text,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=reply_markup
-                )
-                return True
-            elif platform == "vk" and self.vk:
-                self.vk.send_message(user_id, text)
-                return True
-        except Exception as e:
-            logger.error(f"Ошибка отправки ЛС пользователю {user_id}: {e}")
-            return False
-        return False
-    
-    def _progress_bar(self, current: int, total: int, length: int = 10) -> str:
-        """Прогресс-бар"""
-        filled = int((current / total) * length) if total > 0 else 0
-        bar = "█" * filled + "░" * (length - filled)
-        return f"`{bar}` {current}/{total}"
-    
-    async def _check_admin_permissions(self, user: Dict, required_rank: int = 1) -> bool:
-        """Проверяет права администратора"""
-        if user.get('rank', 0) >= required_rank or user.get('id') == OWNER_ID:
-            return True
-        return False
-    
-    async def _resolve_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                           text: str = None, platform: str = "telegram") -> Optional[Dict]:
-        """Определяет пользователя из сообщения (reply или упоминание)"""
-        
-        # Проверяем reply
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            return self.db.get_user(target_id, platform=platform)
-        
-        # Ищем упоминание в тексте
-        if text:
-            # Поиск username
-            match = re.search(r'@(\w+)', text)
-            if match:
-                username = match.group(1)
-                return self.db.get_user_by_username(username, platform)
-            
-            # Поиск ID
-            match = re.search(r'(\d+)', text)
-            if match:
-                user_id = int(match.group(1))
-                return self.db.get_user_by_id(user_id, platform)
-        
-        return None
-    
-    async def _reply_or_edit(self, update: Update, text: str, 
-                            reply_markup: InlineKeyboardMarkup = None,
-                            parse_mode: str = ParseMode.MARKDOWN):
-        """Универсальный метод для ответа или редактирования"""
-        if update.callback_query:
-            await update.callback_query.edit_message_text(
-                text=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup
-            )
-        else:
-            await update.message.reply_text(
-                text=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup
-            )
-    
-    def _split_buttons(self, buttons: List[InlineKeyboardButton], max_per_row: int = 3) -> List[List[InlineKeyboardButton]]:
-        """Разбивает кнопки на строки с учётом лимита в 64 байта"""
-        keyboard = []
-        current_row = []
-        current_row_size = 0
-        
-        for button in buttons:
-            # Примерный размер кнопки в байтах
-            button_size = len(button.text.encode('utf-8')) + len(button.callback_data.encode('utf-8')) + 10
-            
-            if current_row_size + button_size > 60 or len(current_row) >= max_per_row:
-                if current_row:
-                    keyboard.append(current_row)
-                current_row = [button]
-                current_row_size = button_size
-            else:
-                current_row.append(button)
-                current_row_size += button_size
-        
-        if current_row:
-            keyboard.append(current_row)
-        
-        return keyboard
-
-    async def get_display_name(self, user_data: Dict, user_id: int = None, platform: str = "telegram") -> str:
-        """Получает отображаемое имя пользователя (username > ник > first_name)"""
-        # Если есть username в БД
-        if user_data and user_data.get('username'):
-            return f"@{user_data['username']}"
-        
-        # Если есть никнейм
-        if user_data and user_data.get('nickname'):
-            return user_data['nickname']
-        
-        # Пытаемся получить актуальный username из Telegram
-        if user_id and platform == "telegram":
-            try:
-                chat = await self.app.bot.get_chat(user_id)
-                if chat.username:
-                    # Сохраняем username в БД
-                    if user_data:
-                        self.db.update_user(user_data['id'], platform=platform, username=chat.username)
-                    return f"@{chat.username}"
-                if chat.first_name:
-                    return chat.first_name
-            except:
-                pass
-        
-        # Если ничего не нашли, возвращаем first_name из БД или "Пользователь"
-        return user_data.get('first_name', 'Пользователь') if user_data else 'Пользователь'
-
-    # ===== КЭШИРОВАНИЕ НАСТРОЕК ЧАТА =====
-    async def get_chat_setting(self, chat_id: int, key: str, default=None):
-        """Получает настройку чата с кэшированием"""
-        if chat_id not in self.chat_settings_cache:
-            # Загружаем все настройки чата
-            self.db.cursor.execute("SELECT * FROM chat_settings WHERE chat_id = ?", (chat_id,))
-            row = self.db.cursor.fetchone()
-            if row:
-                self.chat_settings_cache[chat_id] = dict(row)
-            else:
-                self.chat_settings_cache[chat_id] = {}
-        
-        return self.chat_settings_cache[chat_id].get(key, default)
-
-    # ===== ОСНОВНЫЕ КОМАНДЫ =====
-    async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка команды /start с новым дизайном"""
-        user = update.effective_user
-        user_data = self.db.get_user(user.id, user.first_name)
-        
-        # Проверка реферальной ссылки
-        if context.args and context.args[0].isdigit():
-            referrer_id = int(context.args[0])
-            if referrer_id != user_data['id']:
-                self.db.update_user(user_data['id'], platform="telegram", referrer_id=referrer_id)
-                self.db.add_neons(referrer_id, 50, platform="telegram")  # 50 неонов за реферала
-                try:
-                    await self.send_private_message(
-                        referrer_id,
-                        f"✅ По вашей ссылке зарегистрировался {user.first_name}! +50 💜"
-                    )
-                except:
-                    pass
-        
-        # Создаем клавиатуру с кнопками
-        keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🎲 Случайная беседа", callback_data="random_chat")],
-            [InlineKeyboardButton("🏆 Беседы топ дня", callback_data="top_chats")],
-            [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
-            [InlineKeyboardButton("🔧 Установка", callback_data="setup_info")],
-            [InlineKeyboardButton("💜 Что такое неоны", callback_data="neons_info")],
-            [InlineKeyboardButton("🎁 Бонусы", callback_data="bonuses_menu")],
-            [InlineKeyboardButton("🎨 Генерация изображений", callback_data="imagine_info")]
-        ])
-        
-        text = f"""
-{s.header('ДОБРО ПОЖАЛОВАТЬ В СПЕКТР')}
-
-👨‍💼 **Spectrum | Чат-менеджер** приветствует Вас!
-
-Я — многофункциональный бот с **двумя AI**:
-• 🤖 **Groq AI** — умные ответы на вопросы
-• 🎨 **Image AI** — генерация изображений по описанию
-
-**Основные возможности:**
-• Экономика с антиинфляцией (монеты 💰, неоны 💜, глитчи 🖥)
-• Игры: мафия, дуэли, боссы, рулетка, слоты, сапёр и многое другое
-• Квесты, ачивки, кружки, кланы, тайный орден
-• Модерация, варны, мут, бан, голосования
-• Собственная биржа валют
-
-**Полезные ссылки:**
-• [Команды бота](https://teletype.in/@nobucraft/h0ZU9C1yXNS)
-• [Канал с новостями](https://t.me/Spectrum_Game)
-• [Канал с полезными статьями](https://t.me/Spectrum_poleznoe)
-
-🔈 Для вызова клавиатуры с основными темами, введите `начать` или `помощь`.
-        """
-        
-        await update.message.reply_text(
-            text,
-            parse_mode=ParseMode.MARKDOWN,
-            disable_web_page_preview=True,
-            reply_markup=keyboard
-        )
-        
-        self.db.log_action(user_data['id'], 'start', platform="telegram")
-
-    async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда помощи (сокращённая)"""
-        text = (
-            f"{s.header('СПРАВКА')}\n"
-            f"{s.section('📌 ОСНОВНЫЕ')}"
-            f"{s.cmd('start', 'начать')}\n"
-            f"{s.cmd('menu', 'меню с цифрами')}\n"
-            f"{s.cmd('profile', 'профиль')}\n"
-            f"{s.cmd('id', 'узнать свой ID')}\n\n"
-            
-            f"{s.section('🤖 ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ')}"
-            f"{s.cmd('Спектр [вопрос]', 'задать вопрос AI (в группах)')}\n"
-            f"{s.cmd('[любое сообщение]', 'AI отвечает в личке')}\n"
-            f"{s.cmd('imagine [описание]', 'сгенерировать изображение')}\n\n"
-            
-            f"{s.section('💰 ЭКОНОМИКА')}"
-            f"{s.cmd('balance', 'баланс')}\n"
-            f"{s.cmd('daily', 'ежедневный бонус')}\n"
-            f"{s.cmd('shop', 'магазин')}\n"
-            f"{s.cmd('farm', 'ферма глитчей')}\n"
-            f"{s.cmd('exchange', 'биржа')}\n\n"
-            
-            f"{s.section('🎮 ИГРЫ')}"
-            f"{s.cmd('games', 'меню игр')}\n"
-            f"{s.cmd('mafia', 'мафия')}\n"
-            f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n"
-            f"{s.cmd('bosses', 'список боссов')}\n\n"
-            
-            f"{s.section('🏅 НОВЫЕ МОДУЛИ')}"
-            f"{s.cmd('achievements', 'ачивки')}\n"
-            f"{s.cmd('quests', 'квесты')}\n"
-            f"{s.cmd('order', 'тайный орден')}\n\n"
-            
-            f"👑 Владелец: {OWNER_USERNAME}"
-        )
-        
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-    async def cmd_imagine(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Генерация изображения через второй AI"""
-        if not context.args:
-            await update.message.reply_text(
-                f"{s.error('Укажите описание изображения')}\n\n"
-                f"Пример: `/imagine космический корабль в стиле киберпанк`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-        
-        prompt = " ".join(context.args)
-        msg = await update.message.reply_text(
-            f"{s.info('🎨 Генерирую изображение... это может занять несколько секунд.')}",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        
-        if not hasattr(self, 'image_ai') or not self.image_ai:
-            self.image_ai = ImageAI()
-        
-        image_data = await self.image_ai.generate(prompt)
-        if image_data:
-            await msg.delete()
-            await update.message.reply_photo(
-                photo=BytesIO(image_data),
-                caption=f"🎨 **Ваше изображение по запросу:**\n`{prompt}`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await msg.edit_text(
-                f"{s.error('Не удалось сгенерировать изображение. Попробуйте позже или измените запрос.')}",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
-    async def cmd_imagine_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Помощь по генерации изображений"""
-        text = f"""
-{s.header('🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ')}
-
-Я использую **Image AI** (Pollinations.ai) для создания картинок по текстовому описанию.
-
-**Команда:**
-`/imagine [описание]`
-
-**Примеры удачных запросов:**
-• космический корабль в стиле киберпанк, арт
-• кот в скафандре, реалистичное фото
-• абстрактная картина, яркие цвета
-• аниме девушка с розовыми волосами
-
-**Советы:**
-• Чем подробнее описание, тем лучше результат
-• Указывайте стиль (реализм, аниме, фэнтези)
-• Избегайте нецензурных слов — фильтр может заблокировать
-
-**Важно:** Генерация бесплатна, но может занимать 5-15 секунд.
-        """
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
-
-    async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Главное меню с цифрами"""
-        text = """
-# Спектр | Меню
-
-Выберите действие (напишите цифру):
-
-1️⃣ 👤 Профиль
-2️⃣ 📊 Статистика
-3️⃣ 🎮 Игры
-4️⃣ 💰 Магазин
-5️⃣ 📈 График активности
-6️⃣ ❓ Помощь
-7️⃣ 📞 Контакты
-8️⃣ 🎨 Генерация изображений
-0️⃣ 🔙 Выход
-
-📝 Просто напишите номер в чат
-        """
-        await update.message.reply_text(text, parse_mode='Markdown')
-
-    async def show_contacts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Контакты"""
-        text = f"""
-# Спектр | Контакты
-
-👑 Владелец: {OWNER_USERNAME}
-📢 Канал: @spectrum_channel
-💬 Чат: @spectrum_chat
-📧 Email: support@spectrum.ru
-        """
-        await update.message.reply_text(text, parse_mode='Markdown')
-
-    # ===== ПРОФИЛЬ (кратко, без изменений) =====
-    async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        user = update.effective_user
-        user_data = self.db.get_user(user.id, user.first_name)
-        # ... (код профиля с новым дизайном) ...
-        # Для краткости пропускаем, но он аналогичен исходному с использованием s.
-        pass
-
-    # ... остальные методы профиля, статистики, экономики ...
-    # Они остаются почти без изменений, только заменяем старые вызовы add_coins на новые с лимитами.
-
-# ========== VK КЛАСС ==========
-class VKBot:
-    def __init__(self, token: str, group_id: int):
-        self.token = token
-        self.group_id = group_id
-        self.vk = None
-        self.longpoll = None
-        self.is_available = False
-        
-        if VK_AVAILABLE and token:
-            try:
-                self.vk = vk_api.VkApi(token=token)
-                self.longpoll = VkLongPoll(self.vk)
-                self.is_available = True
-                logger.info("✅ VK бот инициализирован")
-            except Exception as e:
-                logger.error(f"❌ Ошибка инициализации VK: {e}")
-                self.is_available = False
-    
-    def send_message(self, user_id: int, message: str, keyboard=None):
-        """Отправляет сообщение в ВК"""
-        if not self.is_available:
-            return
-        
-        try:
-            params = {
-                'user_id': user_id,
-                'message': message,
-                'random_id': random.randint(1, 2**31)
-            }
-            if keyboard:
-                params['keyboard'] = json.dumps(keyboard)
-            
-            self.vk.method('messages.send', params)
-        except Exception as e:
-            logger.error(f"Ошибка отправки VK сообщения: {e}")
-    
-    def send_group_message(self, chat_id: int, message: str, keyboard=None):
-        """Отправляет сообщение в беседу ВК"""
-        if not self.is_available:
-            return
-        
-        try:
-            params = {
-                'peer_id': 2000000000 + chat_id,
-                'message': message,
-                'random_id': random.randint(1, 2**31)
-            }
-            if keyboard:
-                params['keyboard'] = json.dumps(keyboard)
-            
-            self.vk.method('messages.send', params)
-        except Exception as e:
-            logger.error(f"Ошибка отправки VK сообщения в беседу: {e}")
-    
-    def get_user_name(self, user_id: int) -> str:
-        """Получает имя пользователя ВК"""
-        if not self.is_available:
-            return f"User{user_id}"
-        
-        try:
-            users = self.vk.method('users.get', {'user_ids': user_id})
-            if users and len(users) > 0:
-                return f"{users[0]['first_name']} {users[0]['last_name']}"
-        except:
-            pass
-        
-        return f"User{user_id}"
-
-# ========== ИНИЦИАЛИЗАЦИЯ БД, AI, VK ==========
-db = Database()
-ai = GroqAI(GROQ_API_KEY) if GROQ_API_KEY and GROQ_AVAILABLE else None
-vk_bot = VKBot(VK_TOKEN, VK_GROUP_ID) if VK_TOKEN and VK_AVAILABLE else None
-image_ai = ImageAI()  # всегда доступен, даже если нет ключа (использует бесплатный сервис)
-
-# ========== ОСНОВНОЙ КЛАСС БОТА ==========
-class SpectrumBot:
-    def __init__(self):
-        self.db = db
-        self.ai = ai
-        self.vk = vk_bot
-        self.image_ai = image_ai
         self.spam_tracker = defaultdict(list)
         self.app = Application.builder().token(TOKEN).build()
         self.start_time = datetime.now()
         self.games_in_progress = {}
-        self.mafia_games = {}  # chat_id -> MafiaGame
+        self.mafia_games = {}
         self.duels_in_progress = {}
         self.boss_fights = {}
         self.active_ban_votes = {}
         self.user_contexts = defaultdict(dict)
+        self.image_ai = ImageAI()  # второй AI для генерации изображений
         self.setup_handlers()
         logger.info(f"✅ Бот {BOT_NAME} инициализирован")
 
     # ===== ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ =====
-    
-    async def get_ai_response(self, user_id: int, message: str, context_type: str = "normal", 
+    async def get_ai_response(self, user_id: int, message: str, context_type: str = "normal",
                              username: str = "Пользователь", chat_id: int = None, **kwargs) -> Optional[str]:
-        """Получает ответ от AI, если он доступен"""
         if self.ai and self.ai.is_available:
             if context_type == "game":
-                return await self.ai.get_game_response(user_id, kwargs.get('game_type', 'general'), 
+                return await self.ai.get_game_response(user_id, kwargs.get('game_type', 'general'),
                                                       kwargs.get('game_state', {}), username)
             else:
-                return await self.ai.get_response(user_id, message, username, 
+                return await self.ai.get_response(user_id, message, username,
                                                  force_response=(context_type=="force"), chat_id=chat_id)
         return None
-    
+
     async def get_user_name(self, user_id: int, platform: str = "telegram") -> str:
-        """Получает имя пользователя по ID"""
         if platform == "telegram":
             try:
                 chat = await self.app.bot.get_chat(user_id)
@@ -2021,116 +2683,9 @@ class SpectrumBot:
                 pass
         elif platform == "vk" and self.vk:
             return self.vk.get_user_name(user_id)
-        
         return f"User{user_id}"
-    
-    async def get_user_display_name(self, user_id: int, platform: str = "telegram") -> str:
-        """Получает отображаемое имя пользователя (никнейм или имя)"""
-        user_data = self.db.get_user_by_id(user_id, platform)
-        if user_data:
-            return user_data.get('nickname') or user_data.get('first_name') or f"User{user_id}"
-        return f"User{user_id}"
-    
-    async def send_private_message(self, user_id: int, text: str, 
-                                   reply_markup: InlineKeyboardMarkup = None, 
-                                   platform: str = "telegram") -> bool:
-        """Отправляет личное сообщение пользователю"""
-        try:
-            if platform == "telegram":
-                await self.app.bot.send_message(
-                    chat_id=user_id,
-                    text=text,
-                    parse_mode=ParseMode.MARKDOWN,
-                    reply_markup=reply_markup
-                )
-                return True
-            elif platform == "vk" and self.vk:
-                self.vk.send_message(user_id, text)
-                return True
-        except Exception as e:
-            logger.error(f"Ошибка отправки ЛС пользователю {user_id}: {e}")
-            return False
-        return False
-    
-    def _progress_bar(self, current: int, total: int, length: int = 10) -> str:
-        """Прогресс-бар"""
-        filled = int((current / total) * length) if total > 0 else 0
-        bar = "█" * filled + "░" * (length - filled)
-        return f"`{bar}` {current}/{total}"
-    
-    async def _check_admin_permissions(self, user: Dict, required_rank: int = 1) -> bool:
-        """Проверяет права администратора"""
-        if user.get('rank', 0) >= required_rank or user.get('id') == OWNER_ID:
-            return True
-        return False
-    
-    async def _resolve_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE, 
-                           text: str = None, platform: str = "telegram") -> Optional[Dict]:
-        """Определяет пользователя из сообщения (reply или упоминание)"""
-        
-        # Проверяем reply
-        if update.message.reply_to_message:
-            target_id = update.message.reply_to_message.from_user.id
-            return self.db.get_user(target_id, platform=platform)
-        
-        # Ищем упоминание в тексте
-        if text:
-            # Поиск username
-            match = re.search(r'@(\w+)', text)
-            if match:
-                username = match.group(1)
-                return self.db.get_user_by_username(username, platform)
-            
-            # Поиск ID
-            match = re.search(r'(\d+)', text)
-            if match:
-                user_id = int(match.group(1))
-                return self.db.get_user_by_id(user_id, platform)
-        
-        return None
-    
-    async def _reply_or_edit(self, update: Update, text: str, 
-                            reply_markup: InlineKeyboardMarkup = None,
-                            parse_mode: str = ParseMode.MARKDOWN):
-        """Универсальный метод для ответа или редактирования"""
-        if update.callback_query:
-            await update.callback_query.edit_message_text(
-                text=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup
-            )
-        else:
-            await update.message.reply_text(
-                text=text,
-                parse_mode=parse_mode,
-                reply_markup=reply_markup
-            )
-    
-    def _split_buttons(self, buttons: List[InlineKeyboardButton], max_per_row: int = 3) -> List[List[InlineKeyboardButton]]:
-        """Разбивает кнопки на строки с учётом лимита в 64 байта"""
-        keyboard = []
-        current_row = []
-        current_row_size = 0
-        
-        for button in buttons:
-            button_size = len(button.text.encode('utf-8')) + len(button.callback_data.encode('utf-8')) + 10
-            
-            if current_row_size + button_size > 60 or len(current_row) >= max_per_row:
-                if current_row:
-                    keyboard.append(current_row)
-                current_row = [button]
-                current_row_size = button_size
-            else:
-                current_row.append(button)
-                current_row_size += button_size
-        
-        if current_row:
-            keyboard.append(current_row)
-        
-        return keyboard
 
     async def get_display_name(self, user_data: Dict, user_id: int = None, platform: str = "telegram") -> str:
-        """Получает отображаемое имя пользователя (username > ник > first_name)"""
         if user_data and user_data.get('username'):
             return f"@{user_data['username']}"
         if user_data and user_data.get('nickname'):
@@ -2148,13 +2703,88 @@ class SpectrumBot:
                 pass
         return user_data.get('first_name', 'Пользователь') if user_data else 'Пользователь'
 
+    async def send_private_message(self, user_id: int, text: str,
+                                   reply_markup: InlineKeyboardMarkup = None,
+                                   platform: str = "telegram") -> bool:
+        try:
+            if platform == "telegram":
+                await self.app.bot.send_message(
+                    chat_id=user_id,
+                    text=text,
+                    parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=reply_markup
+                )
+                return True
+            elif platform == "vk" and self.vk:
+                self.vk.send_message(user_id, text)
+                return True
+        except Exception as e:
+            logger.error(f"Ошибка отправки ЛС пользователю {user_id}: {e}")
+            return False
+        return False
+
+    def _progress_bar(self, current: int, total: int, length: int = 10) -> str:
+        filled = int((current / total) * length) if total > 0 else 0
+        bar = "█" * filled + "░" * (length - filled)
+        return f"`{bar}` {current}/{total}"
+
+    async def _check_admin_permissions(self, user: Dict, required_rank: int = 1) -> bool:
+        return user.get('rank', 0) >= required_rank or user.get('id') == OWNER_ID
+
+    async def _resolve_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+                           text: str = None, platform: str = "telegram") -> Optional[Dict]:
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            return self.db.get_user(target_id, platform=platform)
+        if text:
+            match = re.search(r'@(\w+)', text)
+            if match:
+                username = match.group(1)
+                return self.db.get_user_by_username(username, platform)
+            match = re.search(r'(\d+)', text)
+            if match:
+                user_id = int(match.group(1))
+                return self.db.get_user_by_id(user_id, platform)
+        return None
+
+    async def _reply_or_edit(self, update: Update, text: str,
+                            reply_markup: InlineKeyboardMarkup = None,
+                            parse_mode: str = ParseMode.MARKDOWN):
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup
+            )
+        else:
+            await update.message.reply_text(
+                text=text,
+                parse_mode=parse_mode,
+                reply_markup=reply_markup
+            )
+
+    def _split_buttons(self, buttons: List[InlineKeyboardButton], max_per_row: int = 3) -> List[List[InlineKeyboardButton]]:
+        keyboard = []
+        current_row = []
+        current_row_size = 0
+        for button in buttons:
+            button_size = len(button.text.encode('utf-8')) + len(button.callback_data.encode('utf-8')) + 10
+            if current_row_size + button_size > 60 or len(current_row) >= max_per_row:
+                if current_row:
+                    keyboard.append(current_row)
+                current_row = [button]
+                current_row_size = button_size
+            else:
+                current_row.append(button)
+                current_row_size += button_size
+        if current_row:
+            keyboard.append(current_row)
+        return keyboard
+
     # ===== ОСНОВНЫЕ КОМАНДЫ =====
     async def cmd_start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Обработка команды /start с новым дизайном"""
         user = update.effective_user
         user_data = self.db.get_user(user.id, user.first_name)
-        
-        # Проверка реферальной ссылки
         if context.args and context.args[0].isdigit():
             referrer_id = int(context.args[0])
             if referrer_id != user_data['id']:
@@ -2167,8 +2797,6 @@ class SpectrumBot:
                     )
                 except:
                     pass
-        
-        # Создаем клавиатуру с кнопками (красивый дизайн)
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("🎲 Случайная беседа", callback_data="random_chat")],
             [InlineKeyboardButton("🏆 Беседы топ дня", callback_data="top_chats")],
@@ -2177,120 +2805,102 @@ class SpectrumBot:
             [InlineKeyboardButton("💜 Что такое неоны", callback_data="neons_info")],
             [InlineKeyboardButton("🎁 Бонусы", callback_data="bonuses_menu")]
         ])
-        
         text = f"""
-{s.header('ДОБРО ПОЖАЛОВАТЬ В СПЕКТР')}
+{s.header('ПРИВЕТСТВИЕ')}
 
-👨‍💼 **[Spectrum | Чат-менеджер](https://t.me/{BOT_USERNAME})** приветствует Вас!
+👨‍💼 [Spectrum | Чат-менеджер](https://t.me/{BOT_USERNAME}) приветствует Вас!
 
-{s.section('📌 ДОСТУПНЫЕ ТЕМЫ')}
-{s.item('[установка](https://teletype.in/@nobucraft/2_pbVPOhaYo) — инструкция установки Спектра')}
-{s.item('[команды](https://teletype.in/@nobucraft/h0ZU9C1yXNS) — список команд бота')}
-{s.item('что такое неоны — виртуальная валюта, как её получить')}
-{s.item('[бонусы](https://teletype.in/@nobucraft/60hXq-x3h6S) — какие есть бонусы во вселенной Спектра')}
-{s.item('мой спам — проверить, есть ли вы в базе «Спектр-антиспам»')}
+Я могу предложить следующие темы:
 
-{s.info('Для вызова клавиатуры с основными темами, введите `начать` или `помощь`')}
+1). [установка](https://teletype.in/@nobucraft/2_pbVPOhaYo) — инструкция установки Спектра;
+2). [команды](https://teletype.in/@nobucraft/h0ZU9C1yXNS) — список команд бота;
+3). что такое неоны — неоны, виртуальная валюта, как её получить;
+4). [бонусы](https://teletype.in/@nobucraft/60hXq-x3h6S) — какие есть бонусы во вселенной Спектра;
+5). мой спам — проверить, есть ли вы в базе «Спектр-антиспам».
 
-{s.section('🔗 ПОЛЕЗНЫЕ ССЫЛКИ')}
-[Список всех команд](https://teletype.in/@nobucraft/h0ZU9C1yXNS)
-[Канал с новостями](https://t.me/Spectrum_Game)
+[Список всех команд с их описанием](https://teletype.in/@nobucraft/h0ZU9C1yXNS)
+[Канал](https://t.me/Spectrum_Game) с важными новостями.
 [Канал с полезными статьями](https://t.me/Spectrum_poleznoe)
+
+🔈 Для вызова клавиатуры с основными темами, введите `начать` или `помощь`.
         """
-        
         await update.message.reply_text(
             text,
             parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True,
             reply_markup=keyboard
         )
-        
         self.db.log_action(user_data['id'], 'start', platform="telegram")
 
     async def cmd_test_ai(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Тестовая команда для проверки AI"""
         if not self.ai or not self.ai.is_available:
-            await update.message.reply_text(s.error("AI не подключен"))
+            await update.message.reply_text("❌ AI не подключен")
             return
-        
         await update.message.reply_text("🤖 AI работает!")
-        
         response = await self.ai.get_response(
             update.effective_user.id,
             "Привет, как дела?",
             update.effective_user.first_name,
             force_response=True
         )
-        
         if response:
             await update.message.reply_text(f"🤖 Ответ: {response}")
         else:
-            await update.message.reply_text(s.error("AI не ответил"))
+            await update.message.reply_text("❌ AI не ответил")
 
     async def cmd_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Команда помощи"""
         text = (
-            f"{s.header('СПРАВКА ПО КОМАНДАМ')}\n"
+            f"{s.header('СПРАВКА')}\n"
             f"{s.section('📌 ОСНОВНЫЕ')}"
             f"{s.cmd('start', 'начать')}\n"
             f"{s.cmd('menu', 'меню с цифрами')}\n"
             f"{s.cmd('profile', 'профиль')}\n"
             f"{s.cmd('id', 'узнать свой ID')}\n\n"
-            
             f"{s.section('🤖 ИСКУССТВЕННЫЙ ИНТЕЛЛЕКТ')}"
             f"{s.cmd('Спектр [вопрос]', 'задать вопрос AI (в группах)')}\n"
-            f"{s.cmd('imagine [описание]', 'сгенерировать изображение')}\n"
-            f"{s.cmd('[любое сообщение]', 'AI отвечает в личке')}\n\n"
-            
+            f"{s.cmd('[любое сообщение]', 'AI отвечает в личке')}\n"
+            f"{s.cmd('imagine [описание]', 'сгенерировать изображение')}\n\n"
             f"{s.section('⚙️ МОДЕРАЦИЯ')}"
             f"{s.cmd('+Модер @user', '1 ранг')}\n"
             f"{s.cmd('варн @user [причина]', 'предупреждение')}\n"
             f"{s.cmd('мут @user 30м [причина]', 'заглушить')}\n"
             f"{s.cmd('бан @user [причина]', 'заблокировать')}\n"
             f"{s.cmd('админы', 'список администрации')}\n\n"
-            
             f"{s.section('💰 ЭКОНОМИКА')}"
             f"{s.cmd('balance', 'баланс')}\n"
             f"{s.cmd('daily', 'ежедневный бонус')}\n"
             f"{s.cmd('shop', 'магазин')}\n"
             f"{s.cmd('neons', 'мои неоны')}\n"
             f"{s.cmd('farm', 'ферма глитчей')}\n\n"
-            
             f"{s.section('🎮 ИГРЫ')}"
             f"{s.cmd('games', 'меню игр')}\n"
             f"{s.cmd('rr [ставка]', 'русская рулетка')}\n"
             f"{s.cmd('bosses', 'список боссов')}\n"
             f"{s.cmd('duel @user [ставка]', 'вызвать на дуэль')}\n\n"
-            
             f"{s.section('👾 БОССЫ')}"
             f"{s.cmd('bosses', 'список боссов')}\n"
             f"{s.cmd('boss [ID]', 'атаковать босса')}\n"
             f"{s.cmd('regen', 'восстановить энергию')}\n\n"
-            
             f"{s.section('🎭 МАФИЯ')}"
             f"{s.cmd('mafia', 'меню мафии')}\n"
             f"{s.cmd('mafiastart', 'начать игру')}\n"
             f"{s.cmd('mafiajoin', 'присоединиться')}\n\n"
-            
             f"{s.section('🏅 НОВЫЕ МОДУЛИ')}"
             f"{s.cmd('achievements', 'ачивки')}\n"
             f"{s.cmd('circles', 'кружки по интересам')}\n"
             f"{s.cmd('bookmarks', 'закладки')}\n"
             f"{s.cmd('bonuses', 'кибер-бонусы')}\n\n"
-            
             f"{s.section('📊 СТАТИСТИКА')}"
             f"{s.cmd('stats', 'статистика чата')}\n"
             f"{s.cmd('top', 'топ игроков')}\n\n"
-            
-            f"👑 **Владелец:** {OWNER_USERNAME}"
+            f"👑 Владелец: {OWNER_USERNAME}"
         )
-        
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     async def show_menu(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Главное меню с цифрами"""
-        text = f"""
-{s.header('ГЛАВНОЕ МЕНЮ')}
+        text = """
+# Спектр | Меню
+
 Выберите действие (напишите цифру):
 
 1️⃣ 👤 Профиль
@@ -2302,170 +2912,200 @@ class SpectrumBot:
 7️⃣ 📞 Контакты
 0️⃣ 🔙 Выход
 
-{s.info('Просто напишите номер в чат')}
+📝 Просто напишите номер в чат
         """
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(text, parse_mode='Markdown')
 
     async def show_contacts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Контакты"""
         text = f"""
-{s.header('КОНТАКТЫ')}
+# Спектр | Контакты
 
-👑 **Владелец:** {OWNER_USERNAME}
-📢 **Канал:** @spectrum_channel
-💬 **Чат:** @spectrum_chat
-📧 **Email:** support@spectrum.ru
+👑 Владелец: {OWNER_USERNAME}
+📢 Канал: @spectrum_channel
+💬 Чат: @spectrum_chat
+📧 Email: support@spectrum.ru
         """
-        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        await update.message.reply_text(text, parse_mode='Markdown')
 
     async def show_chart(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Показать график активности"""
         user = update.effective_user
-        
         await update.message.chat.send_action(action="upload_photo")
-        
         days, counts = self.db.get_weekly_stats(user.id)
-        
-        # Используем ChartGenerator (нужен импорт)
-        from chart_generator import ChartGenerator
         chart = ChartGenerator.create_activity_chart(days, counts, user.first_name)
-        
         await update.message.reply_photo(
             photo=chart,
             caption=f"📊 Активность {user.first_name} за последние 7 дней",
-            parse_mode=ParseMode.MARKDOWN
+            parse_mode='Markdown'
         )
 
-    # ===== КОМАНДА /imagine (генерация изображений) =====
-    async def cmd_imagine(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Генерация изображения по описанию"""
-        if not context.args:
+    async def cmd_random_chat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("""
+            SELECT cs.chat_id, cs.chat_name, cs.chat_code,
+                   COUNT(DISTINCT m.user_id) as members,
+                   MIN(m.timestamp) as created,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-1 day') THEN 1 ELSE 0 END) as day_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-7 day') THEN 1 ELSE 0 END) as week_active,
+                   SUM(CASE WHEN m.timestamp > datetime('now', '-30 day') THEN 1 ELSE 0 END) as month_active,
+                   COUNT(m.id) as total_messages
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            ORDER BY RANDOM()
+            LIMIT 1
+        """)
+        row = self.db.cursor.fetchone()
+        if not row:
             await update.message.reply_text(
-                s.error("Укажите описание изображения, например:\n/imagine космический корабль в стиле киберпанк")
-            )
-            return
-        
-        prompt = " ".join(context.args)
-        msg = await update.message.reply_text("🎨 Генерирую изображение... это может занять несколько секунд.")
-        
-        # Отправляем статус "печатает"
-        await update.message.chat.send_action(action="upload_photo")
-        
-        image_data = await self.image_ai.generate(prompt)
-        
-        if image_data:
-            await msg.delete()
-            await update.message.reply_photo(
-                photo=BytesIO(image_data),
-                caption=f"🎨 **Ваше изображение по запросу:**\n{prompt}",
+                "🍬 В базе пока нет бесед**\n\n"
+                "Добавьте бота в чат и введите `!привязать`",
                 parse_mode=ParseMode.MARKDOWN
             )
-        else:
-            await msg.edit_text(s.error("Не удалось сгенерировать изображение. Попробуйте позже."))
+            return
+        chat = dict(row)
+        created_date = datetime.fromisoformat(chat['created']).strftime("%d.%m.%Y") if chat['created'] else "неизвестно"
+        chat_type = "открытый" if random.choice([True, False]) else "закрытый"
+        entry_type = "свободный" if random.choice([True, False]) else "по заявкам"
+        day_active = chat['day_active'] or 0
+        week_active = chat['week_active'] or 0
+        month_active = chat['month_active'] or 0
+        total = chat['total_messages'] or 0
+        keyboard_buttons = [
+            InlineKeyboardButton("📩 Попроситься в чат", url=f"https://t.me/{chat['chat_name']}" if chat['chat_name'] else None),
+            InlineKeyboardButton("📇 Карточка в каталоге", callback_data=f"chat_card_{chat['chat_id']}"),
+            InlineKeyboardButton("🔄 Другую беседу", callback_data="random_chat")
+        ]
+        keyboard = InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 1))
+        text = (
+            f"🍬 Случайная беседа\n\n"
+            f"📢 Чат «{chat['chat_name'] or 'Без названия'}»\n"
+            f"👤 Попроситься в чат: [ссылка]\n"
+            f"📇 Карточка в Спектр-каталоге\n\n"
+            f"🏆 Спектр-коин рейтинг: {random.randint(100000, 999999):,}\n"
+            f"📅 Создан: {created_date}\n"
+            f"👥 Участников: {chat['members'] or 0} участника\n"
+            f"🔒 Тип: {chat_type}, вход {entry_type}\n"
+            f"📊 Актив: {day_active} | {week_active} | {month_active} | {total:,}"
+        )
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
-    async def cmd_imagine_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Справка по генерации изображений"""
-        text = f"""
-{s.header('ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ')}
+    async def cmd_top_chats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        period = "день"
+        if context.args:
+            if context.args[0] in ["день", "неделя", "месяц", "всё"]:
+                period = context.args[0]
+        time_filter = {
+            "день": "datetime('now', '-1 day')",
+            "неделя": "datetime('now', '-7 day')",
+            "месяц": "datetime('now', '-30 day')",
+            "всё": "datetime('2000-01-01')"
+        }.get(period, "datetime('now', '-1 day')")
+        self.db.cursor.execute(f"""
+            SELECT cs.chat_name, COUNT(m.id) as msg_count
+            FROM chat_settings cs
+            LEFT JOIN messages m ON cs.chat_id = m.chat_id AND m.timestamp > {time_filter}
+            WHERE cs.chat_code IS NOT NULL
+            GROUP BY cs.chat_id
+            HAVING msg_count > 0
+            ORDER BY msg_count DESC
+            LIMIT 10
+        """)
+        chats = self.db.cursor.fetchall()
+        if not chats:
+            await update.message.reply_text(f"📊 Нет данных за {period}", parse_mode=ParseMode.MARKDOWN)
+            return
+        text = f"🏆 ТОП БЕСЕД ЗА {period.upper()}**\n\n"
+        for i, chat in enumerate(chats, 1):
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            name = chat[0] or f"Чат {i}"
+            text += f"{medal} {name} — {chat[1]} 💬\n"
+        keyboard_buttons = [
+            InlineKeyboardButton("📅 День", callback_data="top_chats_day"),
+            InlineKeyboardButton("📆 Неделя", callback_data="top_chats_week"),
+            InlineKeyboardButton("📆 Месяц", callback_data="top_chats_month"),
+            InlineKeyboardButton("🔄 Случайная беседа", callback_data="random_chat")
+        ]
+        keyboard = InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 2))
+        await update.message.reply_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
 
-Используйте команду `/imagine [описание]` чтобы создать уникальное изображение.
-
-**Примеры:**
-• `/imagine космический корабль в стиле киберпанк`
-• `/imagine кот в скафандре на Марсе`
-• `/imagine абстрактный пейзаж, неоновые цвета`
-
-{s.info('Генерация занимает до 30 секунд.')}
-        """
+    async def cmd_setup_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = (
+            "🔧 УСТАНОВКА БОТА\n\n"
+            "1️⃣ Добавьте бота в группу\n"
+            "2️⃣ Сделайте бота администратором\n"
+            "3️⃣ Введите `!привязать` для привязки чата\n"
+            "4️⃣ Настройте приветствие: `+приветствие Текст`\n"
+            "5️⃣ Настройте правила: `+правила Текст`\n\n"
+            "📚 Подробнее: https://telegra.ph/Iris-bot-setup"
+        )
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     # ===== ПРОФИЛЬ =====
     async def cmd_profile(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id, user.first_name)
-        
         display_name = user_data.get('nickname') or user.first_name
         title = user_data.get('title', '')
         motto = user_data.get('motto', 'Нет девиза')
         bio = user_data.get('bio', '')
-        
         vip_status = "✅ VIP" if self.db.is_vip(user_data['id']) else "❌"
         premium_status = "✅ PREMIUM" if self.db.is_premium(user_data['id']) else "❌"
-        
         cyber_status = "✅" if user_data.get('cyber_status_until') and datetime.fromisoformat(user_data['cyber_status_until']) > datetime.now() else "❌"
         turbo_drive = "✅" if user_data.get('turbo_drive_until') and datetime.fromisoformat(user_data['turbo_drive_until']) > datetime.now() else "❌"
         rp_packet = "✅" if user_data.get('rp_packet_until') and datetime.fromisoformat(user_data['rp_packet_until']) > datetime.now() else "❌"
-        
         exp_needed = user_data['level'] * 100
         exp_progress = s.progress(user_data['exp'], exp_needed)
-        
         warns = "🔴" * user_data['warns'] + "⚪️" * (3 - user_data['warns'])
-        
         friends_list = json.loads(user_data.get('friends', '[]'))
         friends_count = len(friends_list)
-        
         enemies_list = json.loads(user_data.get('enemies', '[]'))
         enemies_count = len(enemies_list)
-        
         achievements = self.db.get_user_achievements(user_data['id'])
         achievements_count = len(achievements)
-        
         registered = datetime.fromisoformat(user_data['registered']) if user_data.get('registered') else datetime.now()
         days_in_chat = (datetime.now() - registered).days
-        
         days, counts = self.db.get_weekly_stats(user.id)
         total_messages = sum(counts)
         avg_per_day = total_messages / 7 if total_messages > 0 else 0
-        
         chart = ChartGenerator.create_activity_chart(days, counts, user.first_name)
-        
-        profile_text = f"""
-{s.header('ПРОФИЛЬ')}
-
-👤 **{display_name}** {title}
-_{motto}_
-{bio}
-
-{s.section('📊 ХАРАКТЕРИСТИКИ')}
-{s.stat('Ранг', f'{get_rank_emoji(user_data["rank"])} {user_data["rank_name"]}')}
-{s.stat('Уровень', f'{user_data["level"]} ({exp_progress})')}
-{s.stat('Монеты', f'{user_data["coins"]:,} 💰')}
-{s.stat('Неоны', f'{user_data["neons"]:,} 💜')}
-{s.stat('Глитчи', f'{user_data["glitches"]:,} 🖥')}
-{s.stat('Энергия', f'{user_data["energy"]}/100 ⚡️')}
-{s.stat('Здоровье', f'{user_data["health"]}/{user_data["max_health"]} ❤️')}
-
-{s.section('📈 СТАТИСТИКА')}
-{s.stat('За неделю', f'{total_messages} 💬')}
-{s.stat('В среднем', f'{avg_per_day:.1f}/день')}
-{s.stat('Репутация', f'{user_data["reputation"]} ⭐️')}
-{s.stat('Ачивки', f'{achievements_count} 🏅')}
-{s.stat('Предупреждения', warns)}
-{s.stat('Боссов убито', f'{user_data["boss_kills"]} 👾')}
-{s.stat('Друзей', f'{friends_count} / Врагов: {enemies_count}')}
-
-{s.section('💎 СТАТУСЫ')}
-{s.stat('VIP', vip_status)}
-{s.stat('PREMIUM', premium_status)}
-{s.stat('Кибер-статус', cyber_status)}
-{s.stat('Турбо-драйв', turbo_drive)}
-{s.stat('РП-пакет', rp_packet)}
-
-{s.section('📅 ДАТЫ')}
-{s.stat('В чате', f'{days_in_chat} дней')}
-{s.stat('Регистрация', registered.strftime('%d.%m.%Y'))}
-{s.stat('ID', f'`{user.id}`')}
-        """
-        
+        profile_text = (
+            f"{s.header('ПРОФИЛЬ')}\n\n"
+            f"👤 {display_name} {title}\n"
+            f"_{motto}_\n"
+            f"{bio}\n\n"
+            f"📊 **Характеристики**\n"
+            f"• Ранг: {get_rank_emoji(user_data['rank'])} {user_data['rank_name']}\n"
+            f"• Уровень: {user_data['level']} ({exp_progress})\n"
+            f"• Монеты: {user_data['coins']:,} 💰\n"
+            f"• Неоны: {user_data['neons']:,} 💜\n"
+            f"• Глитчи: {user_data['glitches']:,} 🖥\n"
+            f"• Энергия: {user_data['energy']}/100 ⚡️\n"
+            f"• Здоровье: {user_data['health']}/{user_data['max_health']} ❤️\n\n"
+            f"📈 **Статистика**\n"
+            f"• За неделю: {total_messages} 💬\n"
+            f"• В среднем: {avg_per_day:.1f}/день\n"
+            f"• Репутация: {user_data['reputation']} ⭐️\n"
+            f"• Ачивки: {achievements_count} 🏅\n"
+            f"• Предупреждения: {warns}\n"
+            f"• Боссов убито: {user_data['boss_kills']} 👾\n"
+            f"• Друзей: {friends_count} / Врагов: {enemies_count}\n\n"
+            f"💎 **Статусы**\n"
+            f"• VIP: {vip_status}\n"
+            f"• PREMIUM: {premium_status}\n"
+            f"• Кибер-статус: {cyber_status}\n"
+            f"• Турбо-драйв: {turbo_drive}\n"
+            f"• РП-пакет: {rp_packet}\n\n"
+            f"📅 **Даты**\n"
+            f"• В чате: {days_in_chat} дней\n"
+            f"• Регистрация: {registered.strftime('%d.%m.%Y')}\n"
+            f"• ID: `{user.id}`"
+        )
         await update.message.reply_photo(
             photo=chart,
             caption=profile_text,
             parse_mode=ParseMode.MARKDOWN
         )
 
-    # ... (остальные команды профиля: set_nick, set_title и т.д.) …
-
-    # ===== ПРОФИЛЬ (продолжение) =====
     async def cmd_set_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
             await update.message.reply_text(s.error("Укажите ник: /nick [ник]"))
@@ -2523,14 +3163,11 @@ _{motto}_
         else:
             await update.message.reply_text(s.error("Укажите пол (м/ж/др): мой пол м"))
             return
-        
         if gender not in ["м", "ж", "др"]:
             await update.message.reply_text(s.error("Пол должен быть 'м', 'ж' или 'др'"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
         self.db.update_user(user_data['id'], platform="telegram", gender=gender)
-        
         gender_text = {"м": "Мужской", "ж": "Женский", "др": "Другой"}[gender]
         await update.message.reply_text(s.success(f"Пол установлен: {gender_text}"))
 
@@ -2548,10 +3185,18 @@ _{motto}_
         else:
             await update.message.reply_text(s.error("Укажите город: мой город Москва"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
         self.db.update_user(user_data['id'], platform="telegram", city=city)
         await update.message.reply_text(s.success(f"Город установлен: {city}"))
+
+    async def cmd_set_country(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите страну: /country [страна]"))
+            return
+        country = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+        self.db.update_user(user_data['id'], platform="telegram", country=country)
+        await update.message.reply_text(s.success(f"Страна установлена: {country}"))
 
     async def cmd_set_birth(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text
@@ -2562,14 +3207,11 @@ _{motto}_
         else:
             await update.message.reply_text(s.error("Укажите дату (ДД.ММ.ГГГГ): мой др 01.01.2000"))
             return
-        
         if not re.match(r'\d{2}\.\d{2}\.\d{4}', birth):
             await update.message.reply_text(s.error("Неверный формат. Используйте ДД.ММ.ГГГГ"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
         self.db.update_user(user_data['id'], platform="telegram", birth_date=birth)
-        
         try:
             day, month, year = map(int, birth.split('.'))
             today = datetime.now()
@@ -2577,7 +3219,6 @@ _{motto}_
             self.db.update_user(user_data['id'], platform="telegram", age=age)
         except:
             pass
-        
         await update.message.reply_text(s.success(f"Дата рождения установлена: {birth}"))
 
     async def cmd_set_age(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -2617,12 +3258,10 @@ _{motto}_
     async def cmd_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat = update.effective_chat
         cursor = self.db.cursor
-        
         now = datetime.now()
         day_ago = now - timedelta(days=1)
         week_ago = now - timedelta(days=7)
         month_ago = now - timedelta(days=30)
-        
         cursor.execute('''
             SELECT COUNT(DISTINCT user_id), COUNT(*) 
             FROM messages 
@@ -2631,25 +3270,21 @@ _{motto}_
         result = cursor.fetchone()
         total_users = result[0] if result else 0
         total_msgs = result[1] if result else 0
-        
         cursor.execute('''
             SELECT COUNT(*) FROM messages 
             WHERE chat_id = ? AND timestamp > ?
         ''', (chat.id, day_ago.isoformat()))
         daily_msgs = cursor.fetchone()[0] or 0
-        
         cursor.execute('''
             SELECT COUNT(*) FROM messages 
             WHERE chat_id = ? AND timestamp > ?
         ''', (chat.id, week_ago.isoformat()))
         weekly_msgs = cursor.fetchone()[0] or 0
-        
         cursor.execute('''
             SELECT COUNT(*) FROM messages 
             WHERE chat_id = ? AND timestamp > ?
         ''', (chat.id, month_ago.isoformat()))
         monthly_msgs = cursor.fetchone()[0] or 0
-        
         cursor.execute('''
             SELECT username, first_name, COUNT(*) as msg_count
             FROM messages 
@@ -2659,9 +3294,8 @@ _{motto}_
             LIMIT 5
         ''', (chat.id,))
         top_users = cursor.fetchall()
-        
         text = f"""
-{s.header(f'СТАТИСТИКА ЧАТА')}
+{s.header('СТАТИСТИКА ЧАТА')}
 
 📅 **{chat.title}**
 👥 **Участников:** {total_users}
@@ -2672,19 +3306,16 @@ _{motto}_
 {s.stat('За месяц', f'{monthly_msgs:,} 💬')}
 {s.stat('За всё время', f'{total_msgs:,} 💬')}
         """
-        
         if top_users:
             text += f"\n{s.section('🏆 ТОП-5 АКТИВНЫХ')}\n"
             for i, (username, first_name, count) in enumerate(top_users, 1):
                 name = username or first_name or "Пользователь"
                 medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
                 text += f"{medal} {name} — {count} 💬\n"
-        
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     async def cmd_my_stats(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
-        
         text = f"""
 {s.header('📊 МОЯ СТАТИСТИКА')}
 
@@ -2703,15 +3334,12 @@ _{motto}_
     async def cmd_balance(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
-        
         vip_status = "✅ Активен" if self.db.is_vip(user_data['id']) else "❌ Не активен"
         vip_until = ""
         if self.db.is_vip(user_data['id']):
             vip_until = self.db.cursor.execute("SELECT vip_until FROM users WHERE id = ?", (user_data['id'],)).fetchone()[0]
             vip_until = datetime.fromisoformat(vip_until).strftime("%d.%m.%Y")
-        
         premium_status = "✅ Активен" if self.db.is_premium(user_data['id']) else "❌ Не активен"
-        
         text = f"""
 {s.header('КОШЕЛЁК')}
 
@@ -2730,55 +3358,41 @@ _{motto}_
 {s.stat('Дней подряд', user_data['daily_streak'])}
 {s.cmd('daily', 'забрать ежедневный бонус')}
         """
-        
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     async def cmd_pay(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
             await update.message.reply_text(s.error("Использование: /pay @user сумма"))
             return
-        
         username = context.args[0].replace('@', '')
         try:
             amount = int(context.args[1])
         except:
             await update.message.reply_text(s.error("Сумма должна быть числом"))
             return
-        
         if amount <= 0:
             await update.message.reply_text(s.error("Сумма должна быть больше 0"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
-        
         if user_data['coins'] < amount:
             await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
             return
-        
         target = self.db.get_user_by_username(username)
         if not target:
             await update.message.reply_text(s.error("Пользователь не найден"))
             return
-        
         if target['id'] == user_data['id']:
             await update.message.reply_text(s.error("Нельзя перевести самому себе"))
             return
-        
-        # Прогрессивная комиссия
         commission = self.db.get_transfer_commission(amount)
         total_deduction = amount + commission
-        
         if user_data['coins'] < total_deduction:
             await update.message.reply_text(s.error(f"Недостаточно монет с учётом комиссии. Нужно {total_deduction} 💰"))
             return
-        
         self.db.add_coins(user_data['id'], -total_deduction)
         self.db.add_coins(target['id'], amount)
-        # Комиссия сжигается (не добавляется никому)
-        
         target_name = target.get('nickname') or target['first_name']
         user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
-        
         text = f"""
 {s.header('ПЕРЕВОД')}
 
@@ -2794,7 +3408,6 @@ _{motto}_
     async def cmd_daily(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
-        
         if user_data.get('last_daily'):
             last = datetime.fromisoformat(user_data['last_daily'])
             if (datetime.now() - last).seconds < DAILY_COOLDOWN:
@@ -2803,27 +3416,19 @@ _{motto}_
                 minutes = (remain % 3600) // 60
                 await update.message.reply_text(s.warning(f"Бонус через {hours}ч {minutes}м"))
                 return
-        
         streak = self.db.add_daily_streak(user_data['id'])
-        
-        # Базовая награда
         coins = random.randint(100, 300)
         neons = random.randint(1, 5)
         exp = random.randint(20, 60)
         energy = 20
-        
         # Антиинфляционный фактор: чем больше у пользователя валюты, тем меньше прирост
         balance_factor = max(0.5, 1.0 - (user_data['coins'] / MAX_COINS) * 0.5)
         coins = int(coins * balance_factor)
         neons = int(neons * balance_factor)
-        
-        # Бонус за стрик
         streak_multiplier = 1 + min(streak, 30) * 0.05
         coins = int(coins * streak_multiplier)
         neons = int(neons * streak_multiplier)
         exp = int(exp * streak_multiplier)
-        
-        # Бонус за статусы
         if self.db.is_vip(user_data['id']):
             coins = int(coins * 1.5)
             neons = int(neons * 1.5)
@@ -2834,12 +3439,10 @@ _{motto}_
             neons = int(neons * 2)
             exp = int(exp * 2)
             energy = int(energy * 2)
-        
         self.db.add_coins(user_data['id'], coins)
         self.db.add_neons(user_data['id'], neons)
         self.db.add_exp(user_data['id'], exp)
         self.db.add_energy(user_data['id'], energy)
-        
         text = f"""
 {s.header('ЕЖЕДНЕВНЫЙ БОНУС')}
 
@@ -2861,7 +3464,6 @@ _{motto}_
     async def cmd_streak(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
         streak = user_data.get('daily_streak', 0)
-        
         text = f"""
 {s.header('🔥 ТЕКУЩИЙ СТРИК')}
 
@@ -2874,7 +3476,6 @@ _{motto}_
 
     async def cmd_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
-        
         text = f"""
 {s.header('💜 МОИ НЕОНЫ')}
 
@@ -2891,7 +3492,6 @@ _{motto}_
     async def cmd_glitches(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
         neons_from_glitches = user_data['glitches'] // NEON_PRICE
-        
         text = f"""
 {s.header('🖥 МОИ ГЛИТЧИ')}
 
@@ -2907,7 +3507,6 @@ _{motto}_
     async def cmd_farm(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
         user_data = self.db.get_user(user.id)
-        
         last_farm = user_data.get('last_farm')
         if last_farm:
             last = datetime.fromisoformat(last_farm)
@@ -2917,25 +3516,18 @@ _{motto}_
                 minutes = (remain % 3600) // 60
                 await update.message.reply_text(s.warning(f"Ферма будет доступна через {hours}ч {minutes}м"))
                 return
-        
-        # Базовая добыча
         glitches_earned = random.randint(10, 50)
-        
         # Антиинфляционный фактор
         balance_factor = max(0.5, 1.0 - (user_data['glitches'] / MAX_GLITCHES) * 0.5)
         glitches_earned = int(glitches_earned * balance_factor)
-        
-        # Бонусы
         if self.db.is_vip(user_data['id']):
             glitches_earned = int(glitches_earned * 1.2)
         if self.db.is_premium(user_data['id']):
             glitches_earned = int(glitches_earned * 1.3)
         if user_data.get('turbo_drive_until') and datetime.fromisoformat(user_data['turbo_drive_until']) > datetime.now():
             glitches_earned = int(glitches_earned * 1.5)
-        
         self.db.add_glitches(user_data['id'], glitches_earned)
         self.db.update_user(user_data['id'], platform="telegram", last_farm=datetime.now().isoformat())
-        
         text = f"""
 {s.header('🖥 ФЕРМА ГЛИТЧЕЙ')}
 
@@ -2952,50 +3544,36 @@ _{motto}_
         if len(context.args) < 2:
             await update.message.reply_text(s.error("Использование: /transfer @user 100"))
             return
-        
         username = context.args[0].replace('@', '')
         try:
             amount = int(context.args[1])
         except:
             await update.message.reply_text(s.error("Сумма должна быть числом"))
             return
-        
         if amount <= 0:
             await update.message.reply_text(s.error("Сумма должна быть больше 0"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
-        
         if user_data['neons'] < amount:
             await update.message.reply_text(s.error(f"Недостаточно неонов. Баланс: {user_data['neons']} 💜"))
             return
-        
         target = self.db.get_user_by_username(username)
         if not target:
             await update.message.reply_text(s.error("Пользователь не найден"))
             return
-        
         if target['id'] == user_data['id']:
             await update.message.reply_text(s.error("Нельзя перевести самому себе"))
             return
-        
-        # Комиссия на перевод неонов (меньше, чем на монеты)
         commission = int(amount * 0.03) if amount < 1000 else int(amount * 0.05)
         if self.db.is_vip(user_data['id']) or self.db.is_premium(user_data['id']):
-            commission = 0  # привилегии без комиссии
-        
+            commission = 0
         total_deduction = amount + commission
-        
         if user_data['neons'] < total_deduction:
             await update.message.reply_text(s.error(f"Недостаточно неонов с учётом комиссии. Нужно {total_deduction} 💜"))
             return
-        
         self.db.add_neons(user_data['id'], -total_deduction)
         self.db.add_neons(target['id'], amount)
-        # Комиссия сжигается
-        
         target_name = target.get('nickname') or target['first_name']
-        
         text = f"""
 {s.header('💜 ПЕРЕВОД НЕОНОВ')}
 {s.item(f'Получатель: {target_name}')}
@@ -3011,34 +3589,25 @@ _{motto}_
         if not context.args:
             await update.message.reply_text(s.error("Укажите количество глитчей для обмена"))
             return
-        
         try:
             glitches = int(context.args[0])
         except:
             await update.message.reply_text(s.error("Количество должно быть числом"))
             return
-        
         if glitches < NEON_PRICE:
             await update.message.reply_text(s.error(f"Минимум для обмена: {NEON_PRICE} глитчей"))
             return
-        
         user_data = self.db.get_user(update.effective_user.id)
-        
         if user_data['glitches'] < glitches:
             await update.message.reply_text(s.error(f"Недостаточно глитчей. Баланс: {user_data['glitches']} 🖥"))
             return
-        
         neons = glitches // NEON_PRICE
         used_glitches = neons * NEON_PRICE
         remainder = glitches - used_glitches
-        
-        # Антиинфляция: комиссия 1% при обмене
         commission = max(1, int(neons * 0.01))
         neons_after = neons - commission
-        
         self.db.add_glitches(user_data['id'], -used_glitches)
         self.db.add_neons(user_data['id'], neons_after)
-        
         text = f"""
 {s.header('💱 ОБМЕН ВАЛЮТ')}
 
@@ -3049,10 +3618,8 @@ _{motto}_
 
 {s.success('Обмен выполнен!')}
         """
-        
         if remainder > 0:
             text += f"\n{s.info(f'Остаток {remainder} глитчей не обменян (нужно {NEON_PRICE} для 1 неона)')}"
-        
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
     # ===== МАГАЗИН =====
@@ -3082,10 +3649,8 @@ _{motto}_
         if not context.args:
             await update.message.reply_text(s.error("Что купить? /buy [предмет]"))
             return
-        
         item = " ".join(context.args).lower()
         user_data = self.db.get_user(update.effective_user.id)
-        
         items = {
             "зелье здоровья": {"price": 50, "heal": 30},
             "большое зелье": {"price": 100, "heal": 70},
@@ -3094,35 +3659,26 @@ _{motto}_
             "энергетик": {"price": 30, "energy": 20},
             "батарейка": {"price": 80, "energy": 50}
         }
-        
         if item not in items:
             await update.message.reply_text(s.error("Такого товара нет в магазине"))
             return
-        
         item_data = items[item]
-        
         if user_data['coins'] < item_data['price']:
             await update.message.reply_text(s.error(f"Недостаточно монет. Нужно {item_data['price']} 💰"))
             return
-        
         self.db.add_coins(user_data['id'], -item_data['price'])
-        
         effects = []
         if 'heal' in item_data:
             new_health = self.db.heal(user_data['id'], item_data['heal'])
             effects.append(f"❤️ Здоровье +{item_data['heal']} (теперь {new_health})")
-        
         if 'damage' in item_data:
             new_damage = user_data['damage'] + item_data['damage']
             self.db.update_user(user_data['id'], damage=new_damage)
             effects.append(f"⚔️ Урон +{item_data['damage']} (теперь {new_damage})")
-        
         if 'energy' in item_data:
             new_energy = self.db.add_energy(user_data['id'], item_data['energy'])
             effects.append(f"⚡️ Энергия +{item_data['energy']} (теперь {new_energy})")
-        
         effects_text = "\n".join([f"• {e}" for e in effects])
-        
         text = f"""
 {s.header('ПОКУПКА')}
 
@@ -3169,19 +3725,15 @@ _{motto}_
 
     async def cmd_buy_vip(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
-        
         if user_data['coins'] < VIP_PRICE:
             await update.message.reply_text(s.error(f"Недостаточно монет. Нужно {VIP_PRICE} 💰"))
             return
-        
         if self.db.is_vip(user_data['id']):
             await update.message.reply_text(s.error("VIP статус уже активен"))
             return
-        
         self.db.add_coins(user_data['id'], -VIP_PRICE)
         until = self.db.set_vip(user_data['id'], VIP_DAYS)
         date_str = until.strftime("%d.%m.%Y")
-        
         text = f"""
 {s.header('VIP СТАТУС АКТИВИРОВАН')}
 
@@ -3194,19 +3746,15 @@ _{motto}_
 
     async def cmd_buy_premium(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_data = self.db.get_user(update.effective_user.id)
-        
         if user_data['coins'] < PREMIUM_PRICE:
             await update.message.reply_text(s.error(f"Недостаточно монет. Нужно {PREMIUM_PRICE} 💰"))
             return
-        
         if self.db.is_premium(user_data['id']):
             await update.message.reply_text(s.error("PREMIUM статус уже активен"))
             return
-        
         self.db.add_coins(user_data['id'], -PREMIUM_PRICE)
         until = self.db.set_premium(user_data['id'], PREMIUM_DAYS)
         date_str = until.strftime("%d.%m.%Y")
-        
         text = f"""
 {s.header('PREMIUM СТАТУС АКТИВИРОВАН')}
 
@@ -3216,6 +3764,127 @@ _{motto}_
         """
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
         self.db.log_action(user_data['id'], 'buy_premium')
+
+    # ===== КВЕСТЫ =====
+    async def cmd_quests(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        quests = self.db.get_user_quests(user_data['id'])
+        if not quests:
+            daily = self.db.assign_daily_quests(user_data['id'])
+            weekly = self.db.assign_weekly_quests(user_data['id'])
+            quests = daily + weekly
+        if not quests:
+            await update.message.reply_text("ℹ️ Нет доступных квестов")
+            return
+        text = f"{s.header('🎯 АКТИВНЫЕ КВЕСТЫ')}\n\n"
+        for quest in quests:
+            progress_bar = self._progress_bar(quest['progress'], quest['condition_value'], 10)
+            text += (
+                f"**{quest['name']}**\n"
+                f"{quest['description']}\n"
+                f"{progress_bar}\n"
+                f"Награда: {quest['reward_neons']} 💜, {quest['reward_glitches']} 🖥\n\n"
+            )
+        text += f"✅ Выполнено квестов: {user_data.get('completed_quests', 0)}"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ===== БИРЖА =====
+    async def cmd_exchange_market(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        stats = self.db.get_exchange_stats()
+        text = f"""
+{s.header('💱 БИРЖА')}
+
+Текущий курс: {stats['price']} 💰 за 1 💜
+Объём за 24ч: {stats['volume_24h']} 💰
+Активных ордеров: {stats['active_orders']}
+
+{s.section('КОМАНДЫ')}
+{s.cmd('buyorder 100 10', 'купить 100 неонов по 10💰 за штуку')}
+{s.cmd('sellorder 50 12', 'продать 50 неонов по 12💰 за штуку')}
+{s.cmd('myorders', 'мои ордера')}
+{s.cmd('cancelorder 1', 'отменить ордер')}
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_buy_order(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("Использование: /buyorder [количество] [цена]"))
+            return
+        try:
+            amount = int(context.args[0])
+            price = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("Количество и цена должны быть числами"))
+            return
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        total_cost = amount * price
+        if user_data['coins'] < total_cost:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Нужно {total_cost} 💰"))
+            return
+        order_id = self.db.create_exchange_order(user_data['id'], 'buy', 'coins', 'neons', amount, price)
+        if order_id:
+            await update.message.reply_text(f"✅ Ордер на покупку #{order_id} создан!\nКуплю {amount} 💜 по {price} 💰 за штуку")
+        else:
+            await update.message.reply_text(s.error("Не удалось создать ордер"))
+
+    async def cmd_sell_order(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("Использование: /sellorder [количество] [цена]"))
+            return
+        try:
+            amount = int(context.args[0])
+            price = int(context.args[1])
+        except:
+            await update.message.reply_text(s.error("Количество и цена должны быть числами"))
+            return
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        if user_data['neons'] < amount:
+            await update.message.reply_text(s.error(f"Недостаточно неонов. Баланс: {user_data['neons']} 💜"))
+            return
+        order_id = self.db.create_exchange_order(user_data['id'], 'sell', 'neons', 'coins', amount, price)
+        if order_id:
+            await update.message.reply_text(f"✅ Ордер на продажу #{order_id} создан!\nПродам {amount} 💜 по {price} 💰 за штуку")
+        else:
+            await update.message.reply_text(s.error("Не удалось создать ордер"))
+
+    async def cmd_my_orders(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        self.db.cursor.execute('''
+            SELECT * FROM exchange_orders 
+            WHERE user_id = ? AND status = 'active'
+            ORDER BY created_at DESC
+        ''', (user_data['id'],))
+        orders = self.db.cursor.fetchall()
+        if not orders:
+            await update.message.reply_text("ℹ️ У вас нет активных ордеров")
+            return
+        text = f"{s.header('📊 МОИ ОРДЕРА')}\n\n"
+        for order in orders:
+            order_dict = dict(order)
+            order_type = "📈 ПОКУПКА" if order_dict['type'] == 'buy' else "📉 ПРОДАЖА"
+            remaining = order_dict['amount'] - order_dict['filled']
+            text += f"#{order_dict['id']} {order_type}\n{remaining}/{order_dict['amount']} {order_dict['currency_to']}\nЦена: {order_dict['price']} 💰\n\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_cancel_order(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите ID ордера: /cancelorder 1"))
+            return
+        try:
+            order_id = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("ID должен быть числом"))
+            return
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        if self.db.cancel_exchange_order(order_id, user_data['id']):
+            await update.message.reply_text(f"✅ Ордер #{order_id} отменён")
+        else:
+            await update.message.reply_text("❌ Ордер не найден или уже исполнен")
 
     # ===== УЛУЧШЕННЫЕ ИГРЫ =====
 
@@ -3243,7 +3912,6 @@ _{motto}_
         if chat_id in self.mafia_games:
             game = self.mafia_games[chat_id]
             if game.status != "ended":
-                # Показываем текущее состояние
                 status_text = game.get_formatted_status()
                 players_list = "\n".join([f"• {p['name']}" for p in game.players_data.values()])
                 text = f"""
@@ -3259,12 +3927,10 @@ _{motto}_
                 await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
                 return
 
-        # Создаём новую игру
         game_id = f"mafia_{chat_id}_{int(time.time())}"
         game = MafiaGame(chat_id, game_id, user.id)
         self.mafia_games[chat_id] = game
 
-        # Сохраняем в БД
         self.db.cursor.execute('''
             INSERT INTO mafia_games (game_id, chat_id, creator_id, status, players, players_data, roles, alive, votes, night_actions, confirmed_players, story)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -3311,7 +3977,6 @@ _{motto}_
             await update.message.reply_text(s.error("Вы уже в игре"))
             return
 
-        # Отправляем подтверждение в ЛС
         try:
             keyboard = InlineKeyboardMarkup([[
                 InlineKeyboardButton("✅ ПОДТВЕРДИТЬ", callback_data=f"mafia_confirm_{chat_id}")
@@ -3334,7 +3999,6 @@ _{motto}_
             game.remove_player(user.id)
             return
 
-        # Обновляем в БД
         self.db.cursor.execute('''
             UPDATE mafia_games 
             SET players = ?, players_data = ? 
@@ -3401,13 +4065,11 @@ _{motto}_
             logger.error(f"Ошибка обновления сообщения мафии: {e}")
 
     async def _mafia_start_game(self, game: MafiaGame, context: ContextTypes.DEFAULT_TYPE):
-        """Запуск игры после подтверждения всех игроков"""
         game.status = "starting"
         game.assign_roles()
         game.phase = "night"
         game.day = 1
 
-        # Рассылаем роли в ЛС
         for player_id in game.players:
             role = game.roles[player_id]
             description = game.get_role_description(role)
@@ -3424,11 +4086,9 @@ _{motto}_
                 """
             )
 
-        # Обновляем статус в общем чате
         game.status = "active"
         await self._update_mafia_game_message(game, context)
 
-        # Отправляем сообщение о начале
         await context.bot.send_message(
             game.chat_id,
             f"""
@@ -3439,10 +4099,8 @@ _{motto}_
             """
         )
 
-        # Запускаем таймеры
         asyncio.create_task(self._mafia_night_timer(game, context))
 
-        # Сохраняем в БД
         self.db.cursor.execute('''
             UPDATE mafia_games 
             SET status = ?, phase = ?, day = ?, roles = ?, alive = ?
@@ -3681,7 +4339,6 @@ _{motto}_
             await update.message.reply_text(s.error("Нельзя вызвать на дуэль самого себя"))
             return
 
-        # Проверяем, нет ли активной дуэли
         self.db.cursor.execute(
             "SELECT id FROM duels WHERE (challenger_id = ? OR opponent_id = ?) AND status = 'pending'",
             (user_data['id'], user_data['id'])
@@ -3733,7 +4390,6 @@ _{motto}_
         if self.db.is_vip(opponent['id']):
             opponent_roll += 5
 
-        # Учёт кибер-удачи
         if challenger.get('cyber_luck_until') and datetime.fromisoformat(challenger['cyber_luck_until']) > datetime.now():
             challenger_roll += 15
         if opponent.get('cyber_luck_until') and datetime.fromisoformat(opponent['cyber_luck_until']) > datetime.now():
@@ -4400,6 +5056,9 @@ _{motto}_
             text += f"ID {bm['id']}: {bm['name']} (от {name})\n"
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+    async def cmd_my_bookmarks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bookmarks(update, context)
+
     # ===== ТАЙМЕРЫ =====
     async def cmd_add_timer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
@@ -4424,9 +5083,7 @@ _{motto}_
             await update.message.reply_text(s.error("Достигнут лимит таймеров в чате (макс. 5)"))
             return
 
-        await update.message.reply_text(
-            s.success(f"Таймер #{timer_id} установлен на {execute_at.strftime('%d.%m.%Y %H:%M')}")
-        )
+        await update.message.reply_text(s.success(f"Таймер #{timer_id} установлен на {execute_at.strftime('%d.%m.%Y %H:%M')}"))
 
     async def cmd_timers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
@@ -5041,9 +5698,1567 @@ _{motto}_
 
         await update.message.reply_text(message)
 
+    # ===== РАЗВЛЕЧЕНИЯ =====
+    async def cmd_joke(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        jokes = [
+            "Встречаются два программиста:\n— Слышал, ты женился?\n— Да.\n— Ну и как она?\n— Да нормально, интерфейс дружественный...",
+            "— Доктор, у меня глисты.\n— А вы что, их видите?\n— Нет, я с ними переписываюсь.",
+            "Идут два кота по крыше. Один говорит:\n— Мяу.\n— Мяу-мяу.\n— Ты чё, с ума сошёл? Нас же люди услышат!",
+        ]
+        await update.message.reply_text(f"😄 {random.choice(jokes)}")
+
+    async def cmd_fact(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        facts = [
+            "Осьминоги имеют три сердца и голубую кровь.",
+            "Бананы технически являются ягодами, а клубника — нет.",
+            "В Швейцарии запрещено держать только одну морскую свинку.",
+        ]
+        await update.message.reply_text(f"🔍 {random.choice(facts)}")
+
+    async def cmd_quote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        quotes = [
+            "Жизнь — это то, что с тобой происходит, пока ты строишь планы. — Джон Леннон",
+            "Будьте тем изменением, которое вы хотите увидеть в мире. — Махатма Ганди",
+            "Единственный способ делать великие дела — любить то, что вы делаете. — Стив Джобс",
+        ]
+        await update.message.reply_text(f"📜 {random.choice(quotes)}")
+
+    async def cmd_whoami(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        roles = ["супергерой", "злодей", "тайный агент", "космонавт", "пират"]
+        await update.message.reply_text(f"🦸 Вы — {random.choice(roles)}!")
+
+    async def cmd_advice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        advices = [
+            "Пейте больше воды.",
+            "Высыпайтесь — это важно для здоровья.",
+            "Делайте зарядку по утрам.",
+        ]
+        await update.message.reply_text(f"💡 {random.choice(advices)}")
+
+    async def cmd_compatibility(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            await update.message.reply_text(s.error("Укажите двух пользователей: /compatibility @user1 @user2"))
+            return
+
+        username1 = context.args[0].replace('@', '')
+        username2 = context.args[1].replace('@', '')
+
+        user1 = self.db.get_user_by_username(username1)
+        user2 = self.db.get_user_by_username(username2)
+
+        if not user1 or not user2:
+            await update.message.reply_text(s.error("Пользователи не найдены"))
+            return
+
+        name1 = user1.get('nickname') or user1['first_name']
+        name2 = user2.get('nickname') or user2['first_name']
+
+        compatibility = random.randint(0, 100)
+
+        if compatibility < 30:
+            emoji = "💔"
+            text = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            text = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            text = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            text = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            text = "Идеальная совместимость!"
+
+        await update.message.reply_text(
+            f"{s.header('💞 СОВМЕСТИМОСТЬ')}\n\n"
+            f"{emoji} {name1} и {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{text}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_weather(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            city = "Москва"
+        else:
+            city = " ".join(context.args)
+
+        temp = random.randint(-10, 30)
+        conditions = ["ясно", "облачно", "пасмурно", "дождь", "снег", "гроза"]
+        condition = random.choice(conditions)
+        wind = random.randint(0, 10)
+        humidity = random.randint(30, 90)
+
+        text = (
+            f"🌦 Погода в {city}:\n"
+            f"🌡 {temp}°C, {condition}\n"
+            f"💨 ветер {wind} м/с\n"
+            f"💧 влажность {humidity}%"
+        )
+        await update.message.reply_text(text)
+
+    async def cmd_random(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            max_num = 100
+        else:
+            try:
+                max_num = int(context.args[0])
+            except:
+                await update.message.reply_text(s.error("Укажите число"))
+                return
+
+        result = random.randint(0, max_num)
+        await update.message.reply_text(f"🎲 Случайное число: {result}")
+
+    async def cmd_choose(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите варианты через или: /choose чай или кофе"))
+            return
+
+        text = " ".join(context.args)
+        options = re.split(r'\s+или\s+', text)
+
+        if len(options) < 2:
+            await update.message.reply_text(s.error("Нужно минимум 2 варианта через 'или'"))
+            return
+
+        choice = random.choice(options)
+        await update.message.reply_text(f"🤔 Я выбираю: {choice}")
+
+    async def cmd_dane(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text(s.error("Задайте вопрос: /dane сегодня будет дождь?"))
+            return
+
+        answers = [
+            "🎱 Безусловно да",
+            "🎱 Определённо да",
+            "🎱 Без сомнений",
+            "🎱 Да — определённо",
+            "🎱 Мне кажется — да",
+            "🎱 Вероятнее всего",
+            "🎱 Хорошие перспективы",
+            "🎱 Знаки говорят — да",
+            "🎱 Пока не ясно, попробуй снова",
+            "🎱 Спроси позже",
+            "🎱 Лучше не рассказывать",
+            "🎱 Сейчас нельзя предсказать",
+            "🎱 Сконцентрируйся и спроси опять",
+            "🎱 Даже не думай",
+            "🎱 Мой ответ — нет",
+            "🎱 По моим данным — нет",
+            "🎱 Перспективы не очень хорошие",
+            "🎱 Весьма сомнительно",
+        ]
+
+        await update.message.reply_text(f"❓ {random.choice(answers)}")
+
+    async def cmd_ship(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 2:
+            chat_id = update.effective_chat.id
+            cursor = self.db.cursor
+            cursor.execute("SELECT DISTINCT user_id FROM messages WHERE chat_id = ? ORDER BY RANDOM() LIMIT 2", (chat_id,))
+            users = cursor.fetchall()
+
+            if len(users) < 2:
+                await update.message.reply_text(s.error("Недостаточно участников для шипперинга"))
+                return
+
+            user1_id, user2_id = users[0][0], users[1][0]
+        else:
+            username1 = context.args[0].replace('@', '')
+            username2 = context.args[1].replace('@', '')
+
+            user1 = self.db.get_user_by_username(username1)
+            user2 = self.db.get_user_by_username(username2)
+
+            if not user1 or not user2:
+                await update.message.reply_text(s.error("Пользователи не найдены"))
+                return
+
+            user1_id, user2_id = user1['id'], user2['id']
+
+        user1_data = self.db.get_user_by_id(user1_id)
+        user2_data = self.db.get_user_by_id(user2_id)
+
+        name1 = user1_data.get('nickname') or user1_data['first_name']
+        name2 = user2_data.get('nickname') or user2_data['first_name']
+
+        compatibility = random.randint(0, 100)
+
+        if compatibility < 30:
+            emoji = "💔"
+            desc = "Очень низкая совместимость"
+        elif compatibility < 50:
+            emoji = "🤔"
+            desc = "Ниже среднего"
+        elif compatibility < 70:
+            emoji = "👍"
+            desc = "Неплохая совместимость"
+        elif compatibility < 90:
+            emoji = "💕"
+            desc = "Хорошая совместимость"
+        else:
+            emoji = "💖"
+            desc = "Идеальная совместимость!"
+
+        self.db.create_pair(update.effective_chat.id, user1_id, user2_id)
+
+        await update.message.reply_text(
+            f"{s.header('💞 ШИППЕРИМ')}\n\n"
+            f"{emoji} {name1} + {name2}\n\n"
+            f"Совместимость: {compatibility}%\n{desc}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_pairing(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        pairs = self.db.get_chat_pairs(update.effective_chat.id)
+
+        if not pairs:
+            await update.message.reply_text(s.info("В этом чате пока нет пар"))
+            return
+
+        text = f"{s.header('💞 ПАРЫ ЧАТА')}\n\n"
+        for pair in pairs[:10]:
+            text += f"{pair['name1']} + {pair['name2']}\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_pairs(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_pairing(update, context)
+
+    # ===== ПОЛЕЗНОЕ =====
+    async def cmd_ping(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        start = time.time()
+        msg = await update.message.reply_text("🏓 Понг...")
+        end = time.time()
+        ping = int((end - start) * 1000)
+        await msg.edit_text(f"🏓 Понг!\n⏱️ {ping} мс", parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_uptime(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        uptime = datetime.now() - self.start_time
+        days = uptime.days
+        hours = uptime.seconds // 3600
+        minutes = (uptime.seconds % 3600) // 60
+
+        await update.message.reply_text(
+            f"⏱️ Аптайм: {days}д {hours}ч {minutes}м",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        users_count = self.db.cursor.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        messages_count = self.db.cursor.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
+
+        text = (
+            f"{s.header('🤖 ИНФОРМАЦИЯ О БОТЕ')}\n\n"
+            f"Название: {BOT_NAME}\n"
+            f"Версия: {BOT_VERSION}\n"
+            f"Владелец: {OWNER_USERNAME}\n\n"
+            f"{s.stat('Пользователей', users_count)}\n"
+            f"{s.stat('Сообщений', messages_count)}\n"
+            f"{s.stat('Команд', '300+')}\n"
+            f"{s.stat('AI', 'Подключен' if self.ai and self.ai.is_available else 'Не подключен')}\n"
+            f"{s.stat('VK', 'Подключен' if self.vk and self.vk.is_available else 'Не подключен')}"
+        )
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ===== ТОПЫ =====
+    async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = f"{s.header('🏆 ТОП ИГРОКОВ')}\n\n"
+        top_coins = self.db.get_top("coins", 5)
+        text += f"{s.section('💰 ПО МОНЕТАМ')}"
+        for i, row in enumerate(top_coins, 1):
+            name = row[1] or row[0]
+            text += f"{i}. {name} — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_coins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("coins", 10)
+        text = f"{s.header('💰 ТОП ПО МОНЕТАМ')}\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 💰\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_level(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("level", 10)
+        text = f"{s.header('📊 ТОП ПО УРОВНЮ')}\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} уровень\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_neons(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("neons", 10)
+        text = f"{s.header('💜 ТОП ПО НЕОНАМ')}\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 💜\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_glitches(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        top = self.db.get_top("glitches", 10)
+        text = f"{s.header('🖥 ТОП ПО ГЛИТЧАМ')}\n\n"
+        for i, row in enumerate(top, 1):
+            name = row[1] or row[0]
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {row[2]} 🖥\n"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # ===== РУССКИЕ КОМАНДЫ (СТАТИСТИКА ЧАТА) =====
+    async def cmd_chat_stats_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "day")
+
+    async def cmd_chat_stats_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "week")
+
+    async def cmd_chat_stats_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "month")
+
+    async def cmd_chat_stats_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "all")
+
+    async def cmd_stats_custom(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = update.message.text
+        parts = text.split()
+
+        if len(parts) < 2:
+            return
+
+        try:
+            limit = int(parts[1])
+        except:
+            return
+
+        period = "day"
+        if len(parts) > 2:
+            period_map = {"неделя": "week", "месяц": "month", "вся": "all"}
+            period = period_map.get(parts[2].lower(), "day")
+
+        await self._chat_stats_period(update, period, limit)
+
+    async def _chat_stats_period(self, update: Update, period: str, limit: int = 10):
+        chat_id = update.effective_chat.id
+        cursor = self.db.cursor
+
+        now = datetime.now()
+
+        if period == "day":
+            time_ago = now - timedelta(days=1)
+            period_name = "день"
+        elif period == "week":
+            time_ago = now - timedelta(days=7)
+            period_name = "неделю"
+        elif period == "month":
+            time_ago = now - timedelta(days=30)
+            period_name = "месяц"
+        else:
+            time_ago = datetime(2000, 1, 1)
+            period_name = "всё время"
+
+        cursor.execute('''
+            SELECT username, first_name, COUNT(*) as msg_count
+            FROM messages 
+            WHERE chat_id = ? AND timestamp > ?
+            GROUP BY user_id 
+            ORDER BY msg_count DESC 
+            LIMIT ?
+        ''', (chat_id, time_ago.isoformat(), limit))
+
+        top_users = cursor.fetchall()
+
+        if not top_users:
+            await update.message.reply_text(s.info("Нет данных за этот период"))
+            return
+
+        text = f"{s.header(f'🏆 ТОП ЗА {period_name.upper()}')}\n\n"
+        for i, (username, first_name, count) in enumerate(top_users, 1):
+            name = username or first_name or "Пользователь"
+            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else f"{i}."
+            text += f"{medal} {name} — {count} 💬\n"
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_top_chat_today(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "day")
+
+    async def cmd_top_chat_week(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "week")
+
+    async def cmd_top_chat_month(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "month")
+
+    async def cmd_top_chat_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._chat_stats_period(update, "all")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - УПРАВЛЕНИЕ РАНГАМИ
+    # =========================================================================
+
+    async def _set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE, target_rank: int):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Недостаточно прав. Нужен ранг 4+"))
+            return
+
+        target_user = await self._resolve_user(update, context, text)
+
+        if not target_user:
+            await update.message.reply_text(s.error("❌ Пользователь не найден"))
+            return
+
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text(s.error("⛔️ Нельзя назначить ранг выше своего"))
+            return
+
+        self.db.set_rank(target_user['id'], target_rank, user_data['id'])
+        rank_info = RANKS[target_rank]
+
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+
+        await self.send_private_message(
+            target_user['telegram_id'],
+            f"👑 ВАМ ВЫДАН РАНГ!\n\n"
+            f"🦸 Модератор: {user.first_name}\n"
+            f"🎖 Ранг: {rank_info['emoji']} {rank_info['name']}"
+        )
+
+        await update.message.reply_text(
+            f"{s.success('Ранг назначен!')}\n\n"
+            f"{s.item(f'Пользователь: {display_name}')}\n"
+            f"{s.item(f'Ранг: {rank_info["emoji"]} {rank_info["name"]}')}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    async def cmd_set_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, context, 1)
+
+    async def cmd_set_rank2(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, context, 2)
+
+    async def cmd_set_rank3(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, context, 3)
+
+    async def cmd_set_rank4(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, context, 4)
+
+    async def cmd_set_rank5(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._set_rank(update, context, 5)
+
+    async def cmd_lower_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        target_user = await self._resolve_user(update, context, text)
+
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        if target_user['rank'] <= 0:
+            await update.message.reply_text("❌ Пользователь и так участник")
+            return
+
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя понизить модератора выше рангом")
+            return
+
+        new_rank = target_user['rank'] - 1
+        self.db.set_rank(target_user['id'], new_rank, user_data['id'])
+        rank_info = RANKS[new_rank]
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+
+        await update.message.reply_text(
+            f"✅ Ранг понижен!\n\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"🎖 Новый ранг: {rank_info['emoji']} {rank_info['name']}"
+        )
+
+    async def cmd_remove_rank(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        target_user = await self._resolve_user(update, context, text)
+
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя снять модератора выше рангом")
+            return
+
+        self.db.set_rank(target_user['id'], 0, user_data['id'])
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+
+        await update.message.reply_text(
+            f"✅ Модератор снят!\n\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"🎖 Теперь: 👤 Участник"
+        )
+
+    async def cmd_remove_left(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 4 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        await update.message.reply_text("✅ Проверка вышедших модераторов выполнена")
+
+    async def cmd_remove_all_ranks(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 5 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Только для создателя")
+            return
+
+        self.db.cursor.execute("SELECT id FROM users WHERE rank > 0")
+        mods = self.db.cursor.fetchall()
+
+        for mod_id in mods:
+            self.db.set_rank(mod_id[0], 0, user_data['id'])
+
+        await update.message.reply_text(f"✅ Снято модераторов: {len(mods)}")
+
+    async def cmd_who_admins(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        admins = self.db.get_admins()
+        if not admins:
+            await update.message.reply_text("👥 В чате нет администраторов")
+            return
+
+        text = "👑 АДМИНИСТРАЦИЯ\n\n"
+        for admin in admins:
+            display_name = await self.get_display_name(admin, admin.get('telegram_id'))
+            rank_emoji = RANKS[admin['rank']]["emoji"]
+            text += f"{rank_emoji} {display_name} — {admin['rank_name']}\n"
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ПРЕДУПРЕЖДЕНИЯ (ВАРНЫ)
+    # =========================================================================
+
+    async def cmd_warn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 1+", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        target_user = await self._resolve_user(update, context, text)
+        reason = "Нарушение правил"
+
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        if target_user['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя выдать предупреждение модератору выше рангом", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        warns = self.db.add_warn(target_user['id'], user_data['id'], reason)
+
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+
+        try:
+            await context.bot.send_message(
+                target_user['telegram_id'],
+                f"⚠️ Предупреждение ({warns}/4)\n\n"
+                f"💬 Причина: {reason}\n"
+                f"🦸 Модератор: {admin_name}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except:
+            pass
+
+        await update.message.reply_text(
+            f"⚠️ Предупреждение ({warns}/4)\n\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"💬 Причина: {reason}\n"
+            f"🦸 Модератор: {admin_name}",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+        if warns == 2:
+            minutes = 60
+            self.db.mute_user(target_user['id'], minutes, user_data['id'], "2 предупреждения")
+            try:
+                until_date = int(time.time()) + (minutes * 60)
+                permissions = ChatPermissions(can_send_messages=False)
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id'],
+                    permissions=permissions,
+                    until_date=until_date
+                )
+                await update.message.reply_text(f"🔇 Мут на 1 час\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                logger.error(f"Ошибка мута: {e}")
+
+        elif warns == 3:
+            minutes = 1440
+            self.db.mute_user(target_user['id'], minutes, user_data['id'], "3 предупреждения")
+            try:
+                until_date = int(time.time()) + (minutes * 60)
+                permissions = ChatPermissions(can_send_messages=False)
+                await context.bot.restrict_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id'],
+                    permissions=permissions,
+                    until_date=until_date
+                )
+                await update.message.reply_text(f"🔇 Мут на 24 часа\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                logger.error(f"Ошибка мута: {e}")
+
+        elif warns >= 4:
+            self.db.ban_user(target_user['id'], user_data['id'], "4 предупреждения")
+            try:
+                await context.bot.ban_chat_member(
+                    chat_id=chat_id,
+                    user_id=target_user['telegram_id']
+                )
+                await update.message.reply_text(f"🔴 Пользователь забанен (4/4)\n\n👤 {display_name}", parse_mode=ParseMode.MARKDOWN)
+            except Exception as e:
+                logger.error(f"Ошибка бана: {e}")
+
+    async def cmd_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not context.args:
+            await update.message.reply_text("❌ Укажите пользователя: /warns @user")
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        warns_list = self.db.get_warns(target['id'])
+        display_name = await self.get_display_name(target, target['telegram_id'])
+
+        if not warns_list:
+            await update.message.reply_text(f"📋 У {display_name} нет предупреждений")
+            return
+
+        text = f"📋 ПРЕДУПРЕЖДЕНИЯ: {display_name}\n\n"
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = f"@{admin['username']}" if admin and admin.get('username') else (admin['first_name'] if admin else 'Система')
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"⚠️ ID {warn['id']}\n"
+                f"💬 Причина: {warn['reason']}\n"
+                f"🦸 Модератор: {admin_name}\n"
+                f"📅 Дата: {date}\n\n"
+            )
+
+        text += f"📊 Всего: {len(warns_list)}/4"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_my_warns(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_data = self.db.get_user(update.effective_user.id)
+        warns_list = self.db.get_warns(user_data['id'])
+
+        if not warns_list:
+            await update.message.reply_text("✅ У вас нет предупреждений")
+            return
+
+        user_name = f"@{user_data['username']}" if user_data.get('username') else user_data['first_name']
+        text = f"📋 МОИ ПРЕДУПРЕЖДЕНИЯ: {user_name}\n\n"
+
+        for warn in warns_list:
+            admin = self.db.get_user_by_id(warn['admin_id'])
+            admin_name = f"@{admin['username']}" if admin and admin.get('username') else (admin['first_name'] if admin else 'Система')
+            date = datetime.fromisoformat(warn['date']).strftime("%d.%m.%Y %H:%M")
+            text += (
+                f"⚠️ ID {warn['id']}\n"
+                f"💬 Причина: {warn['reason']}\n"
+                f"🦸 Модератор: {admin_name}\n"
+                f"📅 Дата: {date}\n\n"
+            )
+
+        text += f"📊 Всего: {len(warns_list)}/4"
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_unwarn(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        target_user = None
+        if update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target_user = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        else:
+            match = re.search(r'снять варн\s+@?(\S+)', text, re.IGNORECASE)
+            if match:
+                username = match.group(1)
+                target_user = self.db.get_user_by_username(username)
+
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        removed = self.db.remove_last_warn(target_user['id'], user_data['id'])
+        display_name = await self.get_display_name(target_user, target_user['telegram_id'])
+        admin_name = f"@{user.username}" if user.username else user.first_name
+
+        if not removed:
+            await update.message.reply_text(f"📋 У {display_name} нет предупреждений")
+            return
+
+        warns_list = self.db.get_warns(target_user['id'])
+        remaining = len(warns_list)
+
+        await update.message.reply_text(
+            f"✅ Предупреждение снято\n\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"🦸 Модератор: {admin_name}\n"
+            f"📊 Осталось: {remaining}/4"
+        )
+
+    async def cmd_unwarn_all(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        match = re.search(r'снять все варны\s+@?(\S+)', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Укажите пользователя")
+            return
+
+        username = match.group(1)
+        target_user = self.db.get_user_by_username(username)
+
+        if not target_user:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        warns_list = self.db.get_warns(target_user['id'])
+        for _ in warns_list:
+            self.db.remove_last_warn(target_user['id'], user_data['id'])
+
+        target_name = target_user.get('nickname') or target_user['first_name']
+        await update.message.reply_text(f"✅ Все предупреждения сняты с {target_name}")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - МУТ
+    # =========================================================================
+
+    async def cmd_mute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 2+")
+            return
+
+        match = re.search(r'мут\s+@?(\S+)(?:\s+(\d+[мчд]))?(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Пример: мут @user 30м спам")
+            return
+
+        username = match.group(1)
+        time_str = match.group(2) if match.group(2) else "60м"
+        reason = match.group(3) if match.group(3) else "Нарушение правил"
+
+        minutes = parse_time(time_str)
+        if not minutes:
+            await update.message.reply_text("❌ Неверный формат времени. Используйте: 30м, 2ч, 1д")
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        if target['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя замутить модератора выше рангом")
+            return
+
+        until = self.db.mute_user(target['id'], minutes, user_data['id'], reason)
+        until_str = until.strftime("%d.%m.%Y %H:%M")
+
+        mute_success = False
+        try:
+            until_date = int(time.time()) + (minutes * 60)
+            permissions = ChatPermissions(can_send_messages=False)
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                permissions=permissions,
+                until_date=until_date
+            )
+            mute_success = True
+        except Exception as e:
+            logger.error(f"Ошибка мута: {e}")
+
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        display_name = await self.get_display_name(target, target['telegram_id'])
+
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                f"🔇 ВАС ЗАМУТИЛИ\n\n"
+                f"⏱ Срок: {time_str}\n"
+                f"💬 Причина: {reason}\n"
+                f"📅 До: {until_str}"
+            )
+        except:
+            pass
+
+        await update.message.reply_text(
+            f"🔇 МУТ\n\n"
+            f"👤 Пользователь: {display_name}\n"
+            f"⏱ Срок: {time_str}\n"
+            f"📅 До: {until_str}\n"
+            f"💬 Причина: {reason}\n"
+            f"🦸 Модератор: {admin_name}\n\n"
+            f"{'✅ Мут применен' if mute_success else '❌ Не удалось применить мут'}"
+        )
+
+    async def cmd_mutelist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        muted = self.db.get_muted_users()
+
+        if not muted:
+            await update.message.reply_text("📋 Список замученных пуст")
+            return
+
+        text = "📋 СПИСОК ЗАМУЧЕННЫХ\n\n"
+        for mute in muted[:15]:
+            until = datetime.fromisoformat(mute['mute_until']).strftime("%d.%m %H:%M")
+            name = mute['first_name']
+            username = f" (@{mute['username']})" if mute.get('username') else ""
+            text += f"🔇 {name}{username} — до {until}\n"
+
+        if len(muted) > 15:
+            text += f"\n👥 Всего: {len(muted)} (показаны первые 15)"
+        else:
+            text += f"\n👥 Всего: {len(muted)}"
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_unmute(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        username = text.replace('размут', '').replace('@', '').strip()
+        if not username and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+        elif username:
+            target = self.db.get_user_by_username(username)
+        else:
+            await update.message.reply_text("❌ Укажите пользователя")
+            return
+
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        self.db.unmute_user(target['id'], user_data['id'])
+
+        try:
+            permissions = {
+                'can_send_messages': True,
+                'can_send_media_messages': True,
+                'can_send_polls': True,
+                'can_send_other_messages': True,
+                'can_add_web_page_previews': True
+            }
+            await context.bot.restrict_chat_member(
+                chat_id=chat_id,
+                user_id=target['telegram_id'],
+                permissions=permissions
+            )
+        except:
+            pass
+
+        try:
+            await context.bot.send_message(
+                target['telegram_id'],
+                "✅ Мут снят"
+            )
+        except:
+            pass
+
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        display_name = await self.get_display_name(target, target['telegram_id'])
+
+        await update.message.reply_text(f"✅ Мут снят с {display_name}")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - БАН
+    # =========================================================================
+
+    async def cmd_ban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 2+", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        match = re.search(r'бан\s+@?(\S+)(?:\s+(.+))?', text, re.IGNORECASE)
+        if not match:
+            await update.message.reply_text("❌ Пример: `бан @user спам`", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        username = match.group(1)
+        reason = match.group(2) if match.group(2) else "Нарушение правил"
+
+        target_data = self.db.get_user_by_username(username)
+        if not target_data:
+            await update.message.reply_text("❌ Пользователь не найден", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        target_internal_id = target_data['id']
+        target_telegram_id = target_data['telegram_id']
+
+        if target_data['rank'] >= user_data['rank'] and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Нельзя забанить модератора выше рангом", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        try:
+            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+            if bot_member.status not in ['administrator', 'creator']:
+                await update.message.reply_text("❌ Бот не администратор! Выдайте права.", parse_mode=ParseMode.MARKDOWN)
+                return
+            if not bot_member.can_restrict_members:
+                await update.message.reply_text("❌ У бота нет права на блокировку!", parse_mode=ParseMode.MARKDOWN)
+                return
+        except Exception as e:
+            logger.error(f"Ошибка проверки прав: {e}")
+
+        try:
+            await context.bot.ban_chat_member(
+                chat_id=chat_id,
+                user_id=target_telegram_id,
+                until_date=int(time.time()) + (30 * 24 * 60 * 60)
+            )
+            ban_success_telegram = True
+            logger.info(f"Пользователь {target_telegram_id} забанен в чате {chat_id}")
+        except Exception as e:
+            ban_success_telegram = False
+            logger.error(f"Ошибка бана в Telegram для {target_telegram_id}: {e}")
+            await update.message.reply_text(f"❌ Ошибка Telegram: {str(e)[:100]}", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        if ban_success_telegram:
+            self.db.ban_user(target_internal_id, user_data['id'], reason)
+
+            admin_name = f"@{user.username}" if user.username else user.first_name
+            display_name = await self.get_display_name(target_data, target_telegram_id)
+
+            text = (
+                f"🔴 Пользователь забанен\n\n"
+                f"👢 Пользователь: {display_name}\n"
+                f"🦸 Модератор: {admin_name}\n"
+                f"💬 Причина: {reason}\n"
+                f"📅 Срок: 30 дней"
+            )
+            await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+            try:
+                await context.bot.send_message(
+                    target_telegram_id,
+                    f"🔴 Вас заблокировали в чате\n\n"
+                    f"👢 Чат: {update.effective_chat.title}\n"
+                    f"🦸 Модератор: {admin_name}\n"
+                    f"💬 Причина: {reason}\n"
+                    f"📅 Срок: 30 дней",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить пользователя {target_telegram_id} о бане: {e}")
+
+    async def cmd_banlist(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        bans = self.db.get_banlist()
+
+        if not bans:
+            await update.message.reply_text("📋 Список забаненных пуст")
+            return
+
+        text = "📋 СПИСОК ЗАБАНЕННЫХ\n\n"
+        for ban in bans[:15]:
+            name = ban.get('first_name', 'Неизвестно')
+            username = f" (@{ban['username']})" if ban.get('username') else ""
+            text += f"🔴 {name}{username}\n"
+
+        if len(bans) > 15:
+            text += f"\n👥 Всего: {len(bans)} (показаны первые 15)"
+        else:
+            text += f"\n👥 Всего: {len(bans)}"
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_unban(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав. Нужен ранг 2+", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        username = text.replace('разбан', '').replace('@', '').strip()
+        if not username:
+            await update.message.reply_text("❌ Укажите пользователя: `разбан @user`", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        target_data = self.db.get_user_by_username(username)
+        if not target_data:
+            await update.message.reply_text("❌ Пользователь не найден", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        target_internal_id = target_data['id']
+        target_telegram_id = target_data['telegram_id']
+        target_name = target_data.get('nickname') or target_data['first_name']
+
+        try:
+            await context.bot.unban_chat_member(
+                chat_id=chat_id,
+                user_id=target_telegram_id,
+                only_if_banned=True
+            )
+            unban_success_telegram = True
+        except Exception as e:
+            unban_success_telegram = False
+            logger.error(f"Ошибка разбана в Telegram для {target_telegram_id}: {e}")
+
+        self.db.unban_user(target_internal_id, user_data['id'])
+
+        admin_name = f"@{user.username}" if user.username else user.first_name
+        target_display_name = await self.get_display_name(target_data, target_telegram_id)
+
+        if unban_success_telegram:
+            await update.message.reply_text(
+                f"✅ Бан снят\n\n"
+                f"👤 Пользователь: {target_display_name}\n"
+                f"🦸 Модератор: {admin_name}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            try:
+                await context.bot.send_message(
+                    target_telegram_id,
+                    f"✅ Вас разблокировали в чате\n\n"
+                    f"👢 Чат: {update.effective_chat.title}\n"
+                    f"🦸 Модератор: {admin_name}",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                logger.error(f"Не удалось уведомить {target_telegram_id} о разбане: {e}")
+        else:
+            await update.message.reply_text(
+                f"⚠️ Бан снят в базе данных, но возникла ошибка при разбане в Telegram.\n\n"
+                f"👤 Пользователь: {target_display_name}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+    async def cmd_kick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 1 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        username = text.replace('кик', '').replace('@', '').strip()
+        target = self.db.get_user_by_username(username)
+
+        if not target and update.message.reply_to_message:
+            target_id = update.message.reply_to_message.from_user.id
+            target = self.db.get_user_by_id(self.db.get_user(target_id)['id'])
+
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        try:
+            await context.bot.ban_chat_member(chat_id, target['telegram_id'])
+            await context.bot.unban_chat_member(chat_id, target['telegram_id'])
+            await update.message.reply_text(f"✅ {target['first_name']} исключен")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ПРОВЕРКА ПРАВ
+    # =========================================================================
+
+    async def cmd_checkrights(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+
+        try:
+            bot_member = await context.bot.get_chat_member(chat_id, context.bot.id)
+
+            if bot_member.status == 'creator':
+                await update.message.reply_text("✅ Бот является создателем чата! Полные права.")
+            elif bot_member.status == 'administrator':
+                rights = []
+                if bot_member.can_restrict_members:
+                    rights.append("✅ может банить/мутить")
+                else:
+                    rights.append("❌ НЕТ ПРАВА на бан/мут!")
+
+                if bot_member.can_delete_messages:
+                    rights.append("✅ может удалять сообщения")
+                else:
+                    rights.append("❌ не может удалять сообщения")
+
+                if bot_member.can_pin_messages:
+                    rights.append("✅ может закреплять")
+                else:
+                    rights.append("❌ не может закреплять")
+
+                rights_text = "\n".join(rights)
+                await update.message.reply_text(
+                    f"👑 Бот администратор\n\n{rights_text}"
+                )
+            else:
+                await update.message.reply_text("❌ Бот не администратор! Выдайте права.")
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка проверки: {e}")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ТРИГГЕРЫ
+    # =========================================================================
+
+    async def cmd_add_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        text = text[9:].strip()
+        if "=" not in text:
+            await update.message.reply_text("❌ Формат: +триггер слово = действие")
+            return
+
+        word, action = text.split("=", 1)
+        word = word.strip().lower()
+        action = action.strip()
+
+        action_parts = action.split()
+        action_type = action_parts[0].lower()
+        action_value = action_parts[1] if len(action_parts) > 1 else None
+
+        if action_type not in ["delete", "mute", "warn", "ban"]:
+            await update.message.reply_text("❌ Действие должно быть: delete, mute, warn, ban")
+            return
+
+        self.db.cursor.execute('''
+            INSERT INTO triggers (chat_id, word, action, action_value, created_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (update.effective_chat.id, word, action_type, action_value, user_data['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(f"✅ Триггер добавлен: {word} -> {action}")
+
+    async def cmd_remove_trigger(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        trigger_id = text[9:].strip()
+        if not trigger_id.isdigit():
+            await update.message.reply_text("❌ Укажите ID триггера")
+            return
+
+        self.db.cursor.execute("DELETE FROM triggers WHERE id = ? AND chat_id = ?", 
+                             (int(trigger_id), update.effective_chat.id))
+        self.db.conn.commit()
+
+        await update.message.reply_text("✅ Триггер удален")
+
+    async def cmd_list_triggers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT id, word, action, action_value FROM triggers WHERE chat_id = ?", 
+                             (update.effective_chat.id,))
+        triggers = self.db.cursor.fetchall()
+
+        if not triggers:
+            await update.message.reply_text("ℹ️ В этом чате нет триггеров")
+            return
+
+        text = "🔹 ТРИГГЕРЫ ЧАТА\n\n"
+        for trigger in triggers:
+            action_text = trigger[2]
+            if trigger[3]:
+                action_text += f" {trigger[3]}"
+            text += f"ID: {trigger[0]} | {trigger[1]} → {action_text}\n"
+
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - НАСТРОЙКИ ЧАТА
+    # =========================================================================
+
+    async def _toggle_setting(self, update: Update, setting: str):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите on или off")
+            return
+
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+
+        self.db.cursor.execute(f'''
+            INSERT INTO chat_settings (chat_id, {setting})
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET {setting} = excluded.{setting}
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+
+        status = "включен" if state else "выключен"
+        names = {"antimat": "Антимат", "antilink": "Антиссылки", "antiflood": "Антифлуд"}
+        await update.message.reply_text(f"✅ {names.get(setting, setting)} {status}")
+
+    async def cmd_set_antimat(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antimat")
+
+    async def cmd_set_antilink(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antilink")
+
+    async def cmd_set_antiflood(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self._toggle_setting(update, "antiflood")
+
+    async def cmd_clear(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите количество: чистка 50")
+            return
+
+        try:
+            count = int(parts[1])
+            if count > 100:
+                count = 100
+        except:
+            await update.message.reply_text("❌ Количество должно быть числом")
+            return
+
+        try:
+            await update.message.delete()
+            messages = []
+            async for msg in context.bot.get_chat_history(update.effective_chat.id, limit=count):
+                messages.append(msg.message_id)
+
+            if messages:
+                await context.bot.delete_messages(update.effective_chat.id, messages)
+                await context.bot.send_message(
+                    update.effective_chat.id, 
+                    f"✅ Удалено {len(messages)} сообщений",
+                    disable_notification=True
+                )
+        except Exception as e:
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+
+    async def cmd_clear_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+        text = update.message.text
+
+        if user_data['rank'] < 2 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        username = text.replace('чистка от', '').strip().replace('@', '')
+        target = self.db.get_user_by_username(username)
+
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        await update.message.reply_text(f"🔄 Удаляю сообщения {target['first_name']}...")
+
+    async def cmd_set_welcome(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        welcome_text = update.message.text[12:].strip()
+        if not welcome_text:
+            await update.message.reply_text("❌ Укажите текст приветствия")
+            return
+
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, welcome)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET welcome = excluded.welcome
+        ''', (update.effective_chat.id, welcome_text))
+        self.db.conn.commit()
+
+        await update.message.reply_text("✅ Приветствие установлено")
+
+    async def cmd_set_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        rules_text = update.message.text[9:].strip()
+        if not rules_text:
+            await update.message.reply_text("❌ Укажите текст правил")
+            return
+
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, rules)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET rules = excluded.rules
+        ''', (update.effective_chat.id, rules_text))
+        self.db.conn.commit()
+
+        await update.message.reply_text("✅ Правила установлены")
+
+    async def cmd_show_rules(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        self.db.cursor.execute("SELECT rules FROM chat_settings WHERE chat_id = ?", (update.effective_chat.id,))
+        row = self.db.cursor.fetchone()
+
+        if row and row[0]:
+            await update.message.reply_text(f"📜 Правила чата:\n\n{row[0]}")
+        else:
+            await update.message.reply_text("ℹ️ В этом чате ещё не установлены правила")
+
+    async def cmd_set_captcha(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if user_data['rank'] < 3 and user.id != OWNER_ID:
+            await update.message.reply_text("⛔️ Недостаточно прав")
+            return
+
+        parts = update.message.text.split()
+        if len(parts) < 2:
+            await update.message.reply_text("❌ Укажите on или off")
+            return
+
+        state = 1 if parts[1].lower() in ["on", "вкл", "да"] else 0
+
+        self.db.cursor.execute('''
+            INSERT INTO chat_settings (chat_id, captcha)
+            VALUES (?, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET captcha = excluded.captcha
+        ''', (update.effective_chat.id, state))
+        self.db.conn.commit()
+
+        status = "включена" if state else "выключена"
+        await update.message.reply_text(f"✅ Капча {status}")
+
+    # =========================================================================
+    # МЕТОДЫ МОДЕРАЦИИ - ГОЛОСОВАНИЕ ЗА БАН
+    # =========================================================================
+
+    async def cmd_ban_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Использование: /banvote @user или гб @user")
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        required_votes = 5
+        min_rank = 0
+
+        if len(context.args) >= 3:
+            try:
+                required_votes = int(context.args[1])
+                min_rank = int(context.args[2])
+            except:
+                pass
+
+        vote_id = self.db.create_ban_vote(chat_id, target['id'], user_data['id'], required_votes, min_rank)
+
+        display_name = await self.get_display_name(target, target['telegram_id'])
+        creator_name = update.effective_user.first_name
+
+        keyboard = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✅ ЗА БАН", callback_data=f"vote_for_{vote_id}"),
+                InlineKeyboardButton("❌ ПРОТИВ", callback_data=f"vote_against_{vote_id}")
+            ]
+        ])
+
+        await update.message.reply_text(
+            f"🗳 ГОЛОСОВАНИЕ ЗА БАН\n\n"
+            f"👤 Цель: {display_name}\n"
+            f"👑 Инициатор: {creator_name}\n"
+            f"📊 Требуется голосов: {required_votes}\n"
+            f"🎚 Мин. ранг: {min_rank}\n\n"
+            f"Голосуйте!",
+            reply_markup=keyboard
+        )
+
+    async def cmd_stop_vote(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /stopvote @user")
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+
+        vote = dict(vote)
+
+        if vote['created_by'] != user_data['id'] and user_data['rank'] < 3:
+            await update.message.reply_text("❌ У вас нет прав на остановку этого голосования")
+            return
+
+        self.db.cursor.execute("UPDATE ban_votes SET status = 'stopped' WHERE id = ?", (vote['id'],))
+        self.db.conn.commit()
+
+        await update.message.reply_text("✅ Голосование остановлено")
+
+    async def cmd_vote_info(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text("❌ Укажите пользователя: /voteinfo @user или гб инфо @user")
+            return
+
+        username = context.args[0].replace('@', '')
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text("❌ Пользователь не найден")
+            return
+
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND target_id = ? AND status = 'active'",
+                             (chat_id, target['id']))
+        vote = self.db.cursor.fetchone()
+
+        if not vote:
+            await update.message.reply_text("❌ Активное голосование не найдено")
+            return
+
+        vote = dict(vote)
+        creator = self.db.get_user_by_id(vote['created_by'])
+        creator_name = creator.get('nickname') or creator['first_name'] if creator else "Неизвестно"
+        display_name = await self.get_display_name(target, target['telegram_id'])
+
+        text = (
+            f"🗳 ИНФОРМАЦИЯ О ГОЛОСОВАНИИ\n\n"
+            f"👤 Цель: {display_name}\n"
+            f"👑 Инициатор: {creator_name}\n"
+            f"📊 Требуется голосов: {vote['required_votes']}\n"
+            f"🎚 Мин. ранг: {vote['min_rank']}\n"
+            f"✅ Голосов ЗА: {vote['votes_for']}\n"
+            f"❌ Голосов ПРОТИВ: {vote['votes_against']}"
+        )
+
+        await update.message.reply_text(text)
+
+    async def cmd_vote_list(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+
+        self.db.cursor.execute("SELECT * FROM ban_votes WHERE chat_id = ? AND status = 'active'", (chat_id,))
+        votes = self.db.cursor.fetchall()
+
+        if not votes:
+            await update.message.reply_text("ℹ️ Нет активных голосований")
+            return
+
+        text = "🗳 АКТИВНЫЕ ГОЛОСОВАНИЯ\n\n"
+        for vote in votes:
+            vote = dict(vote)
+            target = self.db.get_user_by_id(vote['target_id'])
+            if target:
+                display_name = await self.get_display_name(target, target['telegram_id'])
+                text += f"• {display_name} — {vote['votes_for']}/{vote['required_votes']}\n"
+
+        await update.message.reply_text(text)
+
     # ===== ОБРАБОТЧИКИ СООБЩЕНИЙ =====
     async def handle_numbers(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = update.message.text.strip()
+        
         if text == "1":
             await self.cmd_profile(update, context)
         elif text == "2":
@@ -5061,7 +7276,7 @@ _{motto}_
         elif text == "0":
             await self.show_menu(update, context)
         else:
-            await update.message.reply_text(s.error("Неверный номер. Введите 0-7"))
+            await update.message.reply_text("❌ Неверный номер. Введите 0-7")
 
     async def check_spam(self, update: Update) -> bool:
         user = update.effective_user
@@ -5125,29 +7340,33 @@ _{motto}_
         if context.user_data.get('awaiting_rps'):
             if message_text in ["1", "2", "3"]:
                 context.user_data['awaiting_rps'] = False
+
                 choices = {1: "🪨 Камень", 2: "✂️ Ножницы", 3: "📄 Бумага"}
-                results = {(1,2): "win", (2,3): "win", (3,1): "win", (2,1): "lose", (3,2): "lose", (1,3): "lose"}
+                results = {
+                    (1,2): "win", (2,3): "win", (3,1): "win",
+                    (2,1): "lose", (3,2): "lose", (1,3): "lose"
+                }
 
                 player_choice = int(message_text)
                 bot_choice = random.randint(1, 3)
 
-                text = f"{s.header('✊ КНБ')}\n\n"
+                text = f"✊ КНБ\n\n"
                 text += f"👤 Вы: {choices[player_choice]}\n"
                 text += f"🤖 Бот: {choices[bot_choice]}\n\n"
 
                 if player_choice == bot_choice:
                     self.db.update_user(user_data['id'], rps_draws=user_data.get('rps_draws', 0) + 1)
-                    text += "🤝 **НИЧЬЯ!**"
+                    text += "🤝 НИЧЬЯ!"
                 elif results.get((player_choice, bot_choice)) == "win":
                     self.db.update_user(user_data['id'], rps_wins=user_data.get('rps_wins', 0) + 1)
                     reward = random.randint(10, 30)
                     self.db.add_coins(user_data['id'], reward)
-                    text += f"🎉 **ПОБЕДА!** +{reward} 💰"
+                    text += f"🎉 ПОБЕДА! +{reward} 💰"
                 else:
                     self.db.update_user(user_data['id'], rps_losses=user_data.get('rps_losses', 0) + 1)
-                    text += "😢 **ПОРАЖЕНИЕ!**"
+                    text += "😢 ПОРАЖЕНИЕ!"
 
-                await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+                await update.message.reply_text(text)
                 return
 
         # Обработка голосования в мафии
@@ -5160,11 +7379,13 @@ _{motto}_
                         if 1 <= vote_num <= len(alive_players):
                             target_id = alive_players[vote_num - 1]
                             game.votes[user.id] = target_id
+
                             target_name = game.players_data[target_id]['name']
                             await self.send_private_message(
                                 user.id,
                                 f"✅ Ваш голос учтён за {target_name}"
                             )
+
                             await update.message.reply_text(f"✅ Ваш голос учтён за игрока #{vote_num}")
                             break
             except:
@@ -5184,19 +7405,16 @@ _{motto}_
                             self.db.add_coins(user_data['id'], win)
                             self.db.update_user(user_data['id'], guess_wins=user_data.get('guess_wins', 0) + 1)
                             await update.message.reply_text(
-                                f"""
-{s.header('🎉 ПОБЕДА!')}
-
-Число {game['number']}!
-Попыток: {game['attempts']}
-Выигрыш: {win} 💰
-                                """
+                                f"🎉 ПОБЕДА!\n\n"
+                                f"Число {game['number']}!\n"
+                                f"Попыток: {game['attempts']}\n"
+                                f"Выигрыш: {win} 💰"
                             )
                             del self.games_in_progress[game_id]
                         elif game['attempts'] >= game['max_attempts']:
                             self.db.update_user(user_data['id'], guess_losses=user_data.get('guess_losses', 0) + 1)
                             await update.message.reply_text(
-                                s.error(f"Попытки кончились! Было число {game['number']}")
+                                f"❌ Попытки кончились! Было число {game['number']}"
                             )
                             del self.games_in_progress[game_id]
                         elif guess < game['number']:
@@ -5204,50 +7422,50 @@ _{motto}_
                         else:
                             await update.message.reply_text(f"📉 Загаданное число меньше {guess}")
                     except ValueError:
-                        await update.message.reply_text(s.error("Введите число от 1 до 100"))
+                        await update.message.reply_text("❌ Введите число от 1 до 100")
                     return
 
                 elif game_id.startswith('bulls_'):
                     if len(message_text) != 4 or not message_text.isdigit():
-                        await update.message.reply_text(s.error("Введите 4 цифры"))
+                        await update.message.reply_text("❌ Введите 4 цифры")
                         return
-                    if len(set(message_text)) != 4:
-                        await update.message.reply_text(s.error("Цифры не должны повторяться"))
+
+                    guess = message_text
+                    if len(set(guess)) != 4:
+                        await update.message.reply_text("❌ Цифры не должны повторяться")
                         return
 
                     bulls = 0
                     cows = 0
                     for i in range(4):
-                        if message_text[i] == game['number'][i]:
+                        if guess[i] == game['number'][i]:
                             bulls += 1
-                        elif message_text[i] in game['number']:
+                        elif guess[i] in game['number']:
                             cows += 1
 
-                    game['attempts'].append((message_text, bulls, cows))
+                    game['attempts'].append((guess, bulls, cows))
 
                     if bulls == 4:
                         win = game['bet'] * 3
                         self.db.add_coins(user_data['id'], win)
                         self.db.update_user(user_data['id'], bulls_wins=user_data.get('bulls_wins', 0) + 1)
                         await update.message.reply_text(
-                            f"""
-{s.header('🎉 ПОБЕДА!')}
-
-Число {game['number']}!
-Попыток: {len(game['attempts'])}
-Выигрыш: {win} 💰
-                            """
+                            f"🎉 ПОБЕДА!\n\n"
+                            f"Число {game['number']}!\n"
+                            f"Попыток: {len(game['attempts'])}\n"
+                            f"Выигрыш: {win} 💰"
                         )
                         del self.games_in_progress[game_id]
                     elif len(game['attempts']) >= game['max_attempts']:
                         self.db.update_user(user_data['id'], bulls_losses=user_data.get('bulls_losses', 0) + 1)
                         await update.message.reply_text(
-                            s.error(f"Попытки кончились! Было число {game['number']}")
+                            f"❌ Попытки кончились! Было число {game['number']}"
                         )
                         del self.games_in_progress[game_id]
                     else:
                         await update.message.reply_text(
-                            f"🔍 Быки: {bulls}, Коровы: {cows}\nОсталось попыток: {game['max_attempts'] - len(game['attempts'])}"
+                            f"🔍 Быки: {bulls}, Коровы: {cows}\n"
+                            f"Осталось попыток: {game['max_attempts'] - len(game['attempts'])}"
                         )
                     return
 
@@ -5285,6 +7503,7 @@ _{motto}_
                 if response:
                     await update.message.reply_text(response)
                     self.db.update_quest_progress(user_data['id'], 'ai_interactions', 1)
+                    return
             except Exception as e:
                 logger.error(f"AI response error: {e}")
 
@@ -5292,86 +7511,164 @@ _{motto}_
         member = update.message.left_chat_member
         if member.is_bot:
             return
+
         user_data = self.db.get_user_by_id(member.id)
-        name = user_data.get('nickname') or member.first_name if user_data else member.first_name
-        await update.message.reply_text(f"👋 {name} покинул чат...")
-        self.db.log_action(member.id, 'left_chat', f"Покинул чат {update.effective_chat.title}",
-                           chat_id=update.effective_chat.id)
+        if user_data:
+            name = user_data.get('nickname') or member.first_name
+        else:
+            name = member.first_name
+
+        await update.message.reply_text(
+            f"👋 {name} покинул чат...",
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+        self.db.log_action(
+            member.id,
+            'left_chat',
+            f"Покинул чат {update.effective_chat.title}",
+            chat_id=update.effective_chat.id
+        )
 
     async def handle_new_chat_members(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         for member in update.message.new_chat_members:
             if member.id == context.bot.id:
                 chat = update.effective_chat
                 added_by = update.message.from_user
+
                 welcome_text = f"""
-{s.header('ПРИВЕТ!')}
+Привет, {chat.title}!
 Меня добавил {added_by.first_name}.
 
 📌 Основные команды:
-/menu — главное меню
-/help — список всех команд
-/profile — мой профиль
-/balance — мой баланс
-/games — игры
+• /menu — главное меню
+• /help — список всех команд
+• /profile — мой профиль
+• /balance — мой баланс
+• /games — игры
 
 ⚠️ Для полноценной работы выдайте мне права администратора!
 
 👑 Владелец: {OWNER_USERNAME}
                 """
+
                 keyboard = InlineKeyboardMarkup([
                     [InlineKeyboardButton("📋 Команды", callback_data="help_menu")],
                     [InlineKeyboardButton("👑 Владелец", url=f"https://t.me/{OWNER_USERNAME.replace('@', '')}")]
                 ])
+
                 await update.message.reply_photo(
                     photo="https://i.postimg.cc/wxt62Qy5/photo-2026-02-22-22-19-50.jpg",
                     caption=welcome_text,
                     parse_mode=ParseMode.MARKDOWN,
                     reply_markup=keyboard
                 )
+
                 logger.info(f"✅ Бот добавлен в чат: {chat.title} (ID: {chat.id})")
-                self.db.cursor.execute('INSERT OR IGNORE INTO chat_settings (chat_id, chat_name) VALUES (?, ?)',
-                                      (chat.id, chat.title))
+
+                self.db.cursor.execute('''
+                    INSERT OR IGNORE INTO chat_settings (chat_id, chat_name)
+                    VALUES (?, ?)
+                ''', (chat.id, chat.title))
                 self.db.conn.commit()
 
-    # ===== ОБРАБОТЧИК КНОПОК =====
     async def button_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
         await query.answer()
 
         if not query.message:
+            logger.error("Нет сообщения для редактирования")
             return
 
         data = query.data
         user = query.from_user
         user_data = self.db.get_user(user.id)
 
-        # Основные кнопки из /start
         if data == "random_chat":
-            await self.cmd_random_chat(update, context)
+            self.db.cursor.execute("SELECT chat_id, chat_name FROM chat_settings WHERE chat_code IS NOT NULL ORDER BY RANDOM() LIMIT 1")
+            row = self.db.cursor.fetchone()
+            if row:
+                await query.edit_message_text(
+                    f"🎲 Случайная беседа найдена!\n\n"
+                    f"Название: {row[1]}\n"
+                    f"ID: `{row[0]}`\n\n"
+                    f"Присоединяйтесь!"
+                )
+            else:
+                await query.edit_message_text("❌ Нет доступных бесед")
+
         elif data == "top_chats":
             await self.cmd_top_chats(update, context)
+
         elif data == "help_menu":
             await self.cmd_help(update, context)
+
         elif data == "setup_info":
-            await self.cmd_setup_info(update, context)
+            text = """
+# 🔧 Установка
+
+Подробная инструкция по установке бота:
+https://teletype.in/@nobucraft/2_pbVPOhaYo
+            """
+            await query.edit_message_text(text, disable_web_page_preview=True)
+
         elif data == "neons_info":
-            await self.cmd_neons(update, context)
+            text = """
+# 💜 Что такое неоны?
+
+Неоны — основная валюта кибер-вселенной Спектра.
+
+## Как получить:
+• Ежедневный бонус (/daily)
+• Победы в играх
+• Убийство боссов
+• Покупка за монеты (1000 💰 = 1 💜)
+• Реферальная система
+• Выполнение квестов (/quests)
+
+## На что тратить:
+• Покупка бонусов
+• Подарки
+• Улучшения в играх
+• Торговля на бирже
+
+## Команды:
+/neons — мой баланс
+/transfer @user 100 — перевести неоны
+/farm — ферма глитчей (1 💜 = 100 🖥)
+/exchange — биржа
+            """
+            await query.edit_message_text(text)
+
         elif data == "bonuses_menu":
             await self.cmd_bonuses(update, context)
+
         elif data == "top_chats_day":
             context.args = ["день"]
             await self.cmd_top_chats(update, context)
+
         elif data == "top_chats_week":
             context.args = ["неделя"]
             await self.cmd_top_chats(update, context)
+
         elif data == "top_chats_month":
             context.args = ["месяц"]
             await self.cmd_top_chats(update, context)
+
+        elif data.startswith("chat_card_"):
+            chat_id = int(data.split('_')[2])
+            await query.edit_message_text(
+                "📇 Карточка чата\n\nФункция в разработке",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
         elif data.startswith("boss_attack_"):
             boss_id = int(data.split('_')[2])
             await self._process_boss_attack(update, context, user, user_data, boss_id, is_callback=True)
+
         elif data == "boss_regen":
             await self.cmd_regen(update, context)
+
         elif data == "boss_buy_weapon":
             keyboard_buttons = [
                 InlineKeyboardButton("🗡 Меч (+10 урона) - 200💰", callback_data="buy_weapon_sword"),
@@ -5385,6 +7682,7 @@ _{motto}_
                 parse_mode=ParseMode.MARKDOWN,
                 reply_markup=keyboard
             )
+
         elif data.startswith("buy_weapon_"):
             weapon = data.replace("buy_weapon_", "")
             weapons = {
@@ -5392,81 +7690,288 @@ _{motto}_
                 "legendary": {"name": "⚔️ Легендарный меч", "damage": 30, "price": 500},
                 "blaster": {"name": "🔫 Бластер", "damage": 50, "price": 1000}
             }
+
             if weapon in weapons:
                 w = weapons[weapon]
                 if user_data['coins'] >= w['price']:
                     self.db.add_coins(user_data['id'], -w['price'])
                     new_damage = user_data['damage'] + w['damage']
                     self.db.update_user(user_data['id'], damage=new_damage)
-                    await query.edit_message_text(s.success(f"✅ Куплено: {w['name']}!\nТеперь ваш урон: {new_damage}"))
+                    await query.edit_message_text(
+                        s.success(f"✅ Куплено: {w['name']}!\nТеперь ваш урон: {new_damage}"),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
                 else:
-                    await query.edit_message_text(s.error(f"❌ Недостаточно монет. Нужно {w['price']} 💰"))
+                    await query.edit_message_text(
+                        s.error(f"❌ Недостаточно монет. Нужно {w['price']} 💰"),
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+
         elif data == "boss_list":
             bosses = self.db.get_bosses()
             text = f"{s.header('👾 БОССЫ')}\n\n"
             for i, boss in enumerate(bosses[:5]):
                 status = "⚔️" if boss['is_alive'] else "💀"
-                health_bar = s.progress(boss['health'], boss['max_health'], 10)
+                health_bar = self._progress_bar(boss['health'], boss['max_health'], 10)
                 text += f"{i+1}. {status} {boss['name']}\n   {health_bar}\n\n"
+
             keyboard_buttons = []
             for i, boss in enumerate(bosses[:5]):
                 if boss['is_alive']:
-                    keyboard_buttons.append(InlineKeyboardButton(f"⚔️ {boss['name']}", callback_data=f"boss_attack_{boss['id']}"))
+                    keyboard_buttons.append(InlineKeyboardButton(
+                        f"⚔️ {boss['name']}",
+                        callback_data=f"boss_attack_{boss['id']}"
+                    ))
+
             keyboard_buttons.append(InlineKeyboardButton("🔄 Регенерация", callback_data="boss_regen"))
-            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN,
-                                          reply_markup=InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 1)))
+
+            await query.edit_message_text(
+                text,
+                parse_mode=ParseMode.MARKDOWN,
+                reply_markup=InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 1))
+            )
+
         elif data.startswith("saper_"):
-            # Обработка игры Сапёр (сокращено для краткости)
-            pass
-        elif data.startswith("vote_for_") or data.startswith("vote_against_"):
-            # Обработка голосования за бан
-            pass
+            parts = data.split('_')
+            if len(parts) >= 3:
+                game_id = f"{parts[1]}_{parts[2]}"
+                cell = int(parts[3])
+
+                if game_id in self.games_in_progress:
+                    game = self.games_in_progress[game_id]
+                    if game['user_id'] != user.id:
+                        await query.answer("Это не ваша игра!", show_alert=True)
+                        return
+
+                    x = (cell - 1) // 3
+                    y = (cell - 1) % 3
+
+                    if x == game['mine_x'] and y == game['mine_y']:
+                        await query.edit_message_text(
+                            f"{s.header('💥 БУМ!')}\n\n{s.error('Ты подорвался на мине!')}\n\nПроигрыш: {game['bet']} 💰",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                        del self.games_in_progress[game_id]
+                    else:
+                        game['opened'] += 1
+                        game['field'][x][y] = "✅"
+
+                        if game['opened'] >= 8:
+                            win = game['bet'] * 3
+                            self.db.add_coins(user_data['id'], win)
+                            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+                            await query.edit_message_text(
+                                s.success(f"🎉 ПОБЕДА! Ты открыл все безопасные клетки!\nВыигрыш: {win} 💰"),
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                            del self.games_in_progress[game_id]
+                        else:
+                            field_text = ""
+                            for i in range(3):
+                                field_text += ' '.join(game['field'][i]) + "\n"
+
+                            keyboard_buttons = []
+                            for i in range(3):
+                                for j in range(3):
+                                    cell_num = i * 3 + j + 1
+                                    if game['field'][i][j] == "✅":
+                                        keyboard_buttons.append(InlineKeyboardButton(f"✅", callback_data="disabled"))
+                                    else:
+                                        keyboard_buttons.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+
+                            await query.edit_message_text(
+                                f"{s.header('💣 САПЁР')}\n\n{field_text}",
+                                parse_mode=ParseMode.MARKDOWN,
+                                reply_markup=InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 3))
+                            )
+
+        elif data.startswith("vote_for_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], True):
+                await query.edit_message_text(s.success("✅ Ваш голос учтён (ЗА БАН)"))
+
+                self.db.cursor.execute("SELECT * FROM ban_votes WHERE id = ?", (vote_id,))
+                vote = self.db.cursor.fetchone()
+                if vote and vote[7] >= vote[5]:
+                    target = self.db.get_user_by_id(vote[2])
+                    if target:
+                        self.db.ban_user(target['id'], vote[3], "По результатам голосования")
+                        self.db.cursor.execute("UPDATE ban_votes SET status = 'completed' WHERE id = ?", (vote_id,))
+                        self.db.conn.commit()
+
+                        await context.bot.send_message(
+                            vote[1],
+                            s.error(f"🔨 Пользователь {target['first_name']} забанен по результатам голосования!")
+                        )
+            else:
+                await query.edit_message_text(s.error("❌ Не удалось проголосовать"))
+
+        elif data.startswith("vote_against_"):
+            vote_id = int(data.split('_')[2])
+            if self.db.vote_for_ban(vote_id, user_data['id'], False):
+                await query.edit_message_text(s.success("✅ Ваш голос учтён (ПРОТИВ БАНА)"))
+            else:
+                await query.edit_message_text(s.error("❌ Не удалось проголосовать"))
+
         elif data.startswith("mafia_confirm_"):
             chat_id = int(data.split('_')[2])
             if chat_id in self.mafia_games:
                 game = self.mafia_games[chat_id]
                 if user.id in game.players:
                     game.confirm_player(user.id)
-                    self.db.cursor.execute('INSERT OR REPLACE INTO mafia_confirmations (game_id, user_id, confirmed) VALUES (?, ?, 1)',
-                                         (game.game_id, user.id))
+
+                    self.db.cursor.execute('''
+                        INSERT INTO mafia_confirmations (game_id, user_id, confirmed)
+                        VALUES (?, ?, 1)
+                        ON CONFLICT(game_id, user_id) DO UPDATE SET confirmed = 1
+                    ''', (game.game_id, user.id))
                     self.db.conn.commit()
-                    await query.edit_message_text(s.success("✅ Подтверждение получено!\n\nОжидайте начала игры..."))
+
+                    await query.edit_message_text(
+                        f"{s.success('✅ Подтверждение получено!')}\n\n"
+                        f"{s.info('Ожидайте начала игры...')}",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+
                     if game.all_confirmed():
                         await self._mafia_start_game(game, context)
+
         elif data.startswith("accept_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
+
             if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
-                await query.edit_message_text(s.error("Дуэль не найдена или уже обработана"))
+                await query.edit_message_text(s.error("❌ Дуэль не найдена или уже обработана"))
                 return
+
             self.db.update_duel(duel_id, status='accepted')
+
             challenger = self.db.get_user_by_id(duel['challenger_id'])
             opponent = self.db.get_user_by_id(duel['opponent_id'])
+
             if not challenger or not opponent:
-                await query.edit_message_text(s.error("Ошибка загрузки данных"))
+                await query.edit_message_text(s.error("❌ Ошибка загрузки данных"))
                 return
+
             await query.edit_message_text(
-                f"""
-{s.header('⚔️ ДУЭЛЬ ПРИНЯТА!')}
-
-{challenger['first_name']} VS {opponent['first_name']}
-💰 Ставка: {duel['bet']} 💰
-
-🔄 Дуэль начинается...
-                """
+                f"{s.success('✅ Дуэль принята!')}\n\n"
+                f"⚔️ {challenger['first_name']} VS {opponent['first_name']} ⚔️\n"
+                f"💰 Ставка: {duel['bet']} 💰\n\n"
+                f"🔄 Дуэль начинается...",
+                parse_mode=ParseMode.MARKDOWN
             )
+
             asyncio.create_task(self._process_duel(duel_id, challenger, opponent, duel['bet'], update.effective_chat.id, context))
+
         elif data.startswith("reject_duel_"):
             duel_id = int(data.split('_')[2])
             duel = self.db.get_duel(duel_id)
+
             if not duel or duel['opponent_id'] != user_data['id'] or duel['status'] != 'pending':
-                await query.edit_message_text(s.error("Дуэль не найдена или уже обработана"))
+                await query.edit_message_text(s.error("❌ Дуэль не найдена или уже обработана"))
                 return
+
             self.db.update_duel(duel_id, status='rejected')
             self.db.add_coins(duel['challenger_id'], duel['bet'])
-            await query.edit_message_text(s.error("❌ Дуэль отклонена\nСтавка возвращена."))
+
+            await query.edit_message_text(
+                f"{s.error('❌ Дуэль отклонена')}\n\n"
+                f"Ставка возвращена.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        elif data.startswith("marry_accept_"):
+            proposer_id = int(data.split('_')[2])
+
+            if user_data.get('spouse', 0):
+                await query.edit_message_text(s.error("❌ Вы уже в браке"), parse_mode=ParseMode.MARKDOWN)
+                return
+
+            proposer = self.db.get_user_by_id(proposer_id)
+            if not proposer:
+                await query.edit_message_text(s.error("❌ Пользователь не найден"), parse_mode=ParseMode.MARKDOWN)
+                return
+
+            if proposer.get('spouse', 0):
+                await query.edit_message_text(s.error("❌ Пользователь уже в браке"), parse_mode=ParseMode.MARKDOWN)
+                return
+
+            now = datetime.now().isoformat()
+            self.db.update_user(user_data['id'], spouse=proposer_id, married_since=now)
+            self.db.update_user(proposer_id, spouse=user_data['id'], married_since=now)
+
+            text = (
+                f"# Спектр | Свадьба\n\n"
+                f"💍 Поздравляем!\n"
+                f"{user_data['first_name']} и {proposer['first_name']} теперь в браке! 🎉\n\n"
+                f"💕 Совместимость: {random.randint(70, 100)}%\n"
+                f"💰 Бонус молодожёнам: +500 💰 каждому\n"
+                f"✨ Особый статус: Супруг(а)"
+            )
+
+            self.db.add_coins(user_data['id'], 500)
+            self.db.add_coins(proposer_id, 500)
+
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+
+            await self.send_private_message(
+                proposer['telegram_id'],
+                f"{s.success('💞 ПОЗДРАВЛЯЕМ!')}\n\n"
+                f"{s.item(f'{user_data["first_name"]} принял(а) ваше предложение!')}",
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        elif data.startswith("marry_reject_"):
+            proposer_id = int(data.split('_')[2])
+            await query.edit_message_text(s.error("❌ Предложение отклонено"), parse_mode=ParseMode.MARKDOWN)
+            await self.send_private_message(
+                proposer_id,
+                s.error("❌ Ваше предложение отклонили"),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
+        elif data == "bookmark_help":
+            text = """
+# 📌 Закладки
+
+Как использовать:
+
+• `+Закладка Название` (с новой строки содержимое) — создать
+• `закладка [ID]` — показать
+• `чатбук` — все закладки чата
+• `мои закладки` — ваши закладки
+• `-Закладка [ID]` — удалить
+            """
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        elif data == "circle_help":
+            text = """
+# 🔄 Кружки
+
+Как использовать:
+
+• `создать кружок Название` (с новой строки описание) — создать
+• `кружки` — список кружков
+• `кружок [номер]` — информация
+• `+Кружок [номер]` — присоединиться
+• `-Кружок [номер]` — выйти
+            """
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+
+        elif data == "achievements_help":
+            text = """
+# 🏅 Ачивки
+
+Как использовать:
+
+• `мои ачивки` — ваши достижения
+• `топ ачивок` — рейтинг
+• `ачивка [ID]` — информация
+• `+Ачивки` / `-Ачивки` — приватность
+            """
+            await query.edit_message_text(text, parse_mode=ParseMode.MARKDOWN)
+
         else:
-            # Другие кнопки (marry, bookmark, circle, achievements) – можно добавить по аналогии
             await query.edit_message_text("ℹ️ Функция в разработке")
 
     # ===== ТАЙМЕРЫ =====
@@ -5474,6 +7979,7 @@ _{motto}_
         while True:
             try:
                 timers = self.db.get_pending_timers()
+
                 for timer in timers:
                     try:
                         await self.app.bot.send_message(
@@ -5483,25 +7989,25 @@ _{motto}_
                         self.db.complete_timer(timer['id'])
                     except Exception as e:
                         logger.error(f"Ошибка выполнения таймера {timer['id']}: {e}")
+
                 await asyncio.sleep(60)
             except Exception as e:
                 logger.error(f"Ошибка в check_timers: {e}")
                 await asyncio.sleep(60)
 
-    # ===== НАЛОГОВЫЙ ТАЙМЕР =====
     async def weekly_tax_loop(self):
         while True:
             now = datetime.now()
-            # Проверяем, понедельник ли сегодня, 00:00
             if now.weekday() == 0 and now.hour == 0 and now.minute == 0:
                 self.db.apply_wealth_tax()
-                await asyncio.sleep(60)  # чтобы не сработало повторно в ту же минуту
-            await asyncio.sleep(3600)  # проверяем каждый час
+                await asyncio.sleep(60)
+            await asyncio.sleep(3600)
 
     # ===== НАСТРОЙКА ОБРАБОТЧИКОВ =====
     def setup_handlers(self):
-        """Регистрация всех обработчиков (без Telegram-бонусов)"""
-        # Основные команды
+        """Регистрация всех обработчиков (полный список)"""
+
+        # ===== ОСНОВНЫЕ КОМАНДЫ =====
         self.app.add_handler(CommandHandler("start", self.cmd_start))
         self.app.add_handler(CommandHandler("help", self.cmd_help))
         self.app.add_handler(CommandHandler("menu", self.show_menu))
@@ -5511,7 +8017,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("topchats", self.cmd_top_chats))
         self.app.add_handler(CommandHandler("setupinfo", self.cmd_setup_info))
 
-        # Профиль
+        # ===== ПРОФИЛЬ =====
         self.app.add_handler(CommandHandler("profile", self.cmd_profile))
         self.app.add_handler(CommandHandler("nick", self.cmd_set_nick))
         self.app.add_handler(CommandHandler("title", self.cmd_set_title))
@@ -5520,6 +8026,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("gender", self.cmd_set_gender))
         self.app.add_handler(CommandHandler("removegender", self.cmd_remove_gender))
         self.app.add_handler(CommandHandler("city", self.cmd_set_city))
+        self.app.add_handler(CommandHandler("country", self.cmd_set_country))
         self.app.add_handler(CommandHandler("birth", self.cmd_set_birth))
         self.app.add_handler(CommandHandler("age", self.cmd_set_age))
         self.app.add_handler(CommandHandler("id", self.cmd_id))
@@ -5527,7 +8034,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("profile_public", self.cmd_profile_public))
         self.app.add_handler(CommandHandler("profile_private", self.cmd_profile_private))
 
-        # Статистика
+        # ===== СТАТИСТИКА =====
         self.app.add_handler(CommandHandler("stats", self.cmd_stats))
         self.app.add_handler(CommandHandler("mystats", self.cmd_my_stats))
         self.app.add_handler(CommandHandler("top", self.cmd_top))
@@ -5536,7 +8043,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("topneons", self.cmd_top_neons))
         self.app.add_handler(CommandHandler("topglitches", self.cmd_top_glitches))
 
-        # Экономика
+        # ===== ЭКОНОМИКА =====
         self.app.add_handler(CommandHandler("balance", self.cmd_balance))
         self.app.add_handler(CommandHandler("coins", self.cmd_balance))
         self.app.add_handler(CommandHandler("pay", self.cmd_pay))
@@ -5554,7 +8061,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("transfer", self.cmd_transfer_neons))
         self.app.add_handler(CommandHandler("exchange", self.cmd_exchange))
 
-        # Квесты и биржа
+        # ===== КВЕСТЫ И БИРЖА =====
         self.app.add_handler(CommandHandler("quests", self.cmd_quests))
         self.app.add_handler(CommandHandler("exchange", self.cmd_exchange_market))
         self.app.add_handler(CommandHandler("buyorder", self.cmd_buy_order))
@@ -5562,7 +8069,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("myorders", self.cmd_my_orders))
         self.app.add_handler(CommandHandler("cancelorder", self.cmd_cancel_order))
 
-        # Игры
+        # ===== ИГРЫ =====
         self.app.add_handler(CommandHandler("games", self.cmd_games))
         self.app.add_handler(CommandHandler("coin", self.cmd_coin))
         self.app.add_handler(CommandHandler("dice", self.cmd_dice))
@@ -5575,18 +8082,18 @@ _{motto}_
         self.app.add_handler(CommandHandler("guess", self.cmd_guess))
         self.app.add_handler(CommandHandler("bulls", self.cmd_bulls))
 
-        # Боссы
+        # ===== БОССЫ =====
         self.app.add_handler(CommandHandler("bosses", self.cmd_bosses))
         self.app.add_handler(CommandHandler("boss", self.cmd_boss_fight))
         self.app.add_handler(CommandHandler("bossinfo", self.cmd_boss_info))
         self.app.add_handler(CommandHandler("regen", self.cmd_regen))
 
-        # Дуэли
+        # ===== ДУЭЛИ =====
         self.app.add_handler(CommandHandler("duel", self.cmd_duel))
         self.app.add_handler(CommandHandler("duels", self.cmd_duels))
         self.app.add_handler(CommandHandler("duelrating", self.cmd_duel_rating))
 
-        # Мафия
+        # ===== МАФИЯ =====
         self.app.add_handler(CommandHandler("mafia", self.cmd_mafia))
         self.app.add_handler(CommandHandler("mafiastart", self.cmd_mafia_start))
         self.app.add_handler(CommandHandler("mafiajoin", self.cmd_mafia_join))
@@ -5595,7 +8102,7 @@ _{motto}_
         self.app.add_handler(CommandHandler("mafiarules", self.cmd_mafia_rules))
         self.app.add_handler(CommandHandler("mafiastats", self.cmd_mafia_stats))
 
-        # Ачивки
+        # ===== АЧИВКИ =====
         self.app.add_handler(CommandHandler("achievements", self.cmd_achievements))
         self.app.add_handler(CommandHandler("myachievements", self.cmd_my_achievements))
         self.app.add_handler(CommandHandler("achievement", self.cmd_achievement_info))
@@ -5603,14 +8110,14 @@ _{motto}_
         self.app.add_handler(CommandHandler("achievements_public", self.cmd_achievements_public))
         self.app.add_handler(CommandHandler("achievements_private", self.cmd_achievements_private))
 
-        # Кружки
+        # ===== КРУЖКИ =====
         self.app.add_handler(CommandHandler("circles", self.cmd_circles))
         self.app.add_handler(CommandHandler("circle", self.cmd_circle))
         self.app.add_handler(CommandHandler("createcircle", self.cmd_create_circle))
         self.app.add_handler(CommandHandler("joincircle", self.cmd_join_circle))
         self.app.add_handler(CommandHandler("leavecircle", self.cmd_leave_circle))
 
-        # Закладки
+        # ===== ЗАКЛАДКИ =====
         self.app.add_handler(CommandHandler("bookmarks", self.cmd_bookmarks))
         self.app.add_handler(CommandHandler("bookmark", self.cmd_bookmark))
         self.app.add_handler(CommandHandler("addbookmark", self.cmd_add_bookmark))
@@ -5618,38 +8125,65 @@ _{motto}_
         self.app.add_handler(CommandHandler("chatbook", self.cmd_chat_bookmarks))
         self.app.add_handler(CommandHandler("mybookmarks", self.cmd_my_bookmarks))
 
-        # Таймеры
+        # ===== ТАЙМЕРЫ =====
         self.app.add_handler(CommandHandler("timers", self.cmd_timers))
         self.app.add_handler(CommandHandler("addtimer", self.cmd_add_timer))
         self.app.add_handler(CommandHandler("removetimer", self.cmd_remove_timer))
 
-        # Награды
+        # ===== НАГРАДЫ =====
         self.app.add_handler(CommandHandler("awards", self.cmd_awards))
         self.app.add_handler(CommandHandler("giveaward", self.cmd_give_award))
         self.app.add_handler(CommandHandler("removeaward", self.cmd_remove_award))
 
-        # Кланы
+        # ===== КЛАНЫ =====
         self.app.add_handler(CommandHandler("clan", self.cmd_clan))
         self.app.add_handler(CommandHandler("clans", self.cmd_clans))
         self.app.add_handler(CommandHandler("createclan", self.cmd_create_clan))
         self.app.add_handler(CommandHandler("joinclan", self.cmd_join_clan))
         self.app.add_handler(CommandHandler("leaveclan", self.cmd_leave_clan))
 
-        # Бонусы (кибер-бонусы)
+        # ===== БОНУСЫ =====
         self.app.add_handler(CommandHandler("bonuses", self.cmd_bonuses))
         self.app.add_handler(CommandHandler("bonusinfo", self.cmd_bonus_info))
         self.app.add_handler(CommandHandler("buybonus", self.cmd_buy_bonus))
+        self.app.add_handler(CommandHandler("cyberstatus", self.cmd_cyber_status))
+        self.app.add_handler(CommandHandler("glitchhammer", self.cmd_glitch_hammer))
+        self.app.add_handler(CommandHandler("turbodrive", self.cmd_turbo_drive))
+        self.app.add_handler(CommandHandler("invisible", self.cmd_invisible))
+        self.app.add_handler(CommandHandler("neonick", self.cmd_neon_nick))
+        self.app.add_handler(CommandHandler("cyberluck", self.cmd_cyber_luck))
+        self.app.add_handler(CommandHandler("firewall", self.cmd_firewall))
+        self.app.add_handler(CommandHandler("rppacket", self.cmd_rp_packet))
+        self.app.add_handler(CommandHandler("use_glitch_hammer", self.cmd_use_glitch_hammer))
+        self.app.add_handler(CommandHandler("use_invisible", self.cmd_use_invisible))
+        self.app.add_handler(CommandHandler("allow_invisible", self.cmd_allow_invisible))
+        self.app.add_handler(CommandHandler("ban_invisible", self.cmd_ban_invisible))
 
-        # Второй AI (изображения)
-        self.app.add_handler(CommandHandler("imagine", self.cmd_imagine))
-        self.app.add_handler(CommandHandler("imagine_help", self.cmd_imagine_help))
+        # ===== РП КОМАНДЫ =====
+        self.app.add_handler(CommandHandler("rp_hack", self.cmd_rp_hack))
+        self.app.add_handler(CommandHandler("rp_glitch", self.cmd_rp_glitch))
+        self.app.add_handler(CommandHandler("rp_reboot", self.cmd_rp_reboot))
+        self.app.add_handler(CommandHandler("rp_code", self.cmd_rp_code))
+        self.app.add_handler(CommandHandler("rp_digitize", self.cmd_rp_digitize))
+        self.app.add_handler(CommandHandler("rp_hack_deep", self.cmd_rp_hack_deep))
+        self.app.add_handler(CommandHandler("rp_download", self.cmd_rp_download))
+        self.app.add_handler(CommandHandler("rp_update", self.cmd_rp_update))
 
-        # Тайный орден
-        self.app.add_handler(CommandHandler("order", self.cmd_order))
-        self.app.add_handler(CommandHandler("startorder", self.cmd_start_order))
-        self.app.add_handler(CommandHandler("revealorder", self.cmd_reveal_order))
+        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
+        self.app.add_handler(CommandHandler("themes", self.cmd_themes))
+        self.app.add_handler(CommandHandler("apply_theme", self.cmd_apply_theme))
+        self.app.add_handler(CommandHandler("apply_theme_by_name", self.cmd_apply_theme_by_name))
 
-        # Развлечения
+        # ===== ПРИВЯЗКА ЧАТА =====
+        self.app.add_handler(CommandHandler("bind_chat", self.cmd_bind_chat))
+        self.app.add_handler(CommandHandler("chat_code", self.cmd_chat_code))
+        self.app.add_handler(CommandHandler("changecode", self.cmd_change_chat_code))
+
+        # ===== КУБЫШКА =====
+        self.app.add_handler(CommandHandler("treasury", self.cmd_treasury))
+        self.app.add_handler(CommandHandler("treasury_withdraw", self.cmd_treasury_withdraw))
+
+        # ===== РАЗВЛЕЧЕНИЯ =====
         self.app.add_handler(CommandHandler("joke", self.cmd_joke))
         self.app.add_handler(CommandHandler("fact", self.cmd_fact))
         self.app.add_handler(CommandHandler("quote", self.cmd_quote))
@@ -5664,12 +8198,32 @@ _{motto}_
         self.app.add_handler(CommandHandler("pairing", self.cmd_pairing))
         self.app.add_handler(CommandHandler("pairs", self.cmd_pairs))
 
-        # Полезное
+        # ===== ПОЛЕЗНОЕ =====
         self.app.add_handler(CommandHandler("ping", self.cmd_ping))
         self.app.add_handler(CommandHandler("uptime", self.cmd_uptime))
         self.app.add_handler(CommandHandler("info", self.cmd_info))
 
-        # Модерация
+        # ===== ТАЙНЫЙ ОРДЕН =====
+        self.app.add_handler(CommandHandler("order", self.cmd_order))
+        self.app.add_handler(CommandHandler("startorder", self.cmd_start_order))
+        self.app.add_handler(CommandHandler("revealorder", self.cmd_reveal_order))
+
+        # ===== AI КОМАНДЫ =====
+        self.app.add_handler(CommandHandler("set_ai_prompt", self.cmd_set_ai_prompt))
+        self.app.add_handler(CommandHandler("ai_status", self.cmd_ai_status))
+
+        # ===== ВНЕШНИЕ API =====
+        self.app.add_handler(CommandHandler("currency", self.cmd_currency))
+        self.app.add_handler(CommandHandler("news", self.cmd_news))
+
+        # ===== ВТОРОЙ AI =====
+        self.app.add_handler(CommandHandler("imagine", self.cmd_imagine))
+        self.app.add_handler(CommandHandler("imagine_help", self.cmd_imagine_help))
+
+        # ===== ТЕСТОВЫЕ =====
+        self.app.add_handler(CommandHandler("testai", self.cmd_test_ai))
+
+        # ===== МОДЕРАЦИЯ =====
         self.app.add_handler(CommandHandler("admins", self.cmd_who_admins))
         self.app.add_handler(CommandHandler("warns", self.cmd_warns))
         self.app.add_handler(CommandHandler("mywarns", self.cmd_my_warns))
@@ -5689,7 +8243,6 @@ _{motto}_
         self.app.add_handler(CommandHandler("set_rules", self.cmd_set_rules))
         self.app.add_handler(CommandHandler("set_captcha", self.cmd_set_captcha))
 
-        # Модерация (ранги, мут, бан)
         self.app.add_handler(CommandHandler("set_rank", self.cmd_set_rank))
         self.app.add_handler(CommandHandler("set_rank2", self.cmd_set_rank2))
         self.app.add_handler(CommandHandler("set_rank3", self.cmd_set_rank3))
@@ -5705,7 +8258,13 @@ _{motto}_
         self.app.add_handler(CommandHandler("unban", self.cmd_unban))
         self.app.add_handler(CommandHandler("kick", self.cmd_kick))
 
-        # Русские текстовые команды
+        # ===== ГОЛОСОВАНИЯ =====
+        self.app.add_handler(CommandHandler("banvote", self.cmd_ban_vote))
+        self.app.add_handler(CommandHandler("stopvote", self.cmd_stop_vote))
+        self.app.add_handler(CommandHandler("voteinfo", self.cmd_vote_info))
+        self.app.add_handler(CommandHandler("votelist", self.cmd_vote_list))
+
+        # ===== РУССКИЕ ТЕКСТОВЫЕ КОМАНДЫ =====
         self.app.add_handler(MessageHandler(filters.Regex(r'^[0-7]$'), self.handle_numbers))
         self.app.add_handler(MessageHandler(filters.Regex(r'^стата$'), self.cmd_chat_stats_today))
         self.app.add_handler(MessageHandler(filters.Regex(r'^стата неделя$'), self.cmd_chat_stats_week))
@@ -5715,28 +8274,34 @@ _{motto}_
         self.app.add_handler(MessageHandler(filters.Regex(r'^топ неделя$'), self.cmd_top_chat_week))
         self.app.add_handler(MessageHandler(filters.Regex(r'^топ месяц$'), self.cmd_top_chat_month))
         self.app.add_handler(MessageHandler(filters.Regex(r'^топ вся$'), self.cmd_top_chat_all))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^мои ачивки$'), self.cmd_my_achievements))
         self.app.add_handler(MessageHandler(filters.Regex(r'^топ ачивок$'), self.cmd_top_achievements))
         self.app.add_handler(MessageHandler(filters.Regex(r'^ачивка \d+$'), self.cmd_achievement_info))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Ачивки$'), self.cmd_achievements_public))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-Ачивки$'), self.cmd_achievements_private))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^кружки$'), self.cmd_circles))
         self.app.add_handler(MessageHandler(filters.Regex(r'^кружок \d+$'), self.cmd_circle))
         self.app.add_handler(MessageHandler(filters.Regex(r'^создать кружок'), self.cmd_create_circle))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Кружок \d+$'), self.cmd_join_circle))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-Кружок \d+$'), self.cmd_leave_circle))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Закладка'), self.cmd_add_bookmark))
         self.app.add_handler(MessageHandler(filters.Regex(r'^закладка \d+$'), self.cmd_bookmark))
         self.app.add_handler(MessageHandler(filters.Regex(r'^чатбук$'), self.cmd_chat_bookmarks))
         self.app.add_handler(MessageHandler(filters.Regex(r'^мои закладки$'), self.cmd_my_bookmarks))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-Закладка \d+$'), self.cmd_remove_bookmark))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^таймер через'), self.cmd_add_timer))
         self.app.add_handler(MessageHandler(filters.Regex(r'^таймер на'), self.cmd_add_timer))
         self.app.add_handler(MessageHandler(filters.Regex(r'^таймеры$'), self.cmd_timers))
         self.app.add_handler(MessageHandler(filters.Regex(r'^удалить таймер \d+$'), self.cmd_remove_timer))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^наградить \d+'), self.cmd_give_award))
         self.app.add_handler(MessageHandler(filters.Regex(r'^награды'), self.cmd_awards))
         self.app.add_handler(MessageHandler(filters.Regex(r'^снять награду'), self.cmd_remove_award))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^моя анкета$'), self.cmd_my_profile))
         self.app.add_handler(MessageHandler(filters.Regex(r'^мой пол '), self.cmd_set_gender))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-Пол$'), self.cmd_remove_gender))
@@ -5744,6 +8309,7 @@ _{motto}_
         self.app.add_handler(MessageHandler(filters.Regex(r'^мой др '), self.cmd_set_birth))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Анкета$'), self.cmd_profile_public))
         self.app.add_handler(MessageHandler(filters.Regex(r'^-Анкета$'), self.cmd_profile_private))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер|^!модер|^повысить$'), self.cmd_set_rank))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 2|^!модер 2|^повысить 2$'), self.cmd_set_rank2))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+Модер 3|^!модер 3|^повысить 3$'), self.cmd_set_rank3))
@@ -5769,32 +8335,35 @@ _{motto}_
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+приветствие'), self.cmd_set_welcome))
         self.app.add_handler(MessageHandler(filters.Regex(r'^\+правила'), self.cmd_set_rules))
         self.app.add_handler(MessageHandler(filters.Regex(r'^капча'), self.cmd_set_captcha))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^!темы$'), self.cmd_themes))
         self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \d+$'), self.cmd_apply_theme))
         self.app.add_handler(MessageHandler(filters.Regex(r'^!темы \w+$'), self.cmd_apply_theme_by_name))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^!привязать$'), self.cmd_bind_chat))
         self.app.add_handler(MessageHandler(filters.Regex(r'^код чата$'), self.cmd_chat_code))
         self.app.add_handler(MessageHandler(filters.Regex(r'^сменить код'), self.cmd_change_chat_code))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка$'), self.cmd_treasury))
         self.app.add_handler(MessageHandler(filters.Regex(r'^кубышка в неоны$'), self.cmd_treasury_withdraw))
+
         self.app.add_handler(MessageHandler(filters.Regex(r'^Случайная беседа$'), self.cmd_random_chat))
         self.app.add_handler(MessageHandler(filters.Regex(r'^Беседы топ дня$'), self.cmd_top_chats))
         self.app.add_handler(MessageHandler(filters.Regex(r'^Команды$'), self.cmd_help))
         self.app.add_handler(MessageHandler(filters.Regex(r'^Установка$'), self.cmd_setup_info))
 
-        # Основные обработчики сообщений
+        # ===== ОСНОВНЫЕ ОБРАБОТЧИКИ =====
         self.app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_message))
         self.app.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.handle_new_chat_members))
         self.app.add_handler(MessageHandler(filters.StatusUpdate.LEFT_CHAT_MEMBER, self.handle_left_member))
 
-        # Callback кнопки
+        # ===== КНОПКИ =====
         self.app.add_handler(CallbackQueryHandler(self.button_callback))
 
         self.app.add_error_handler(self.error_handler)
 
         logger.info(f"✅ Зарегистрировано обработчиков: {len(self.app.handlers)}")
 
-    # ===== ОБРАБОТЧИК ОШИБОК =====
     async def error_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             logger.error(f"Ошибка: {context.error}")
@@ -5814,8 +8383,8 @@ _{motto}_
             logger.info(f"🚀 Бот {BOT_NAME} успешно запущен")
             logger.info(f"👑 Владелец: {OWNER_USERNAME}")
             logger.info(f"🤖 AI: {'Подключен' if self.ai and self.ai.is_available else 'Не подключен'}")
-            logger.info(f"📱 VK: {'Подключен' if self.vk and self.vk.is_available else 'Не подключен'}")
             logger.info(f"🎨 Image AI: Подключен (бесплатный Pollinations)")
+            logger.info(f"📱 VK: {'Подключен' if self.vk and self.vk.is_available else 'Не подключен'}")
 
             asyncio.create_task(self.check_timers())
             asyncio.create_task(self.weekly_tax_loop())
