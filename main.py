@@ -4307,6 +4307,396 @@ class SpectrumBot:
         """
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+        # ===== ИГРЫ (недостающие) =====
+    async def cmd_games(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = f"""
+{s.header('🎮 ИГРЫ')}
+
+🔫 /rr [ставка] — Русская рулетка
+🎲 /dicebet [ставка] — Кости
+🎰 /slots [ставка] — Слоты
+✊ /rps — Камень-ножницы-бумага
+💣 /saper [ставка] — Сапёр
+🔢 /guess [ставка] — Угадай число
+🐂 /bulls [ставка] — Быки и коровы
+
+💰 Баланс: /balance
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_coin(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.choice(["Орёл", "Решка"])
+        await update.message.reply_text(f"🪙 МОНЕТКА\n\n• Выпало: {result}")
+
+    async def cmd_dice(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        result = random.randint(1, 6)
+        await update.message.reply_text(f"🎲 КУБИК\n\n• Выпало: {result}")
+
+    async def cmd_dice_bet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите ставку: /dicebet 100"))
+            return
+
+        try:
+            bet = int(context.args[0])
+        except:
+            await update.message.reply_text(s.error("Ставка должна быть числом"))
+            return
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        if bet <= 0:
+            await update.message.reply_text(s.error("Ставка должна быть больше 0"))
+            return
+
+        dice1 = random.randint(1, 6)
+        dice2 = random.randint(1, 6)
+        total = dice1 + dice2
+
+        win_multiplier = 1
+        if total in [7, 11]:
+            win_multiplier = 2
+            self.db.update_user(user_data['id'], dice_wins=user_data.get('dice_wins', 0) + 1)
+            result_text = "🎉 ВЫИГРЫШ!"
+        elif total in [2, 3, 12]:
+            win_multiplier = 0
+            self.db.update_user(user_data['id'], dice_losses=user_data.get('dice_losses', 0) + 1)
+            result_text = "💀 ПРОИГРЫШ!"
+        else:
+            win_multiplier = 1
+            result_text = "🔄 НИЧЬЯ!"
+
+        win_amount = bet * win_multiplier if win_multiplier > 0 else -bet
+
+        if win_multiplier > 0:
+            self.db.add_coins(user_data['id'], win_amount - bet if win_multiplier > 1 else 0)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+
+        text = (
+            f"🎲 КОСТИ\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"🎲 {dice1} + {dice2} = {total}\n\n"
+            f"{result_text}\n"
+        )
+
+        if win_multiplier > 1:
+            text += f"+{win_amount - bet} 💰\n"
+        elif win_multiplier == 0:
+            text += f"-{bet} 💰\n"
+        else:
+            text += f"Ставка возвращена\n"
+
+        text += f"\n💰 Новый баланс: {user_data['coins'] + (win_amount - bet if win_multiplier > 1 else -bet if win_multiplier == 0 else 0)} 💰"
+
+        await update.message.reply_text(text)
+
+    async def cmd_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        choice = "red"
+
+        if context.args:
+            try:
+                bet = int(context.args[0])
+                if len(context.args) > 1:
+                    choice = context.args[1].lower()
+            except:
+                pass
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        if bet <= 0:
+            await update.message.reply_text(s.error("Ставка должна быть больше 0"))
+            return
+
+        num = random.randint(0, 36)
+        red_numbers = [1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36]
+
+        if num == 0:
+            color = "green"
+        elif num in red_numbers:
+            color = "red"
+        else:
+            color = "black"
+
+        win = False
+        multiplier = 0
+
+        if choice.isdigit() and int(choice) == num:
+            win = True
+            multiplier = 36
+        elif choice in ["red", "black", "green"] and choice == color:
+            win = True
+            multiplier = 2 if choice in ["red", "black"] else 36
+
+        if win:
+            win_amount = bet * multiplier
+            self.db.add_coins(user_data['id'], win_amount)
+            self.db.update_user(user_data['id'], casino_wins=user_data.get('casino_wins', 0) + 1)
+            result = f"🎉 ВЫИГРЫШ! +{win_amount} 💰"
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], casino_losses=user_data.get('casino_losses', 0) + 1)
+            result = f"💀 ПРОИГРЫШ! -{bet} 💰"
+
+        await update.message.reply_text(
+            f"🎰 РУЛЕТКА\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"🎯 Выбрано: {choice}\n\n"
+            f"🎰 Выпало: {num} {color}\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win_amount if win else -bet)} 💰"
+        )
+        self.db.log_action(user_data['id'], 'roulette', f"{'win' if win else 'lose'} {bet}")
+
+    async def cmd_slots(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                pass
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        if bet <= 0:
+            await update.message.reply_text(s.error("Ставка должна быть больше 0"))
+            return
+
+        symbols = ["🍒", "🍋", "🍊", "7️⃣", "💎", "⭐️"]
+        spin = [random.choice(symbols) for _ in range(3)]
+
+        if len(set(spin)) == 1:
+            if spin[0] == "7️⃣":
+                win = bet * 50
+            elif spin[0] == "💎":
+                win = bet * 30
+            elif spin[0] == "⭐️":
+                win = bet * 20
+            else:
+                win = bet * 10
+            result = f"🎉 ДЖЕКПОТ! +{win} 💰"
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        elif len(set(spin)) == 2:
+            win = bet * 2
+            result = f"🎉 ВЫИГРЫШ! +{win} 💰"
+            self.db.update_user(user_data['id'], slots_wins=user_data.get('slots_wins', 0) + 1)
+        else:
+            win = 0
+            result = f"💀 ПРОИГРЫШ! -{bet} 💰"
+            self.db.update_user(user_data['id'], slots_losses=user_data.get('slots_losses', 0) + 1)
+
+        if win > 0:
+            self.db.add_coins(user_data['id'], win)
+        else:
+            self.db.add_coins(user_data['id'], -bet)
+
+        await update.message.reply_text(
+            f"🎰 СЛОТЫ\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"[ {' | '.join(spin)} ]\n\n"
+            f"{result}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win if win > 0 else -bet)} 💰"
+        )
+
+    async def cmd_rps(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = f"""
+{s.header('✊ КАМЕНЬ-НОЖНИЦЫ-БУМАГА')}
+
+Выберите жест (напишите цифру):
+
+1️⃣ 🪨 Камень
+2️⃣ ✂️ Ножницы
+3️⃣ 📄 Бумага
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+        context.user_data['awaiting_rps'] = True
+
+    async def cmd_russian_roulette(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                await update.message.reply_text(s.error("Ставка должна быть числом"))
+                return
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        if bet <= 0:
+            await update.message.reply_text(s.error("Ставка должна быть больше 0"))
+            return
+
+        chamber = random.randint(1, 6)
+        shot = random.randint(1, 6)
+
+        await asyncio.sleep(2)
+
+        if chamber == shot:
+            self.db.add_coins(user_data['id'], -bet)
+            self.db.update_user(user_data['id'], rr_losses=user_data.get('rr_losses', 0) + 1)
+            result_text = "💥 *Бах!* Выстрел..."
+            win_text = f"💀 ВЫ ПРОИГРАЛИ! -{bet} 💰"
+        else:
+            win = bet * 5
+            self.db.add_coins(user_data['id'], win)
+            self.db.update_user(user_data['id'], rr_wins=user_data.get('rr_wins', 0) + 1)
+            result_text = "🔫 *Щёлк...* В этот раз повезло!"
+            win_text = f"🎉 ВЫ ВЫИГРАЛИ! +{win} 💰"
+
+        await update.message.reply_text(
+            f"🔫 РУССКАЯ РУЛЕТКА\n\n"
+            f"👤 Игрок: {user.first_name}\n"
+            f"💰 Ставка: {bet} 💰\n\n"
+            f"{result_text}\n\n"
+            f"{win_text}\n\n"
+            f"💰 Новый баланс: {user_data['coins'] + (win if chamber != shot else -bet)} 💰"
+        )
+        self.db.log_action(user_data['id'], 'rr', f"{'win' if chamber != shot else 'lose'} {bet}")
+
+    async def cmd_saper(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        field = [['⬜️' for _ in range(3)] for _ in range(3)]
+        mine_x, mine_y = random.randint(0, 2), random.randint(0, 2)
+
+        game_id = f"saper_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'field': field,
+            'mine_x': mine_x,
+            'mine_y': mine_y,
+            'bet': bet,
+            'opened': 0
+        }
+
+        self.db.add_coins(user_data['id'], -bet)
+
+        keyboard_buttons = []
+        for i in range(3):
+            for j in range(3):
+                cell_num = i * 3 + j + 1
+                keyboard_buttons.append(InlineKeyboardButton(f"⬜️", callback_data=f"saper_{game_id}_{cell_num}"))
+
+        keyboard = InlineKeyboardMarkup(self._split_buttons(keyboard_buttons, 3))
+
+        await update.message.reply_text(
+            f"{s.header('💣 САПЁР')}\n\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"🎯 Выберите клетку:\n\n"
+            f"ℹ️ Нажимайте на кнопки, чтобы открыть клетки",
+            reply_markup=keyboard
+        )
+
+    async def cmd_guess(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        number = random.randint(1, 100)
+        game_id = f"guess_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': 0,
+            'max_attempts': 7,
+            'bet': bet
+        }
+
+        self.db.add_coins(user_data['id'], -bet)
+
+        await update.message.reply_text(
+            f"{s.header('🔢 УГАДАЙ ЧИСЛО')}\n\n"
+            f"🎯 Я загадал число от 1 до 100\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"📊 Попыток: 7\n\n"
+            f"💬 Напиши свой вариант..."
+        )
+
+    async def cmd_bulls(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        user_data = self.db.get_user(user.id)
+
+        bet = 10
+        if context.args:
+            try:
+                bet = int(context.args[0])
+            except:
+                bet = 10
+
+        if bet > user_data['coins']:
+            await update.message.reply_text(s.error(f"Недостаточно монет. Баланс: {user_data['coins']} 💰"))
+            return
+
+        digits = random.sample(range(10), 4)
+        number = ''.join(map(str, digits))
+
+        game_id = f"bulls_{user.id}_{int(time.time())}"
+        self.games_in_progress[game_id] = {
+            'user_id': user.id,
+            'number': number,
+            'attempts': [],
+            'max_attempts': 10,
+            'bet': bet
+        }
+
+        self.db.add_coins(user_data['id'], -bet)
+
+        await update.message.reply_text(
+            f"{s.header('🐂 БЫКИ И КОРОВЫ')}\n\n"
+            f"🎯 Я загадал 4-значное число без повторов\n"
+            f"💰 Ставка: {bet} 💰\n"
+            f"📊 Попыток: 10\n"
+            f"🐂 Бык — цифра на своём месте\n"
+            f"🐄 Корова — цифра есть, но не на своём месте\n\n"
+            f"💬 Напиши свой вариант (4 цифры)..."
+        )
+
     # ----- ДУЭЛИ -----
     async def cmd_duel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if len(context.args) < 2:
