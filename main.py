@@ -2336,30 +2336,55 @@ class GroqAI:
 
 # ========== КЛАСС ДЛЯ ГЕНЕРАЦИИ ИЗОБРАЖЕНИЙ (ВТОРОЙ AI) ==========
 class ImageAI:
-    """Генерация изображений через Pollinations.ai (бесплатно)"""
     def __init__(self):
-        self.base_url = "https://image.pollinations.ai/prompt/"
-        self.timeout = IMAGE_GEN_TIMEOUT
+        self.api_url = "https://api.felo.ai/v1/gemini-image-gen"
+        self.timeout = 60  # увеличенный таймаут (генерация может быть долгой)
 
-    async def generate(self, prompt: str) -> Optional[bytes]:
-        """Асинхронно генерирует изображение по запросу"""
-        encoded = quote(prompt)
-        url = f"{self.base_url}{encoded}?width=1024&height=1024&nologo=true"
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url, timeout=self.timeout) as resp:
-                    if resp.status == 200:
-                        return await resp.read()
-                    else:
-                        logger.error(f"Image generation failed: {resp.status}")
-                        return None
-        except asyncio.TimeoutError:
-            logger.error("Image generation timeout")
-            return None
-        except Exception as e:
-            logger.error(f"Image generation error: {e}")
-            return None
+    async def generate(self, prompt: str, retries: int = 2) -> Optional[bytes]:
+        """
+        Генерирует изображение по промпту, возвращает байты изображения или None.
+        При ошибке делает до retries повторных попыток.
+        """
+        headers = {
+            "Content-Type": "application/json",
+            # Иногда требуется User-Agent, добавим стандартный
+            "User-Agent": "Mozilla/5.0 (compatible; SpectrumBot/7.0)"
+        }
+        payload = {
+            "prompt": prompt,
+            "resolution": "1024x1024",        # можно также 512x512, 768x768
+            "model": "gemini-3-pro-image-preview"
+        }
 
+        for attempt in range(retries + 1):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(self.api_url, json=payload, headers=headers, timeout=self.timeout) as resp:
+                        if resp.status == 200:
+                            data = await resp.json()
+                            # Обычно ответ содержит поле "image_url"
+                            image_url = data.get("image_url")
+                            if image_url:
+                                # Скачиваем изображение
+                                async with session.get(image_url) as img_resp:
+                                    if img_resp.status == 200:
+                                        return await img_resp.read()
+                                    else:
+                                        logger.error(f"Не удалось скачать изображение: статус {img_resp.status}")
+                            else:
+                                logger.error("Ответ не содержит image_url")
+                        else:
+                            logger.error(f"Ошибка API (статус {resp.status}): {await resp.text()}")
+            except asyncio.TimeoutError:
+                logger.error(f"Таймаут при попытке {attempt+1}")
+            except Exception as e:
+                logger.error(f"Исключение при попытке {attempt+1}: {e}")
+
+            if attempt < retries:
+                await asyncio.sleep(2)  # пауза перед повтором
+
+        return None
+        
 # ========== ИНИЦИАЛИЗАЦИЯ AI ==========
 ai = None
 if GROQ_API_KEY and GROQ_AVAILABLE:
@@ -6625,13 +6650,11 @@ class SpectrumBot:
         if not context.args:
             await update.message.reply_text(s.error("Укажите описание изображения, например:\n/imagine космический корабль в стиле киберпанк"))
             return
+
         prompt = " ".join(context.args)
-        msg = await update.message.reply_text("🎨 **Генерирую изображение...** это может занять несколько секунд.", parse_mode=ParseMode.MARKDOWN)
+        msg = await update.message.reply_text("🎨 **Генерирую изображение...** это может занять до минуты.", parse_mode=ParseMode.MARKDOWN)
 
-        if not hasattr(self, 'image_ai'):
-            self.image_ai = ImageAI()
-
-        image_data = await self.image_ai.generate(prompt)
+        image_data = await self.image_ai.generate(prompt, retries=2)
         if image_data:
             await msg.delete()
             await update.message.reply_photo(
@@ -6640,8 +6663,8 @@ class SpectrumBot:
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
-            await msg.edit_text(s.error("Не удалось сгенерировать изображение. Попробуйте позже."))
-
+            await msg.edit_text(s.error("Не удалось сгенерировать изображение. Сервис временно недоступен. Попробуйте позже."))
+        
     async def cmd_imagine_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"""
 {s.header('🎨 ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ')}
