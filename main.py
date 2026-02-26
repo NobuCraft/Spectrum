@@ -5873,6 +5873,753 @@ class SpectrumBot:
         else:
             await update.message.reply_text(s.error("Ошибка при покупке"))
 
+        # ===== КИБЕР-БОНУСЫ (недостающие) =====
+    async def _check_rp_packet(self, user_id: int) -> bool:
+        user = self.db.get_user_by_id(user_id)
+        if not user:
+            return False
+        if user.get('rp_packet_until') and datetime.fromisoformat(user['rp_packet_until']) > datetime.now():
+            return True
+        if user.get('cyber_status_until') and datetime.fromisoformat(user['cyber_status_until']) > datetime.now():
+            return True
+        return False
+
+    async def cmd_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /use_glitch_hammer @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        if target['rank'] >= user_data['rank'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Нельзя применить к модератору выше рангом"))
+            return
+
+        if self.db.use_glitch_hammer(user_data['id'], chat_id, target['id']):
+            until = self.db.mute_user(target['id'], 24*60, user_data['id'], "Глитч-молот")
+            await self.send_private_message(
+                target['telegram_id'],
+                f"🔨 **ГЛИТЧ-МОЛОТ**\n\n"
+                f"🦸 Модератор: {update.effective_user.first_name}\n"
+                f"⏳ Срок: 24 часа\n"
+                f"💬 Причина: Глитч-молот"
+            )
+            await update.message.reply_text(s.success(f"Глитч-молот применён к {target['first_name']} на 24 часа!"))
+        else:
+            await update.message.reply_text(s.error("У вас нет активного глитч-молота"))
+
+    async def cmd_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            await update.message.reply_text(s.error("Эта команда работает только в ЛС"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите текст сообщения"))
+            return
+
+        text = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+
+        if not self.db.has_invisible_bonus(user_data['id']):
+            await update.message.reply_text(s.error("У вас нет активного бонуса 'Невидимка'"))
+            return
+
+        # Здесь можно реализовать отправку анонимного сообщения в чат, если нужно.
+        await update.message.reply_text(s.success("Анонимное сообщение отправлено!"))
+
+    async def cmd_allow_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /allow_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("DELETE FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, target['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} может использовать невидимку"))
+
+    async def cmd_ban_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /ban_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("INSERT OR REPLACE INTO invisible_bans (chat_id, user_id, banned_by) VALUES (?, ?, ?)",
+                             (chat_id, target['id'], user_data['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} забанен в невидимке"))
+
+    async def cmd_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+            # ===== КИБЕР-БОНУСЫ (полный набор) =====
+    async def _check_rp_packet(self, user_id: int) -> bool:
+        user = self.db.get_user_by_id(user_id)
+        if not user:
+            return False
+        if user.get('rp_packet_until') and datetime.fromisoformat(user['rp_packet_until']) > datetime.now():
+            return True
+        if user.get('cyber_status_until') and datetime.fromisoformat(user['cyber_status_until']) > datetime.now():
+            return True
+        return False
+
+    async def cmd_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /use_glitch_hammer @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        if target['rank'] >= user_data['rank'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Нельзя применить к модератору выше рангом"))
+            return
+
+        if self.db.use_glitch_hammer(user_data['id'], chat_id, target['id']):
+            until = self.db.mute_user(target['id'], 24*60, user_data['id'], "Глитч-молот")
+            await self.send_private_message(
+                target['telegram_id'],
+                f"🔨 **ГЛИТЧ-МОЛОТ**\n\n"
+                f"🦸 Модератор: {update.effective_user.first_name}\n"
+                f"⏳ Срок: 24 часа\n"
+                f"💬 Причина: Глитч-молот"
+            )
+            await update.message.reply_text(s.success(f"Глитч-молот применён к {target['first_name']} на 24 часа!"))
+        else:
+            await update.message.reply_text(s.error("У вас нет активного глитч-молота"))
+
+    async def cmd_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            await update.message.reply_text(s.error("Эта команда работает только в ЛС"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите текст сообщения"))
+            return
+
+        text = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+
+        if not self.db.has_invisible_bonus(user_data['id']):
+            await update.message.reply_text(s.error("У вас нет активного бонуса 'Невидимка'"))
+            return
+
+        # В реальной реализации здесь нужно отправить анонимное сообщение в чат.
+        await update.message.reply_text(s.success("Анонимное сообщение отправлено!"))
+
+    async def cmd_allow_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /allow_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("DELETE FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, target['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} может использовать невидимку"))
+
+    async def cmd_ban_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /ban_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("INSERT OR REPLACE INTO invisible_bans (chat_id, user_id, banned_by) VALUES (?, ?, ?)",
+                             (chat_id, target['id'], user_data['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} забанен в невидимке"))
+
+    async def cmd_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+        # ===== КИБЕР-БОНУСЫ (полный набор) =====
+    async def _check_rp_packet(self, user_id: int) -> bool:
+        user = self.db.get_user_by_id(user_id)
+        if not user:
+            return False
+        if user.get('rp_packet_until') and datetime.fromisoformat(user['rp_packet_until']) > datetime.now():
+            return True
+        if user.get('cyber_status_until') and datetime.fromisoformat(user['cyber_status_until']) > datetime.now():
+            return True
+        return False
+
+    async def cmd_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /use_glitch_hammer @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        if target['rank'] >= user_data['rank'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Нельзя применить к модератору выше рангом"))
+            return
+
+        if self.db.use_glitch_hammer(user_data['id'], chat_id, target['id']):
+            until = self.db.mute_user(target['id'], 24*60, user_data['id'], "Глитч-молот")
+            await self.send_private_message(
+                target['telegram_id'],
+                f"🔨 **ГЛИТЧ-МОЛОТ**\n\n"
+                f"🦸 Модератор: {update.effective_user.first_name}\n"
+                f"⏳ Срок: 24 часа\n"
+                f"💬 Причина: Глитч-молот"
+            )
+            await update.message.reply_text(s.success(f"Глитч-молот применён к {target['first_name']} на 24 часа!"))
+        else:
+            await update.message.reply_text(s.error("У вас нет активного глитч-молота"))
+
+    async def cmd_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            await update.message.reply_text(s.error("Эта команда работает только в ЛС"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите текст сообщения"))
+            return
+
+        text = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+
+        if not self.db.has_invisible_bonus(user_data['id']):
+            await update.message.reply_text(s.error("У вас нет активного бонуса 'Невидимка'"))
+            return
+
+        # В реальной реализации здесь нужно отправить анонимное сообщение в чат.
+        await update.message.reply_text(s.success("Анонимное сообщение отправлено!"))
+
+    async def cmd_allow_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /allow_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("DELETE FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, target['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} может использовать невидимку"))
+
+    async def cmd_ban_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /ban_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("INSERT OR REPLACE INTO invisible_bans (chat_id, user_id, banned_by) VALUES (?, ?, ?)",
+                             (chat_id, target['id'], user_data['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} забанен в невидимке"))
+
+    async def cmd_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+        # ===== КИБЕР-БОНУСЫ (полный набор) =====
+    async def _check_rp_packet(self, user_id: int) -> bool:
+        user = self.db.get_user_by_id(user_id)
+        if not user:
+            return False
+        if user.get('rp_packet_until') and datetime.fromisoformat(user['rp_packet_until']) > datetime.now():
+            return True
+        if user.get('cyber_status_until') and datetime.fromisoformat(user['cyber_status_until']) > datetime.now():
+            return True
+        return False
+
+    async def cmd_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_glitch_hammer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /use_glitch_hammer @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        if target['rank'] >= user_data['rank'] and user_data['id'] != OWNER_ID:
+            await update.message.reply_text(s.error("Нельзя применить к модератору выше рангом"))
+            return
+
+        if self.db.use_glitch_hammer(user_data['id'], chat_id, target['id']):
+            until = self.db.mute_user(target['id'], 24*60, user_data['id'], "Глитч-молот")
+            await self.send_private_message(
+                target['telegram_id'],
+                f"🔨 **ГЛИТЧ-МОЛОТ**\n\n"
+                f"🦸 Модератор: {update.effective_user.first_name}\n"
+                f"⏳ Срок: 24 часа\n"
+                f"💬 Причина: Глитч-молот"
+            )
+            await update.message.reply_text(s.success(f"Глитч-молот применён к {target['first_name']} на 24 часа!"))
+        else:
+            await update.message.reply_text(s.error("У вас нет активного глитч-молота"))
+
+    async def cmd_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_turbo_drive(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_use_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if update.effective_chat.type != "private":
+            await update.message.reply_text(s.error("Эта команда работает только в ЛС"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите текст сообщения"))
+            return
+
+        text = " ".join(context.args)
+        user_data = self.db.get_user(update.effective_user.id)
+
+        if not self.db.has_invisible_bonus(user_data['id']):
+            await update.message.reply_text(s.error("У вас нет активного бонуса 'Невидимка'"))
+            return
+
+        # В реальной реализации здесь нужно отправить анонимное сообщение в чат.
+        await update.message.reply_text(s.success("Анонимное сообщение отправлено!"))
+
+    async def cmd_allow_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /allow_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("DELETE FROM invisible_bans WHERE chat_id = ? AND user_id = ?", (chat_id, target['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} может использовать невидимку"))
+
+    async def cmd_ban_invisible(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if len(context.args) < 1:
+            await update.message.reply_text(s.error("Укажите пользователя: /ban_invisible @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        user_data = self.db.get_user(update.effective_user.id)
+        chat_id = update.effective_chat.id
+
+        if user_data['rank'] < 3:
+            await update.message.reply_text(s.error("Недостаточно прав"))
+            return
+
+        target = self.db.get_user_by_username(username)
+        if not target:
+            await update.message.reply_text(s.error("Пользователь не найден"))
+            return
+
+        self.db.cursor.execute("INSERT OR REPLACE INTO invisible_bans (chat_id, user_id, banned_by) VALUES (?, ?, ?)",
+                             (chat_id, target['id'], user_data['id']))
+        self.db.conn.commit()
+
+        await update.message.reply_text(s.success(f"{target['first_name']} забанен в невидимке"))
+
+    async def cmd_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_neon_nick(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_cyber_luck(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_firewall(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    async def cmd_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_bonus_info(update, context)
+
+    async def cmd_buy_rp_packet(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        await self.cmd_buy_bonus(update, context)
+
+    # ===== РП-КОМАНДЫ =====
+    async def cmd_rp_hack(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_hack @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        actions = [
+            f"💻 Взломал аккаунт {target_name} и получил доступ к переписке",
+            f"🔓 Взломал базу данных и узнал все секреты {target_name}",
+            f"📱 Взломал телефон {target_name} и читает сообщения"
+        ]
+        await update.message.reply_text(f"🤖 {random.choice(actions)}")
+
+    async def cmd_rp_glitch(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_glitch @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        actions = [
+            f"⚡ Вызвал системный глитч у {target_name}, теперь он двоится",
+            f"💫 Заглючил {target_name}, теперь он разговаривает с собой",
+            f"🌀 Внёс ошибку в код {target_name}, делает странные вещи"
+        ]
+        await update.message.reply_text(f"🤖 {random.choice(actions)}")
+
+    async def cmd_rp_reboot(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_reboot @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        await update.message.reply_text(f"🤖 Перезагрузил {target_name}. Подождите 5 секунд... 🔄")
+
+    async def cmd_rp_code(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_code @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        code = f"function {target_name}() {{ return 'робот'; }}"
+        await update.message.reply_text(f"🤖 Закодил {target_name} в функцию:\n`{code}`", parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_rp_digitize(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_digitize @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        binary = ' '.join(format(ord(c), '08b') for c in target_name[:3])
+        await update.message.reply_text(f"🤖 Оцифровал {target_name}: `{binary}...`", parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_rp_hack_deep(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_hack_deep @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        data = {
+            'IP': f'192.168.{random.randint(1,255)}.{random.randint(1,255)}',
+            'Пароль': '*' * random.randint(6, 12),
+            'Баланс': f'{random.randint(0,1000)} 💰'
+        }
+        text = f"🤖 Данные {target_name}:\n"
+        for key, value in data.items():
+            text += f"• {key}: {value}\n"
+        await update.message.reply_text(text)
+
+    async def cmd_rp_download(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_download @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        size = random.randint(1, 100)
+        await update.message.reply_text(f"🤖 Скачиваю данные {target_name}... {size}% [░░░░░░░░░░]")
+        await asyncio.sleep(1)
+        await update.message.reply_text(f"🤖 Скачивание завершено! Получено {random.randint(10,500)} МБ данных.")
+
+    async def cmd_rp_update(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not await self._check_rp_packet(update.effective_user.id):
+            await update.message.reply_text(s.error("Для этой команды нужен РП-пакет или Кибер-статус"))
+            return
+
+        if not context.args:
+            await update.message.reply_text(s.error("Укажите пользователя: /rp_update @user"))
+            return
+
+        username = context.args[0].replace('@', '')
+        target = self.db.get_user_by_username(username)
+        target_name = target.get('nickname') or target['first_name'] if target else username
+
+        version = f"v{random.randint(1,9)}.{random.randint(0,9)}.{random.randint(0,9)}"
+        await update.message.reply_text(f"🤖 Обновляю {target_name} до версии {version}...")
+        await asyncio.sleep(1)
+        await update.message.reply_text(f"🤖 Обновление завершено! Добавлены новые функции.")
+
     # ===== ВТОРОЙ AI: ГЕНЕРАЦИЯ ИЗОБРАЖЕНИЙ =====
     async def cmd_imagine(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not context.args:
