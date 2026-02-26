@@ -7101,6 +7101,31 @@ class SpectrumBot:
 
         await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
 
+        # ===== ТЕМЫ ДЛЯ РОЛЕЙ =====
+    async def cmd_themes(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        text = f"""
+{s.header('🎨 ТЕМЫ РОЛЕЙ')}
+
+• `!темы default` — Стандартная
+• `!темы cyber` — Киберпанк
+• `!темы fantasy` — Фэнтези
+• `!темы anime` — Аниме
+• `!темы military` — Военная
+
+Примеры названий:
+• Киберпанк: Хакер, Кодер, Админ
+• Фэнтези: Маг, Воин, Эльф
+        """
+        await update.message.reply_text(text, parse_mode=ParseMode.MARKDOWN)
+
+    async def cmd_apply_theme(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Заглушка – в исходном коде эта функция была "в разработке"
+        await update.message.reply_text(s.info("Функция в разработке"))
+
+    async def cmd_apply_theme_by_name(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        # Заглушка
+        await update.message.reply_text(s.info("Функция в разработке"))
+
     # ===== ТОПЫ =====
     async def cmd_top(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = f"{s.header('🏆 ТОП ИГРОКОВ')}\n\n"
